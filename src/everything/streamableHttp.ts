@@ -22,6 +22,31 @@ app.use(cors({
 
 const transports: Map<string, StreamableHTTPServerTransport> = new Map<string, StreamableHTTPServerTransport>();
 
+// Health check endpoint for Railway monitoring
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    activeSessions: transports.size
+  });
+});
+
+// Root endpoint with server info
+app.get('/', (req: Request, res: Response) => {
+  res.status(200).json({
+    name: 'MCP Streamable HTTP Server',
+    version: '0.6.2',
+    protocol: 'Model Context Protocol',
+    transport: 'Streamable HTTP with SSE',
+    endpoints: {
+      mcp: 'POST /mcp',
+      stream: 'GET /mcp/stream',
+      health: 'GET /health'
+    },
+    documentation: 'https://modelcontextprotocol.io'
+  });
+});
+
 app.post('/mcp', async (req: Request, res: Response) => {
   console.error('Received MCP POST request');
   try {
