@@ -1,0 +1,40 @@
+# Cloudflare Workers configuration for MCP Server
+name = "mcp-server"
+main = "src/workers/index.ts"
+compatibility_date = "2025-01-15"
+
+# Workers Free plan limits
+# - 100,000 requests/day
+# - 10ms CPU time per request
+# - 128 MB memory
+# - 3 MB compressed bundle size
+
+[build]
+command = ""
+
+# Durable Objects configuration
+[[durable_objects.bindings]]
+name = "MCP_SESSION"
+class_name = "MCPSession"
+script_name = "mcp-server"
+
+# Migrations for Durable Objects
+[[migrations]]
+tag = "v1"
+new_classes = ["MCPSession"]
+
+# Environment variables (optional)
+[vars]
+# Add any environment variables here if needed
+# EXAMPLE_VAR = "value"
+
+# Development configuration
+[env.dev]
+name = "mcp-server-dev"
+vars = { }
+
+# Production configuration  
+[env.production]
+name = "mcp-server-production"
+vars = { }
+
