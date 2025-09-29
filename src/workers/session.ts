@@ -1,6 +1,6 @@
 /**
  * Durable Object for managing MCP session state
- * 
+ *
  * Each instance of this DO represents a single MCP session and owns:
  * - StreamableHTTPServerTransport
  * - MCP Server instance
@@ -12,6 +12,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { InMemoryEventStore } from '@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore.js';
 import { createServer } from './everything-workers.js';
+import { ExpressRequestAdapter, ExpressResponseAdapter } from './express-adapter.js';
 
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;
@@ -87,12 +88,13 @@ export class MCPSession extends DurableObject {
       // Connect the transport to the server
       await this.server.connect(this.transport);
 
-      // Convert Request to Express-like req/res objects
-      const expressReq = await this.convertToExpressRequest(request);
-      const expressRes = this.createExpressResponse();
+      // Convert Request to Express-like req/res objects using adapter
+      const expressReq = new ExpressRequestAdapter(request);
+      await expressReq.parseBody();
+      const expressRes = new ExpressResponseAdapter();
 
-      // Handle the request
-      await this.transport.handleRequest(expressReq, expressRes);
+      // Handle the request - pass the parsed body as third parameter
+      await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
 
       // Start notification intervals after initialization
       startNotificationIntervals(this.sessionId);
@@ -101,7 +103,7 @@ export class MCPSession extends DurableObject {
       this.startHeartbeat();
 
       // Return the response
-      return this.convertFromExpressResponse(expressRes);
+      return await expressRes.toResponse();
     }
 
     // Existing session - handle the request
@@ -119,13 +121,14 @@ export class MCPSession extends DurableObject {
       });
     }
 
-    // Convert and handle the request
-    const expressReq = await this.convertToExpressRequest(request);
-    const expressRes = this.createExpressResponse();
+    // Convert and handle the request using adapter
+    const expressReq = new ExpressRequestAdapter(request);
+    await expressReq.parseBody();
+    const expressRes = new ExpressResponseAdapter();
 
-    await this.transport!.handleRequest(expressReq, expressRes);
+    await this.transport!.handleRequest(expressReq as any, expressRes as any, expressReq.body);
 
-    return this.convertFromExpressResponse(expressRes);
+    return await expressRes.toResponse();
   }
 
   private async handleGet(request: Request): Promise<Response> {
@@ -153,13 +156,14 @@ export class MCPSession extends DurableObject {
       console.log(`Establishing new SSE stream for session ${this.sessionId}`);
     }
 
-    // Convert and handle the request
-    const expressReq = await this.convertToExpressRequest(request);
-    const expressRes = this.createExpressResponse();
+    // Convert and handle the request using adapter
+    const expressReq = new ExpressRequestAdapter(request);
+    await expressReq.parseBody();
+    const expressRes = new ExpressResponseAdapter();
 
-    await this.transport.handleRequest(expressReq, expressRes);
+    await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
 
-    return this.convertFromExpressResponse(expressRes);
+    return await expressRes.toResponse();
   }
 
   private async handleDelete(request: Request): Promise<Response> {
@@ -182,12 +186,13 @@ export class MCPSession extends DurableObject {
     console.log(`Received session termination request for session ${this.sessionId}`);
 
     try {
-      const expressReq = await this.convertToExpressRequest(request);
-      const expressRes = this.createExpressResponse();
+      const expressReq = new ExpressRequestAdapter(request);
+      await expressReq.parseBody();
+      const expressRes = new ExpressResponseAdapter();
 
-      await this.transport.handleRequest(expressReq, expressRes);
+      await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
 
-      return this.convertFromExpressResponse(expressRes);
+      return await expressRes.toResponse();
     } catch (error) {
       console.error('Error handling session termination:', error);
       return new Response(JSON.stringify({
@@ -217,65 +222,6 @@ export class MCPSession extends DurableObject {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
-  }
-
-  // Helper methods to convert between Workers Request/Response and Express-like objects
-  private async convertToExpressRequest(request: Request): any {
-    const url = new URL(request.url);
-    const body = request.method !== 'GET' ? await request.json().catch(() => ({})) : {};
-
-    return {
-      method: request.method,
-      url: url.pathname + url.search,
-      headers: Object.fromEntries(request.headers.entries()),
-      body,
-      query: Object.fromEntries(url.searchParams.entries()),
-    };
-  }
-
-  private createExpressResponse(): any {
-    const response: any = {
-      statusCode: 200,
-      headers: {},
-      body: null,
-      headersSent: false,
-    };
-
-    response.status = (code: number) => {
-      response.statusCode = code;
-      return response;
-    };
-
-    response.json = (data: any) => {
-      response.body = JSON.stringify(data);
-      response.headers['Content-Type'] = 'application/json';
-      response.headersSent = true;
-      return response;
-    };
-
-    response.setHeader = (name: string, value: string) => {
-      response.headers[name] = value;
-    };
-
-    response.write = (chunk: any) => {
-      if (!response.body) response.body = '';
-      response.body += chunk;
-    };
-
-    response.end = (data?: any) => {
-      if (data) response.body = data;
-      response.headersSent = true;
-    };
-
-    return response;
-  }
-
-  private convertFromExpressResponse(expressRes: any): Response {
-    const headers = new Headers(expressRes.headers);
-    return new Response(expressRes.body, {
-      status: expressRes.statusCode,
-      headers,
-    });
   }
 }
 
