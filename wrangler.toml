@@ -19,10 +19,10 @@ name = "MCP_SESSION"
 class_name = "MCPSession"
 script_name = "mcp-server"
 
-# Migrations for Durable Objects
+# Migrations for Durable Objects (Free plan requires new_sqlite_classes)
 [[migrations]]
 tag = "v1"
-new_classes = ["MCPSession"]
+new_sqlite_classes = ["MCPSession"]
 
 # Environment variables (optional)
 [vars]
