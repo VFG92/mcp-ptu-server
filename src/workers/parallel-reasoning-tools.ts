@@ -23,8 +23,8 @@ import {
 } from './parallel-reasoning-engine.js';
 import { getAllAgentPersonas } from './agent-personas.js';
 
+// Regex to validate Durable Object IDs (64 hex characters)
 const DURABLE_OBJECT_ID_REGEX = /^[0-9a-f]{64}$/i;
-const SESSION_DELIMITER = '::';
 
 // Tool Schemas
 export const ParallelReasoningInitSchema = z.object({
@@ -89,10 +89,13 @@ export function handleParallelReasoningInit(
   getTransportSessionId?: () => string | null | undefined
 ): any {
   const transportSessionId = getTransportSessionId?.() ?? null;
-  const baseSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // CRITICAL FIX: Use ONLY the DO ID as session_id
+  // ChatGPT tool calls don't propagate mcp-session-id header, so composite IDs don't work
+  // We must use the DO ID directly so all tool calls to the same session hit the same DO
   const sessionId = transportSessionId && DURABLE_OBJECT_ID_REGEX.test(transportSessionId)
-    ? `${transportSessionId}${SESSION_DELIMITER}${baseSessionId}`
-    : baseSessionId;
+    ? transportSessionId  // Use DO ID directly - this ensures persistence!
+    : `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; // Fallback for non-DO environments
 
   const session = initializeSession(
     sessionId,
@@ -118,16 +121,23 @@ export function handleParallelReasoningInit(
     instructions: `
 🎯 Parallel Reasoning Session Initialized!
 
-**Session ID**: ${sessionId}
+**SESSION_ID**: ${sessionId}
+
 **Task**: ${args.task}
 **Agents**: ${session.agent_count}
 **Strategy**: ${session.coordination_strategy}
 
+⚠️  **CRITICAL**: Use this exact session_id (${sessionId}) in ALL subsequent tool calls:
+- agent_reasoning_step
+- parallel_compute_status
+- cross_agent_communication
+- synthesize_parallel_reasoning
+
 📋 **Next Steps**:
 1. For each agent below, adopt their persona and analyze the task
-2. Use agent_reasoning_step to submit each agent's analysis
-3. Agents can communicate using cross_agent_communication
-4. When all agents complete, use synthesize_parallel_reasoning
+2. Use agent_reasoning_step to submit each agent's analysis (with session_id: "${sessionId}")
+3. Agents can communicate using cross_agent_communication (with session_id: "${sessionId}")
+4. When all agents complete, use synthesize_parallel_reasoning (with session_id: "${sessionId}")
 
 🤖 **Agent Prompts**:
 ${agentPrompts.map((a, i) => `
@@ -137,15 +147,6 @@ ${a.prompt}
 
 ⚡ Start reasoning in parallel now!
     `.trim()
-  };
-
-  if (transportSessionId) {
-    responseData.transport_session_id = transportSessionId;
-    responseData.instructions += `
-
-🛰️ **Session Routing**:
-- Use the provided session_id for tool arguments
-- The MCP client should reuse the \`mcp-session-id\` header value (${transportSessionId}) for all subsequent requests`;
   }
 
   return {

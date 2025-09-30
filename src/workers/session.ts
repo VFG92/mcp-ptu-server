@@ -149,6 +149,11 @@ export class MCPSession extends DurableObject {
 
     if (!sessionIdHeader) {
       console.log(`[MCPSession] POST request missing session header; trusting worker routing for session ${this.sessionId}`);
+      // CRITICAL FIX: Inject the session ID header for MCP SDK compatibility
+      // ChatGPT tool calls don't include the header, but we know the correct session from routing
+      const headers = new Headers(request.headers);
+      headers.set('mcp-session-id', this.sessionId);
+      request = new Request(request, { headers });
     }
 
     // Convert and handle the request using adapter
