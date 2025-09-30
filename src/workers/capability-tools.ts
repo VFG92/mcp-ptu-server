@@ -48,6 +48,8 @@ export const AnalyzeWithCapabilitiesSchema = z.object({
   }).optional().describe('Optional budget constraints'),
   tournament_mode: z.boolean().optional().default(true)
     .describe('Tournament mode for multi-agent quality (DEFAULT: enabled, set to false to disable)'),
+  peer_review_mode: z.boolean().optional().default(true)
+    .describe('Enable peer review between agents for robustness measurement (DEFAULT: enabled, set to false to disable)'),
   industry_vertical: z.enum([
     'consumer_saas', 'enterprise_saas', 'automotive', 'pharmaceutical', 'energy',
     'financial_services', 'manufacturing', 'retail', 'healthcare', 'telecommunications',
@@ -130,6 +132,7 @@ export async function handleAnalyzeWithCapabilities(
     adapter_id: args.adapter_id,
     required_artifacts: args.required_artifacts,
     tournament_mode: args.tournament_mode,
+    peer_review_mode: args.peer_review_mode,
     industry_vertical: args.industry_vertical,
     geographic_region: args.geographic_region,
     entity_names: args.entity_names
@@ -176,13 +179,32 @@ export async function handleAnalyzeWithCapabilities(
       }
       response += `\n`;
     }
-    
+
+    // Add peer review results if available
+    if (result.peer_review) {
+      response += `## Peer Review Analysis\n`;
+      response += `- **Consensus Score**: ${(result.peer_review.consensus_score * 100).toFixed(1)}%\n`;
+      response += `- **Conflict Score**: ${(result.peer_review.conflict_score * 100).toFixed(1)}%\n`;
+      response += `- **Robustness Score**: ${(result.peer_review.robustness_score * 100).toFixed(1)}%\n`;
+      response += `- **Critical Disagreements**: ${result.peer_review.critical_disagreements}\n`;
+      response += `- **Review Quality**: ${(result.peer_review.review_quality * 100).toFixed(1)}%\n\n`;
+
+      // Interpretation
+      if (result.peer_review.robustness_score >= 0.8) {
+        response += `**Interpretation**: ✅ HIGH ROBUSTNESS - Results are highly validated by peer agents. Strong consensus indicates reliable findings.\n\n`;
+      } else if (result.peer_review.robustness_score >= 0.6) {
+        response += `**Interpretation**: ⚠️ MODERATE ROBUSTNESS - Some disagreement among agents. Review critical disagreements for areas of uncertainty.\n\n`;
+      } else {
+        response += `**Interpretation**: ❌ LOW ROBUSTNESS - Significant disagreement among agents. Results may be unreliable - consider additional analysis.\n\n`;
+      }
+    }
+
     response += `## Cost\n`;
     response += `- **Tokens In**: ${result.cost_actual.tokens_in}\n`;
     response += `- **Tokens Out**: ${result.cost_actual.tokens_out}\n`;
     response += `- **CPU Time**: ${result.cost_actual.cpu_ms}ms\n`;
     response += `- **Subrequests**: ${result.cost_actual.subrequests}\n`;
-    
+
     return {
       content: [{ type: 'text', text: response }]
     };

@@ -6,8 +6,8 @@ A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MC
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-4.0.0-green)](https://github.com/VFG92/mcp-ptu-server)
-[![Capabilities](https://img.shields.io/badge/Capabilities-46+-brightgreen)](./CAPABILITIES_IMPLEMENTATION_SUMMARY.md)
+[![Version](https://img.shields.io/badge/Version-4.2.0-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Capabilities](https://img.shields.io/badge/Capabilities-58-brightgreen)](./AGENT.md#-46-advanced-capabilities-v40)
 
 ---
 
@@ -30,6 +30,15 @@ An MCP server that enables **ChatGPT Developer Mode** to perform **evidence-back
 ---
 
 ## ✨ Key Features
+
+### 🆕 Version 4.2 Enhancements
+
+#### Peer Review System for Multi-Agent Consensus
+- ✅ **PeerReviewKernel** - Each agent critiques every other result, producing agreement matrices and consensus insights
+- ✅ **Consensus/Conflict Metrics** - Consensus, conflict, robustness, critical disagreements, and review quality available in orchestration results
+- ✅ **Tournament Integration** - Peer agreement boosts ELO scores while controversy introduces penalties, sharpening final rankings
+- ✅ **Orchestrator Controls** - `peer_review_mode` toggle (default `true`) keeps the feature backward compatible
+- ✅ **Developer Visibility** - Results exposed via `result.peer_review` plus runnable example in `examples/peer-review-example.ts`
 
 ### 🆕 Version 4.0 Enhancements
 
@@ -210,7 +219,7 @@ Export complete session for audit/compliance.
 
 ### 46 Advanced Capabilities Across 8 Domains
 
-For detailed descriptions, see [CAPABILITIES_IMPLEMENTATION_SUMMARY.md](./CAPABILITIES_IMPLEMENTATION_SUMMARY.md)
+For detailed descriptions, see [AGENT.md](./AGENT.md#-46-advanced-capabilities-v40)
 
 #### 1. Corporate Strategy & Growth (5)
 - `portfolio_strategy` - Portfolio optimization with BCG matrix
@@ -327,6 +336,65 @@ See [src/workers/industry-adapters.ts](./src/workers/industry-adapters.ts) for i
 
 ### Legacy Tools
 Legacy persona-based tools (8 tools) have been **removed from the public API** but remain functional internally for backward compatibility. New integrations should use only the 4 capability-driven tools above.
+
+---
+
+## 🤝 Peer Review Metrics & Usage
+
+- **Consensus Score (0-1)** – Measures agreement among agent outputs (>0.8 = strong alignment)
+- **Conflict Score (0-1)** – Highlights disagreement hot spots (inverse of consensus)
+- **Robustness Score (0-1)** – Blends consensus, reviewer confidence, and controversy penalties
+- **Critical Disagreements** – Counts high-impact conflicts that merit follow-up investigation
+- **Review Quality (0-1)** – Assesses thoroughness of critiques and cross-checks
+
+Peer review runs by default whenever the orchestrator executes multiple trajectories. Toggle it explicitly with `peer_review_mode: false` if you need a faster, single-pass run.
+
+```typescript
+const result = await orchestrator.execute({
+  session_id: 'session_001',
+  task: 'Market analysis',
+  budget: defaultBudget,
+  policy: defaultPolicy,
+  // peer_review_mode defaults to true
+});
+
+if (result.peer_review) {
+  console.log('Consensus', result.peer_review.consensus_score);
+  console.log('Robustness', result.peer_review.robustness_score);
+  console.log('Critical disagreements', result.peer_review.critical_disagreements);
+}
+```
+
+### MCP Integration
+
+- `peer_review_mode` is now part of the MCP tool schema for `analyze_with_capabilities` and defaults to `true`.
+- Clients can explicitly disable peer review for faster runs by sending `"peer_review_mode": false` in the MCP request.
+
+MCP request examples:
+
+```json
+{
+  "name": "analyze_with_capabilities",
+  "arguments": {
+    "session_id": "market_analysis_001",
+    "task": "Analyze the European fintech market for B2B SaaS opportunities",
+    "adapter_id": "strategy",
+    "tournament_mode": true
+  }
+}
+```
+
+```json
+{
+  "name": "analyze_with_capabilities",
+  "arguments": {
+    "session_id": "quick_check_001",
+    "task": "Quick baseline churn analysis",
+    "adapter_id": "commercial",
+    "peer_review_mode": false
+  }
+}
+```
 
 ---
 
@@ -553,6 +621,15 @@ wrangler deploy      # Deploy
 
 ---
 
+## ✅ Quality Verification
+
+- `npm test` → **105 tests passing** (includes 7 new peer review tests)
+- `npm test -- __tests__/peer-review.test.ts` → Focused peer review coverage
+- `npx tsc --noEmit` → TypeScript strict compilation with **0 errors**
+- `npx ts-node examples/peer-review-example.ts` → End-to-end peer review walkthrough
+
+---
+
 ## 🤝 Contributing
 
 Contributions welcome! Please:
@@ -602,4 +679,3 @@ See [AGENT.md](./AGENT.md) sections "Peer Review System (v4.2.0)" and "Bug Fixes
 ---
 
 **Ready to get started?** Check out [AGENT.md](./AGENT.md) for complete technical documentation!
-

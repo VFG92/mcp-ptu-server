@@ -7,7 +7,7 @@
 ## 📋 Quick Reference
 
 **Project**: MCP PTU Server - Capability-Driven Business Analysis
-**Version**: 4.0.0 (Major Enhancement Release)
+**Version**: 4.2.0 (Peer Review Release)
 **Platform**: Cloudflare Workers + Durable Objects
 **Language**: TypeScript (Strict Mode)
 **Protocol**: Model Context Protocol (MCP) 2024-11-05
@@ -733,6 +733,161 @@ confidence: realData ? 0.85 : 0.70
 
 ---
 
+## 🤝 Peer Review System (v4.2.0)
+
+### Overview
+Peer review converts parallel agent runs into a **critical evaluation loop**. Every trajectory critiques the others, producing consensus, conflict, and robustness signals that feed directly into tournament rankings and orchestration outputs.
+
+### Core Module: `PeerReviewKernel`
+- File: `src/workers/peer-review-kernel.ts`
+- Responsibilities:
+  - `conductPeerReview(results)` orchestrates the complete review session
+  - `generateCritiques(results)` produces pairwise critiques for each agent output
+  - `analyzeConsensus(critiques)` builds an agreement matrix and scores
+  - `identifyClusters(matrix)` groups mutually supportive trajectories
+  - `identifyOutliers(matrix)` spots isolated or controversial outputs
+  - `calculateRobustness(analysis)` blends consensus, reviewer confidence, and controversy into a single robustness index
+
+#### Key Data Structures
+```typescript
+interface PeerCritique {
+  reviewer_id: string;
+  reviewed_id: string;
+  agreement_score: number;        // 0-1
+  critique_points: CritiquePoint[];
+  overall_assessment: 'strong_agree' | 'agree' | 'neutral' | 'disagree' | 'strong_disagree';
+  confidence_in_critique: number;
+}
+
+interface ConsensusAnalysis {
+  consensus_score: number;        // Agreement level 0-1
+  conflict_score: number;         // Disagreement level 0-1
+  robustness_score: number;       // Composite robustness metric 0-1
+  agreement_matrix: number[][];   // NxN agreement grid
+  clusters: ResultCluster[];      // Groups of mutually aligned outputs
+  outliers: string[];             // Controversial or isolated trajectories
+  critical_disagreements: CriticalDisagreement[];
+}
+```
+
+### Integrations
+
+| Component | Changes |
+|-----------|---------|
+| `tournament-kernel.ts` | Runs peer review **before** scoring, boosts ELO by up to +100 for high agreement, applies -50 penalty for high controversy, enriches contestant summaries with peer-identified strengths/weaknesses. |
+| `capability-orchestrator.ts` | New `peer_review_mode` flag (default `true`), passes peer review insights through to orchestration results, logs consensus/robustness in execution traces. |
+| `examples/peer-review-example.ts` | Runnable walkthrough demonstrating consensus metrics, cluster detection, and toggling. |
+
+### Metrics & Interpretation
+- **Consensus Score (0-1)** – >0.8 indicates strong alignment, <0.6 signals divergence
+- **Conflict Score (0-1)** – Computed as `1 - consensus`, surfaces disagreement hot spots
+- **Robustness Score (0-1)** – Weighted blend of consensus (60%), reviewer confidence (30%), controversy penalty (10%)
+- **Critical Disagreements** – Count of high-impact conflicts requiring escalation
+- **Review Quality (0-1)** – Assesses critique depth, coverage, and reviewer confidence
+
+### Execution Flow
+```
+1. capabilityOrchestrator.execute()
+   ↓
+2. Capabilities generate N candidate outputs
+   ↓
+3. PeerReviewKernel.conductPeerReview()
+   ├─ Each output critiques all others
+   ├─ Builds agreement matrix & critique ledger
+   ├─ Computes consensus/conflict/robustness
+   ├─ Identifies clusters and outliers
+   ↓
+4. TournamentKernel.runTournament()
+   ├─ Applies ELO boosts or penalties
+   └─ Injects peer strengths/weaknesses
+   ↓
+5. Orchestrator returns results with `peer_review` summary
+```
+
+### Usage
+```typescript
+const result = await orchestrator.execute({
+  session_id: 'session_001',
+  task: 'Market analysis for EU EV segment',
+  budget: defaultBudget,
+  policy: defaultPolicy,
+  // peer_review_mode defaults to true
+});
+
+if (result.peer_review) {
+  console.log('Consensus', result.peer_review.consensus_score);
+  console.log('Robustness', result.peer_review.robustness_score);
+  console.log('Critical disagreements', result.peer_review.critical_disagreements);
+}
+
+// Optional: disable when speed matters
+await orchestrator.execute({
+  session_id: 'quick_pass',
+  task: 'Baseline churn check',
+  budget: leanBudget,
+  policy: defaultPolicy,
+  peer_review_mode: false,
+});
+```
+
+### MCP Schema and Handler Changes
+
+- `peer_review_mode` is included in the Zod schema for `analyze_with_capabilities` in `src/workers/capability-tools.ts`:
+  - Optional boolean with default `true`.
+  - Described as: Enable peer review between agents for robustness measurement.
+- The handler forwards `peer_review_mode` to the orchestrator request.
+- The formatter appends a "Peer Review Analysis" section to responses when `result.peer_review` is present, including consensus, conflict, robustness, critical disagreements, and review quality, plus interpretation guidance.
+
+Example MCP payloads:
+
+```json
+{
+  "name": "analyze_with_capabilities",
+  "arguments": {
+    "session_id": "market_analysis_001",
+    "task": "Analyze the European fintech market for B2B SaaS opportunities",
+    "adapter_id": "strategy",
+    "tournament_mode": true
+  }
+}
+```
+
+```json
+{
+  "name": "analyze_with_capabilities",
+  "arguments": {
+    "session_id": "quick_check_001",
+    "task": "Quick baseline churn analysis",
+    "adapter_id": "commercial",
+    "peer_review_mode": false
+  }
+}
+```
+
+### Implementation Stats & Verification
+- New files: `peer-review-kernel.ts`, `__tests__/peer-review.test.ts`, `examples/peer-review-example.ts`
+- Modified files: `tournament-kernel.ts`, `capability-orchestrator.ts`, `AGENT.md`
+- Test coverage: **7 dedicated peer review tests**, **105 total tests** now passing
+- TypeScript strict: `npx tsc --noEmit` → 0 errors
+- Example script: `npx ts-node examples/peer-review-example.ts`
+- Backward compatibility: 100% (feature togglable)
+
+### Benefits
+1. **Internal Self-Validation** – Agents cross-check each other before tournament scoring
+2. **Quantified Robustness** – Consensus/conflict metrics surface stability of conclusions
+3. **Conflict Spotlighting** – Critical disagreements pinpoint areas needing human review
+4. **Enhanced Rankings** – Tournament incorporates agreement strength and controversy penalties
+5. **Transparent Audit Trail** – Full critique ledger stored for inspection
+
+### Future Enhancements
+1. LLM-assisted critique generation for deeper peer feedback
+2. Reviewer weighting based on historical accuracy
+3. Iterative review rounds with refinement loops
+4. Visualization of agreement matrices and clusters
+5. Learning from past peer reviews to improve critique heuristics
+
+---
+
 ## 🔌 MCP Tools API
 
 **4 production-ready tools exposed via MCP protocol**
@@ -757,6 +912,7 @@ Main analysis tool with 46 capabilities, industry adaptation, and native LLM int
     max_subrequests: number;    // Default: 50
   };
   tournament_mode?: boolean;    // Default: true (v4.0 change)
+  peer_review_mode?: boolean;   // Default: true (v4.2.0 NEW)
   industry_vertical?: string;   // v4.0: Auto-detected or explicit
   geographic_region?: string;   // v4.0: For regulatory context
   entity_names?: Record<string, string>; // v4.0: Actual entity names
@@ -768,6 +924,9 @@ Main analysis tool with 46 capabilities, industry adaptation, and native LLM int
 - `industry_vertical` - One of 20+ industries (auto-detected from task if not provided)
 - `geographic_region` - Geographic region for regulatory context (global, north_america, europe, asia_pacific, etc.)
 - `entity_names` - Map of entity types to actual names (e.g., `{"competitor_1": "Tesla", "competitor_2": "VW Group"}`)
+
+**v4.2.0 New Parameters**:
+- `peer_review_mode` - **Enabled by default**. Agents critique each other's results for robustness measurement. Set to `false` to disable for faster execution.
 
 **Output**:
 ```typescript
@@ -792,6 +951,13 @@ Main analysis tool with 46 capabilities, industry adaptation, and native LLM int
     vertical: string;
     region: string;
     adapter_applied: boolean;
+  };
+  peer_review?: {           // v4.2.0: Peer review results
+    consensus_score: number;        // 0-1, level of agreement
+    conflict_score: number;         // 0-1, level of disagreement
+    robustness_score: number;       // 0-1, overall robustness
+    critical_disagreements: number; // Count of critical conflicts
+    review_quality: number;         // 0-1, quality of review process
   };
 }
 ```
@@ -1443,7 +1609,7 @@ npm test
 
 ---
 
-## 🔄 Peer Review System (v4.2.0)
+## 🔄 Peer Review System Deep Dive (v4.2.0)
 
 ### Overview
 
@@ -1555,7 +1721,40 @@ Low robustness (<0.5) indicates:
 
 ### Usage
 
-#### Enable/Disable Peer Review
+#### Via MCP Tool (analyze_with_capabilities)
+
+```json
+{
+  "session_id": "session_001",
+  "task": "Market analysis for European fintech",
+  "adapter_id": "strategy",
+  "tournament_mode": true,
+  "peer_review_mode": true
+}
+```
+
+**Response includes peer review section:**
+```markdown
+## Peer Review Analysis
+- **Consensus Score**: 82.0%
+- **Conflict Score**: 18.0%
+- **Robustness Score**: 87.0%
+- **Critical Disagreements**: 1
+- **Review Quality**: 91.0%
+
+**Interpretation**: ✅ HIGH ROBUSTNESS - Results are highly validated by peer agents. Strong consensus indicates reliable findings.
+```
+
+**To disable peer review:**
+```json
+{
+  "session_id": "session_002",
+  "task": "Quick baseline analysis",
+  "peer_review_mode": false
+}
+```
+
+#### Via TypeScript API
 
 ```typescript
 // Peer review enabled by default
@@ -1814,6 +2013,81 @@ Session 1: execute capability A again
 
 ---
 
+## ✅ Pull Request Checklist
+
+Use this guide when preparing a contribution. Copy the sections into your PR description and tick items as you complete them.
+
+### Required Sections
+- **Description** – Clear and concise summary of the change
+- **Changes Made** – Bullet the concrete modifications
+- **Related Issues** – Reference `Fixes #123` / `Relates to #456`
+- **Screenshots/Logs** – Include if relevant
+- **Deployment Notes** – Document special rollout steps or migrations
+- **Rollback Plan** – Explain how to revert safely
+
+### Change Type (select all that apply)
+- [ ] 🐛 Bug fix
+- [ ] ✨ New feature
+- [ ] 💥 Breaking change
+- [ ] 📚 Documentation update
+- [ ] 🎨 Code style/refactor
+- [ ] 🧪 Test updates
+- [ ] ⚙️ Configuration changes
+
+### Testing Checklist
+**Local**
+- [ ] `npm run workers:dev`
+- [ ] `./test-parallel-reasoning-v2.sh`
+- [ ] `npx tsc --noEmit`
+- [ ] No console warnings/errors
+
+**Production / Staging (if applicable)**
+- [ ] Deployed to target environment
+- [ ] Verified all MCP tools end-to-end
+- [ ] Validated session persistence
+- [ ] Confirmed ChatGPT integration
+
+### Documentation Updates
+- [ ] `README.md`
+- [ ] `AGENT.md`
+- [ ] Inline JSDoc for new APIs
+
+### Code Quality Gates
+- [ ] Strict TypeScript compliance (no unchecked `any`)
+- [ ] Descriptive identifiers and focused functions (<50 lines)
+- [ ] Robust error handling and input validation
+- [ ] Tests updated/added for new logic
+
+### MCP Protocol Compliance
+- [ ] Aligns with MCP 2024-11-05 spec
+- [ ] JSON-RPC 2.0 formatting validated
+- [ ] SSE streaming verified (if used)
+- [ ] Tool schemas validated
+
+### Session Management Expectations
+- [ ] Durable Objects use `idFromString()`
+- [ ] State persists across requests
+- [ ] Graceful handling for missing sessions
+- [ ] No data loss during session operations
+
+### Performance Guardrails
+- [ ] Minimize Durable Object writes
+- [ ] Avoid heavy deps / bundle bloat
+- [ ] Optimize for Workers edge constraints
+
+### Reviewer Guidance
+- Highlight focus areas and open questions in the PR body
+- Provide additional context, logs, or artifacts as needed
+
+### Final Confirmation
+- [ ] Read `AGENT.md` guidelines
+- [ ] Tested changes locally
+- [ ] Updated necessary documentation
+- [ ] Code is production-ready
+- [ ] Change respects business consulting domain focus
+
+---
+
 **Last Updated**: 2025-09-30
 **Version**: 4.2.0 (Peer Review System)
 **Deployment**: d4b9fdeb-dabd-4b3f-af42-2be0b63bbad7
@@ -1825,4 +2099,3 @@ Session 1: execute capability A again
 **Bug Fixes**: ✅ Session state + artifact versioning (v4.1.1)
 **Peer Review**: ✅ Critical peer review between agents (v4.2.0)
 **Tests**: ✅ 105 tests passing (including 7 peer review tests)
-
