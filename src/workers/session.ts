@@ -153,13 +153,18 @@ export class MCPSession extends DurableObject {
     }
 
     // Convert and handle the request using adapter
+    console.log(`[MCPSession] Converting request to Express format`);
     const expressReq = new ExpressRequestAdapter(request);
     await expressReq.parseBody();
+    console.log(`[MCPSession] Request body parsed, method: ${expressReq.body?.method || 'unknown'}`);
     const expressRes = new ExpressResponseAdapter();
 
+    console.log(`[MCPSession] Calling transport.handleRequest`);
     await this.transport!.handleRequest(expressReq as any, expressRes as any, expressReq.body);
+    console.log(`[MCPSession] transport.handleRequest completed`);
 
     const response = await expressRes.toResponse();
+    console.log(`[MCPSession] Response created, status: ${response.status}`);
     return this.attachSessionHeader(response);
   }
 

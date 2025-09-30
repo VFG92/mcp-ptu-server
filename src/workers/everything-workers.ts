@@ -435,9 +435,13 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    console.log(`[CallTool] Tool called: ${name}`);
+    console.log(`[CallTool] Arguments: ${JSON.stringify(args).substring(0, 200)}`);
 
-    // Parallel Reasoning Tool Handlers
-    if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
+    try {
+      // Parallel Reasoning Tool Handlers
+      if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
+      console.log(`[CallTool] Handling parallel_reasoning_init`);
       const validatedArgs = ParallelReasoningInitSchema.parse(args);
       const result = handleParallelReasoningInit(
         validatedArgs,
@@ -446,53 +450,73 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
       );
       // Persist after state change
       if (persistCallback) await persistCallback();
+      console.log(`[CallTool] parallel_reasoning_init completed successfully`);
       return result;
     }
 
     if (name === ParallelReasoningToolName.AGENT_REASONING_STEP) {
+      console.log(`[CallTool] Handling agent_reasoning_step`);
       const validatedArgs = AgentReasoningStepSchema.parse(args);
       const result = handleAgentReasoningStep(validatedArgs, sessionStore);
       // Persist after state change
       if (persistCallback) await persistCallback();
+      console.log(`[CallTool] agent_reasoning_step completed successfully`);
       return result;
     }
 
     if (name === ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION) {
+      console.log(`[CallTool] Handling cross_agent_communication`);
       const validatedArgs = CrossAgentCommunicationSchema.parse(args);
       const result = handleCrossAgentCommunication(validatedArgs, sessionStore);
       // Persist after state change
       if (persistCallback) await persistCallback();
+      console.log(`[CallTool] cross_agent_communication completed successfully`);
       return result;
     }
 
     if (name === ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING) {
+      console.log(`[CallTool] Handling synthesize_parallel_reasoning`);
       const validatedArgs = SynthesizeParallelReasoningSchema.parse(args);
       const result = handleSynthesizeParallelReasoning(validatedArgs, sessionStore);
       // Persist after state change
       if (persistCallback) await persistCallback();
+      console.log(`[CallTool] synthesize_parallel_reasoning completed successfully`);
       return result;
     }
 
     if (name === ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS) {
+      console.log(`[CallTool] Handling parallel_compute_status`);
       const validatedArgs = ParallelComputeStatusSchema.parse(args);
       // No state change, no persist needed
-      return handleParallelComputeStatus(validatedArgs, sessionStore);
+      const result = handleParallelComputeStatus(validatedArgs, sessionStore);
+      console.log(`[CallTool] parallel_compute_status completed successfully`);
+      return result;
     }
 
     if (name === ParallelReasoningToolName.AGENT_DEBATE) {
+      console.log(`[CallTool] Handling agent_debate`);
       const validatedArgs = AgentDebateSchema.parse(args);
       const result = handleAgentDebate(validatedArgs, sessionStore);
       // Persist after state change
       if (persistCallback) await persistCallback();
+      console.log(`[CallTool] agent_debate completed successfully`);
       return result;
     }
 
     if (name === ParallelReasoningToolName.LIST_AGENT_PERSONAS) {
-      // No state change, no persist needed
-      return handleListAgentPersonas();
+      console.log(`[CallTool] Handling list_agent_personas`);
+      const result = handleListAgentPersonas();
+      console.log(`[CallTool] list_agent_personas completed successfully`);
+      return result;
     }
 
-    throw new Error(`Unknown tool: ${name}`);
+      console.error(`[CallTool] Unknown tool requested: ${name}`);
+      throw new Error(`Unknown tool: ${name}`);
+    } catch (error) {
+      console.error(`[CallTool] Error handling tool ${name}:`, error);
+      console.error(`[CallTool] Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+      throw error; // Re-throw to let MCP SDK handle it
+    }
   });
 
   server.setRequestHandler(CompleteRequestSchema, async (request) => {
