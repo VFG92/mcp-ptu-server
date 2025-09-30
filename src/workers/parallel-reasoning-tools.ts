@@ -82,9 +82,11 @@ export enum ParallelReasoningToolName {
 
 export function handleParallelReasoningInit(
   args: z.infer<typeof ParallelReasoningInitSchema>,
-  sessionStore: Map<string, ParallelReasoningSession>
+  sessionStore: Map<string, ParallelReasoningSession>,
+  getTransportSessionId?: () => string | null | undefined
 ): any {
-  const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const transportSessionId = getTransportSessionId?.() ?? null;
+  const sessionId = transportSessionId ?? `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const session = initializeSession(
     sessionId,
@@ -101,7 +103,7 @@ export function handleParallelReasoningInit(
   const agentPrompts = getAgentPrompts(session);
   
   // Return response with session_id prominently displayed
-  const responseData = {
+  const responseData: Record<string, unknown> = {
     session_id: sessionId,
     task: args.task,
     agent_count: session.agent_count,
@@ -130,6 +132,15 @@ ${a.prompt}
 ⚡ Start reasoning in parallel now!
     `.trim()
   };
+
+  if (transportSessionId) {
+    responseData.transport_session_id = transportSessionId;
+    responseData.instructions += `
+
+🛰️ **Session Routing**:
+- Use the provided session_id for tool arguments
+- The MCP client should reuse the \`mcp-session-id\` header value (${transportSessionId}) for all subsequent requests`;
+  }
 
   return {
     content: [

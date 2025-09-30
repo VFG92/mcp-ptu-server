@@ -78,7 +78,8 @@ export class MCPSession extends DurableObject {
       };
       const { server, cleanup, startNotificationIntervals } = createServer(
         this.parallelReasoningSessions,
-        persistCallback
+        persistCallback,
+        () => this.sessionId
       );
       this.server = server;
       this.cleanup = cleanup;
@@ -122,7 +123,8 @@ export class MCPSession extends DurableObject {
       this.startHeartbeat();
 
       // Return the response
-      return await expressRes.toResponse();
+      const response = await expressRes.toResponse();
+      return this.attachSessionHeader(response);
     }
 
     // Existing session - handle the request
@@ -148,7 +150,8 @@ export class MCPSession extends DurableObject {
 
     await this.transport!.handleRequest(expressReq as any, expressRes as any, expressReq.body);
 
-    return await expressRes.toResponse();
+    const response = await expressRes.toResponse();
+    return this.attachSessionHeader(response);
   }
 
   private async handleGet(request: Request): Promise<Response> {
@@ -183,7 +186,8 @@ export class MCPSession extends DurableObject {
 
     await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
 
-    return await expressRes.toResponse();
+    const response = await expressRes.toResponse();
+    return this.attachSessionHeader(response);
   }
 
   private async handleDelete(request: Request): Promise<Response> {
@@ -212,7 +216,8 @@ export class MCPSession extends DurableObject {
 
       await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
 
-      return await expressRes.toResponse();
+      const response = await expressRes.toResponse();
+      return this.attachSessionHeader(response);
     } catch (error) {
       console.error('Error handling session termination:', error);
       return new Response(JSON.stringify({
@@ -269,6 +274,21 @@ export class MCPSession extends DurableObject {
     if (sessions) {
       this.parallelReasoningSessions = new Map(sessions);
     }
+  }
+
+  private attachSessionHeader(response: Response): Response {
+    if (!this.sessionId) {
+      return response;
+    }
+
+    const headers = new Headers(response.headers);
+    headers.set('mcp-session-id', this.sessionId);
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers
+    });
   }
 }
 
