@@ -73,11 +73,6 @@ Synthesize with consensus strategy.
 
 ---
 
-## 📚 Documentation
-
-- **[Parallel Reasoning Guide](PARALLEL_REASONING_GUIDE.md)** - Complete system documentation
-- **[ChatGPT Integration Guide](CHATGPT_INTEGRATION.md)** - Step-by-step integration instructions
-
 ---
 
 ## 🤖 Available Agent Personas
@@ -188,13 +183,6 @@ npm run workers:dev
 # Server runs on http://localhost:8787
 ```
 
-### Testing
-
-```bash
-# Run test script
-./test-parallel-reasoning-v2.sh
-```
-
 ### Deploy
 
 ```bash
@@ -221,9 +209,8 @@ mcp-ptu-server/
 │   ├── everything-workers.ts # MCP server integration
 │   ├── express-adapter.ts    # Express→Workers adapter
 │   └── index.ts              # Hono routing
-├── PARALLEL_REASONING_GUIDE.md  # Complete guide
-├── CHATGPT_INTEGRATION.md    # Integration instructions
-├── test-parallel-reasoning-v2.sh  # Test script
+├── README.md                 # This file
+├── AGENT.md                  # AI agent instructions
 ├── wrangler.toml             # Cloudflare config
 └── package.json              # Dependencies
 ```
@@ -267,11 +254,31 @@ Built with:
 ## 📞 Support
 
 For issues or questions:
-1. Check [PARALLEL_REASONING_GUIDE.md](PARALLEL_REASONING_GUIDE.md) troubleshooting section
-2. Review [CHATGPT_INTEGRATION.md](CHATGPT_INTEGRATION.md) for integration help
+1. Check [AGENT.md](AGENT.md) for development guidelines
+2. Review the MCP Tools section above for API reference
 3. Open an issue on GitHub
 
 ---
 
-**🎉 Ready to enable multi-agent parallel reasoning in ChatGPT? Get started with the [ChatGPT Integration Guide](CHATGPT_INTEGRATION.md)!**
+## 🔄 Recent Updates
+
+### v2.0.2 (2025-09-30)
+
+**Improved Error Handling & Diagnostics**
+
+- ✅ `parallel_compute_status` now **never returns 400** - always provides diagnostic info
+- ✅ Enhanced synthesis error messages with detailed progress and suggestions
+- ✅ Changed `require_all_completed` default to `true` (prevents premature synthesis)
+- ✅ Improved tool descriptions to guide proper workflow
+- ✅ Better troubleshooting information for session issues
+
+**Key Improvements:**
+- Status checks work even when sessions are not found (returns diagnostic info)
+- Synthesis errors now show exactly which agents are incomplete and what to do
+- Default behavior prevents partial synthesis unless explicitly requested
+- All error messages include actionable next steps
+
+---
+
+**🎉 Ready to enable multi-agent parallel reasoning in ChatGPT? Connect to the production server and start analyzing!**
 

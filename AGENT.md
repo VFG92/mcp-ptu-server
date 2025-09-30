@@ -126,13 +126,13 @@ src/workers/
 
 5. **Test Locally First**
    - Always test with `npm run workers:dev` before deploying
-   - Use `test-parallel-reasoning-v2.sh` for automated testing
    - Verify all 7 tools work correctly
+   - Test session persistence across requests
 
 6. **Document Changes**
-   - Update relevant .md files when changing functionality
-   - Keep PARALLEL_REASONING_GUIDE.md in sync with code
-   - Update REPOSITORY_STATUS.md for major changes
+   - Update README.md for user-facing changes
+   - Update AGENT.md for development guidelines
+   - Keep documentation in sync with code
 
 ### DON'T ❌
 
@@ -182,7 +182,7 @@ src/workers/
    }
    ```
 4. Add to `AGENT_PERSONAS` object
-5. Update `PARALLEL_REASONING_GUIDE.md` with new persona
+5. Update README.md with new persona in the list
 6. Test with `list_agent_personas` tool
 
 ### Adding a New Synthesis Strategy
@@ -194,7 +194,7 @@ src/workers/
    ```
 3. Add to `synthesizeResults()` switch statement
 4. Update type union: `'consensus' | 'weighted' | ... | 'my_strategy'`
-5. Document in `PARALLEL_REASONING_GUIDE.md`
+5. Document in README.md
 6. Test with `synthesize_parallel_reasoning` tool
 
 ### Adding a New MCP Tool
@@ -204,8 +204,8 @@ src/workers/
 3. Register in `src/workers/everything-workers.ts`:
    - Add to `tools` array
    - Add to tool handler switch statement
-4. Update `PARALLEL_REASONING_GUIDE.md` API reference
-5. Update `CHATGPT_INTEGRATION.md` if user-facing
+4. Update README.md API reference
+5. Update AGENT.md with usage guidelines
 6. Test locally and in production
 
 ### Modifying Session State
@@ -250,17 +250,12 @@ src/workers/
 # Start local server
 npm run workers:dev
 
-# In another terminal, run tests
-./test-parallel-reasoning-v2.sh
+# Test with curl
+curl -X POST http://localhost:8787/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
-# Expected output:
-# ✅ MCP Session initialized
-# ✅ List personas: 15 agents
-# ✅ Parallel reasoning session created
-# ✅ Agent reasoning submitted
-# ✅ Status retrieved
-# ✅ Cross-agent communication
-# ✅ Synthesis completed
+# Expected: MCP initialization response
 ```
 
 ### Production Testing
@@ -309,17 +304,15 @@ curl https://mcp-server.vf-ghizzoni.workers.dev/
 1. Test all 7 tools in production
 2. Verify Durable Objects working
 3. Check session persistence
-4. Update REPOSITORY_STATUS.md if needed
+4. Monitor logs with `npx wrangler tail`
 
 ---
 
 ## 📚 Key Documentation
 
-1. **[README.md](README.md)** - Project overview, quick start
-2. **[PARALLEL_REASONING_GUIDE.md](PARALLEL_REASONING_GUIDE.md)** - Complete system guide (300 lines)
-3. **[CHATGPT_INTEGRATION.md](CHATGPT_INTEGRATION.md)** - ChatGPT integration (300 lines)
-4. **[REPOSITORY_STATUS.md](REPOSITORY_STATUS.md)** - Current status, metrics
-5. **[CLEANUP_PLAN.md](CLEANUP_PLAN.md)** - Cleanup rationale
+1. **[README.md](README.md)** - Project overview, quick start, API reference
+2. **[AGENT.md](AGENT.md)** - This file - AI agent development guidelines
+3. **[LICENSE](LICENSE)** - MIT License
 
 ---
 
@@ -391,11 +384,11 @@ curl https://mcp-server.vf-ghizzoni.workers.dev/
 
 ## 🆘 Getting Help
 
-1. **Check Documentation** - Read PARALLEL_REASONING_GUIDE.md first
+1. **Check Documentation** - Read README.md and this file first
 2. **Review Code** - Look at existing implementations
 3. **Test Locally** - Reproduce issues in local environment
 4. **Check Logs** - Use `npx wrangler tail` for real-time logs
-5. **Review Recent Updates** - Check the "Recent Updates" section above
+5. **Review Recent Updates** - Check the "Recent Updates" section below
 6. **Ask User** - If unclear, ask for clarification
 
 ### Debugging Session Issues
@@ -460,111 +453,158 @@ A successful change should:
 
 **Production URL**: https://mcp-server.vf-ghizzoni.workers.dev
 **Status**: ✅ OPERATIONAL
-**Version**: 2.0.1
+**Version**: 2.0.2
 
 ---
 
-## 🔧 Recent Updates (v2.0.1)
+## 🔧 Recent Updates
 
-### Session Persistence & Timeout Fixes
+### v2.0.2 - Error Handling & Diagnostics (2025-09-30)
 
-**Date**: 2025-09-30
+**Critical Fixes for ChatGPT Integration**
+
+#### Issues Resolved:
+
+1. **`parallel_compute_status` Never Returns 400** ✅
+   - **Problem**: Status check would fail with 400 Bad Request when session not found
+   - **Root Cause**: Function threw errors instead of returning diagnostic info
+   - **Solution**: Modified to always return 200 OK with diagnostic information
+   - **Files Modified**: `src/workers/parallel-reasoning-tools.ts` (lines 372-449)
+   - **Impact**: Clients can always diagnose issues, even when sessions are missing
+
+2. **Enhanced Synthesis Error Messages** ✅
+   - **Problem**: Generic "Synthesis blocked" errors without actionable information
+   - **Root Cause**: Error message didn't show which agents were incomplete or what to do
+   - **Solution**: Enhanced error messages with:
+     - Exact progress percentage (e.g., "1/3 agents completed (33%)")
+     - List of incomplete agents with their status
+     - Three clear options on how to proceed
+     - Explicit suggestion to use `parallel_compute_status`
+   - **Files Modified**: `src/workers/parallel-reasoning-tools.ts` (lines 294-320)
+   - **Impact**: ChatGPT receives actionable guidance on how to proceed
+
+3. **Changed Default `require_all_completed` to `true`** ✅
+   - **Problem**: Default `false` allowed premature synthesis before all agents completed
+   - **Root Cause**: Poor default behavior led to incomplete analysis
+   - **Solution**: Changed default to `true` to prevent premature synthesis
+   - **Files Modified**: `src/workers/parallel-reasoning-tools.ts` (line 59)
+   - **Impact**: Better quality results by default, clients must explicitly opt-in to partial synthesis
+
+4. **Improved Tool Descriptions** ✅
+   - **Problem**: Tool descriptions didn't mention default behavior or best practices
+   - **Solution**: Updated `synthesize_parallel_reasoning` description to:
+     - Mention default `require_all_completed=true`
+     - Suggest using `parallel_compute_status` first
+   - **Files Modified**: `src/workers/everything-workers.ts` (lines 407-412)
+   - **Impact**: Better guidance for ChatGPT on proper workflow
+
+#### Key Changes:
+
+**Status Check Always Returns 200 OK** (`src/workers/parallel-reasoning-tools.ts`):
+```typescript
+// IMPORTANT: Never throw error for status check - always return status info
+if (!session) {
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        session_id: args.session_id,
+        status: 'not_found',
+        error: true,
+        error_type: 'session_not_found',
+        troubleshooting: {
+          tip: 'Make sure you are using the session_id returned by parallel_reasoning_init',
+          possible_causes: [...]
+        }
+      }, null, 2)
+    }]
+  };
+}
+```
+
+**Enhanced Synthesis Error Message**:
+```typescript
+throw new Error(
+  `❌ Synthesis Blocked: Waiting for ${incompleteAgents.length} more agent(s) to complete.\n\n` +
+  `Progress: ${completedCount}/${agentStates.length} agents completed (${Math.round(completedCount/agentStates.length*100)}%)\n\n` +
+  `Incomplete agents:\n${incompleteDetails.map(a =>
+    `  • ${a.role} (${a.agent_id}): ${a.status} - ${a.progress}% complete`
+  ).join('\n')}\n\n` +
+  `💡 Options:\n` +
+  `  1. Wait for all agents to complete their reasoning steps\n` +
+  `  2. Call synthesize_parallel_reasoning with require_all_completed=false for partial synthesis\n` +
+  `  3. Use parallel_compute_status to monitor progress`
+);
+```
+
+**Workflow Improvements**:
+- Status checks never fail → Always provide diagnostic information
+- Error messages are actionable → Show exactly what's wrong and how to fix it
+- Default behavior is safe → Prevents incomplete analysis by default
+- Tool descriptions guide proper usage → ChatGPT knows the recommended workflow
+
+#### Recommended Workflow for ChatGPT:
+
+1. **Initialize Session**: Call `parallel_reasoning_init` with task and perspectives
+2. **Submit Agent Reasoning**: Call `agent_reasoning_step` for each agent
+3. **Check Status**: Always call `parallel_compute_status` before synthesis
+4. **Synthesize**: Call `synthesize_parallel_reasoning` only when all agents complete
+5. **Handle Errors**: If synthesis fails, check the error message for guidance
+
+#### Testing the Fixes:
+
+1. **Test Status Check on Non-Existent Session**:
+   ```json
+   {"tool": "parallel_compute_status", "arguments": {"session_id": "fake_session_id"}}
+   ```
+   Expected: 200 OK with diagnostic info (not 400 error)
+
+2. **Test Premature Synthesis**:
+   ```json
+   // Step 1: Create session with 3 agents
+   {"tool": "parallel_reasoning_init", "arguments": {"task": "...", "perspectives": ["agent_1", "agent_2", "agent_3"]}}
+
+   // Step 2: Submit only 1 agent reasoning
+   {"tool": "agent_reasoning_step", "arguments": {"session_id": "...", "agent_id": "agent_1", ...}}
+
+   // Step 3: Try to synthesize (should fail with detailed message)
+   {"tool": "synthesize_parallel_reasoning", "arguments": {"session_id": "..."}}
+   ```
+   Expected: Error message showing "1/3 agents completed (33%)" with actionable options
+
+3. **Test Status Check After Error**:
+   ```json
+   {"tool": "parallel_compute_status", "arguments": {"session_id": "..."}}
+   ```
+   Expected: Works correctly (returns current status)
+
+#### For AI Agents Working on This Codebase:
+
+When debugging parallel reasoning issues:
+1. **Status Check Failures**: Remember that `parallel_compute_status` should NEVER return 400 - if it does, the fix was broken
+2. **Synthesis Errors**: Check that error messages include progress percentage and actionable options
+3. **Default Behavior**: Verify `require_all_completed` defaults to `true` in the schema
+4. **Tool Descriptions**: Ensure tool descriptions guide proper workflow (status check before synthesis)
+5. **Error Handling Philosophy**: Status/diagnostic tools should always succeed and provide information, never fail with errors
+
+---
+
+### v2.0.1 - Session Persistence & Timeout Fixes (2025-09-30)
+
+**Previous Update - Now Superseded by v2.0.2**
 
 #### Issues Resolved:
 
 1. **sampleLLM Timeout** ✅
-   - **Problem**: 5-second timeout too short for LLM sampling requests
-   - **Solution**: Increased timeout to 30 seconds in `express-adapter.ts`
-   - **Impact**: Tool now completes successfully without 500 errors
+   - Increased timeout from 5 to 30 seconds in `express-adapter.ts`
+   - Tool now completes successfully without 500 errors
 
-2. **Session Not Found Diagnostics** ✅
-   - **Problem**: Parallel reasoning tools couldn't find sessions after creation
-   - **Solution**: Added extensive logging throughout the session lifecycle
-   - **Files Modified**:
-     - `src/workers/index.ts` - Request routing logs
-     - `src/workers/session.ts` - Durable Object lifecycle logs
-     - `src/workers/parallel-reasoning-tools.ts` - Session operation logs
-   - **Impact**: Can now diagnose session persistence issues in production
+2. **Session Diagnostics** ✅
+   - Added extensive logging throughout session lifecycle
+   - Files: `index.ts`, `session.ts`, `parallel-reasoning-tools.ts`
+   - Can now diagnose session persistence issues in production
 
 3. **Improved Error Messages** ✅
-   - **Problem**: Generic "Session not found" errors
-   - **Solution**: Enhanced error messages showing:
-     - Requested session ID
-     - List of available sessions
-     - Helpful tips for users
-   - **Impact**: Faster debugging and better user experience
-
-#### Key Changes:
-
-**Timeout Configuration** (`src/workers/express-adapter.ts:332`):
-```typescript
-setTimeout(() => {
-  console.warn('Response timeout - returning buffered content');
-  resolve();
-}, 30000); // Increased from 5000 to 30000 (30 seconds)
-```
-
-**Logging Points**:
-- `[Worker]` - HTTP request routing to Durable Objects
-- `[MCPSession]` - Durable Object lifecycle (constructor, load, persist)
-- `[ParallelReasoning]` - Session operations (create, lookup, update)
-
-**Error Message Format**:
-```
-Session not found: session_1759193023694_qtqf5ernm
-Available sessions: session_1759193023694_qtqf5ernm, session_1759193023695_abc123
-Tip: Make sure you're using the session_id returned by parallel_reasoning_init
-```
-
-#### Documentation Added:
-
-- `BUGFIX_SESSION_PERSISTENCE.md` - Technical analysis of the fixes
-- `DEPLOYMENT_INSTRUCTIONS.md` - Step-by-step deploy and test guide
-- `SUMMARY_FIXES.md` - Executive summary of changes
-
-#### Known Issues:
-
-**Session Persistence** (Under Investigation):
-- ChatGPT may not pass `mcp-session-id` header between requests
-- This causes each request to create a new Durable Object
-- Logging now helps identify if this is the root cause
-- Alternative solutions being considered:
-  - Session ID in request body
-  - Cookie-based session tracking
-  - Query parameter session tracking
-
-#### Testing:
-
-To verify the fixes work:
-
-1. **Test sampleLLM**:
-   ```json
-   {"tool": "sampleLLM", "arguments": {"prompt": "Hello", "maxTokens": 50}}
-   ```
-   Expected: Completes within 30 seconds (no timeout)
-
-2. **Test Session Persistence**:
-   ```json
-   // Step 1: Create session
-   {"tool": "parallel_reasoning_init", "arguments": {...}}
-
-   // Step 2: Check status (use session_id from step 1)
-   {"tool": "parallel_compute_status", "arguments": {"session_id": "..."}}
-   ```
-   Expected: Status found OR logs show why it failed
-
-3. **Monitor Logs**:
-   ```bash
-   npx wrangler tail
-   ```
-   Look for `[Worker]`, `[MCPSession]`, `[ParallelReasoning]` prefixes
-
-#### For AI Agents:
-
-When debugging session issues:
-1. Check logs for `[Worker]` to see if same Durable Object is used
-2. Check logs for `[MCPSession]` to see if sessions are persisted/loaded
-3. Check logs for `[ParallelReasoning]` to see session operations
-4. Look for "Total sessions: N" to verify session count
-5. If session not found, check "Available sessions" in error message
+   - Enhanced "Session not found" errors with available sessions list
+   - Added helpful tips for users
 
