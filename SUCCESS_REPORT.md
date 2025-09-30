@@ -8,7 +8,7 @@
 
 ## 🎉 Problema Risolto!
 
-Il server MCP è ora completamente funzionante. Tutti i tool sono visibili e utilizzabili da ChatGPT.
+Il server MCP è ora completamente funzionante. Solo i 7 tool di parallel reasoning sono visibili e utilizzabili da ChatGPT (demo tools disabilitati).
 
 ---
 
@@ -66,17 +66,7 @@ curl -X POST https://mcp-server.vf-ghizzoni.workers.dev/mcp \
   -H "mcp-session-id: <session-id>" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
-**Risultato**: Lista completa di 17 tool:
-- echo
-- add
-- longRunningOperation
-- printEnv
-- sampleLLM
-- getTinyImage
-- annotatedMessage
-- getResourceReference
-- getResourceLinks
-- structuredContent
+**Risultato**: Lista di 7 tool (solo parallel reasoning):
 - **parallel_reasoning_init** ✅
 - **agent_reasoning_step** ✅
 - **cross_agent_communication** ✅
@@ -84,6 +74,8 @@ curl -X POST https://mcp-server.vf-ghizzoni.workers.dev/mcp \
 - **parallel_compute_status** ✅
 - **agent_debate** ✅
 - **list_agent_personas** ✅
+
+Note: I 10 tool di demo/test (echo, add, longRunningOperation, etc.) sono stati disabilitati per ridurre il clutter.
 
 ### Test 4: Parallel Reasoning Init ✅
 ```bash
@@ -172,8 +164,8 @@ d6d3b26 fix: validate Durable Object ID format before parsing
 ### Test Sequence Completa
 
 1. **Refresh Tool Inventory**
-   - ChatGPT dovrebbe vedere 17 tool disponibili
-   - Inclusi tutti i tool di parallel reasoning
+   - ChatGPT dovrebbe vedere 7 tool disponibili
+   - Solo tool di parallel reasoning (demo tools disabilitati)
 
 2. **Test parallel_reasoning_init**
    ```
@@ -226,12 +218,13 @@ d6d3b26 fix: validate Durable Object ID format before parsing
 - ❌ Server non utilizzabile
 
 ### Dopo le Fix
-- ✅ Tools list: 17 tool visibili
+- ✅ Tools list: 7 tool visibili (solo parallel reasoning)
 - ✅ parallel_reasoning_init: Funzionante
 - ✅ Session persistence: Funzionante
 - ✅ Logging: Completo e informativo
 - ✅ Error handling: Robusto
 - ✅ Server: Completamente operativo
+- ✅ Demo tools disabilitati per ridurre clutter
 
 ---
 
@@ -262,7 +255,7 @@ Tutti i problemi sono stati identificati e risolti:
 - ✅ Session persistence funzionante
 
 **ChatGPT può ora**:
-- ✅ Vedere tutti i 17 tool disponibili
+- ✅ Vedere i 7 tool di parallel reasoning (demo tools disabilitati)
 - ✅ Invocare parallel_reasoning_init
 - ✅ Utilizzare tutti i tool di parallel reasoning
 - ✅ Beneficiare della session persistence
@@ -286,5 +279,5 @@ export CLOUDFLARE_ACCOUNT_ID="a6bc052b995103bc3ac7329151ccd785"
 
 ---
 
-**Status Finale**: ✅ SUCCESS - Server Operativo al 100%!
+**Status Finale**: ✅ SUCCESS - Server Operativo al 100% con 7 tool di parallel reasoning!
 
