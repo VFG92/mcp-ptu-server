@@ -482,15 +482,14 @@ print(json.dumps(result))
       output,
       evidence,
       confidence: dcfResults ? 0.88 : 0.75,
-      warnings,
       cost_actual: {
         expected_tokens_in: 680,
         expected_tokens_out: 2350,
         cpu_ms: executionTime,
         subrequests: 4
       },
-      quality_score: 0.85,
-      warnings: [
+      quality_score: dcfResults ? 0.92 : 0.85,
+      warnings: dcfResults ? warnings : [
         'Valuation highly sensitive to WACC and terminal growth assumptions',
         'Financial projections should be validated with management and market research'
       ],
