@@ -188,7 +188,10 @@ const EXAMPLE_COMPLETIONS = {
   resourceId: ["1", "2", "3", "4", "5"],
 };
 
-export const createServer = (parallelReasoningSessions?: Map<string, ParallelReasoningSession>) => {
+export const createServer = (
+  parallelReasoningSessions?: Map<string, ParallelReasoningSession>,
+  persistCallback?: () => Promise<void>
+) => {
   // Initialize parallel reasoning session store if not provided
   const sessionStore = parallelReasoningSessions || new Map<string, ParallelReasoningSession>();
 
@@ -973,35 +976,52 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
     // Parallel Reasoning Tool Handlers
     if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
       const validatedArgs = ParallelReasoningInitSchema.parse(args);
-      return handleParallelReasoningInit(validatedArgs, sessionStore);
+      const result = handleParallelReasoningInit(validatedArgs, sessionStore);
+      // Persist after state change
+      if (persistCallback) await persistCallback();
+      return result;
     }
 
     if (name === ParallelReasoningToolName.AGENT_REASONING_STEP) {
       const validatedArgs = AgentReasoningStepSchema.parse(args);
-      return handleAgentReasoningStep(validatedArgs, sessionStore);
+      const result = handleAgentReasoningStep(validatedArgs, sessionStore);
+      // Persist after state change
+      if (persistCallback) await persistCallback();
+      return result;
     }
 
     if (name === ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION) {
       const validatedArgs = CrossAgentCommunicationSchema.parse(args);
-      return handleCrossAgentCommunication(validatedArgs, sessionStore);
+      const result = handleCrossAgentCommunication(validatedArgs, sessionStore);
+      // Persist after state change
+      if (persistCallback) await persistCallback();
+      return result;
     }
 
     if (name === ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING) {
       const validatedArgs = SynthesizeParallelReasoningSchema.parse(args);
-      return handleSynthesizeParallelReasoning(validatedArgs, sessionStore);
+      const result = handleSynthesizeParallelReasoning(validatedArgs, sessionStore);
+      // Persist after state change
+      if (persistCallback) await persistCallback();
+      return result;
     }
 
     if (name === ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS) {
       const validatedArgs = ParallelComputeStatusSchema.parse(args);
+      // No state change, no persist needed
       return handleParallelComputeStatus(validatedArgs, sessionStore);
     }
 
     if (name === ParallelReasoningToolName.AGENT_DEBATE) {
       const validatedArgs = AgentDebateSchema.parse(args);
-      return handleAgentDebate(validatedArgs, sessionStore);
+      const result = handleAgentDebate(validatedArgs, sessionStore);
+      // Persist after state change
+      if (persistCallback) await persistCallback();
+      return result;
     }
 
     if (name === ParallelReasoningToolName.LIST_AGENT_PERSONAS) {
+      // No state change, no persist needed
       return handleListAgentPersonas();
     }
 

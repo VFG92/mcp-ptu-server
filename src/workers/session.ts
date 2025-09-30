@@ -32,6 +32,10 @@ export class MCPSession extends DurableObject {
 
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
+    // Load parallel reasoning sessions from storage on initialization
+    this.ctx.blockConcurrencyWhile(async () => {
+      await this.loadParallelReasoningSessions();
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -64,8 +68,14 @@ export class MCPSession extends DurableObject {
       // Generate a session ID based on the DO ID
       this.sessionId = this.ctx.id.toString();
 
-      // Create the MCP server with parallel reasoning session store
-      const { server, cleanup, startNotificationIntervals } = createServer(this.parallelReasoningSessions);
+      // Create the MCP server with parallel reasoning session store and persist callback
+      const persistCallback = async () => {
+        await this.persistParallelReasoningSessions();
+      };
+      const { server, cleanup, startNotificationIntervals } = createServer(
+        this.parallelReasoningSessions,
+        persistCallback
+      );
       this.server = server;
       this.cleanup = cleanup;
 
