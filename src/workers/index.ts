@@ -57,21 +57,21 @@ app.get('/health', (c) => {
 // MCP POST endpoint - initialization and requests
 app.post('/mcp', async (c) => {
   const sessionId = c.req.header('mcp-session-id');
-  
+
   // Get or create Durable Object for this session
   let id: DurableObjectId;
-  
+
   if (sessionId) {
-    // Existing session - use the session ID to get the DO
-    id = c.env.MCP_SESSION.idFromName(sessionId);
+    // Existing session - use the session ID (which is the DO ID hex string) to get the DO
+    id = c.env.MCP_SESSION.idFromString(sessionId);
   } else {
     // New session - create a new DO with a unique ID
     id = c.env.MCP_SESSION.newUniqueId();
   }
-  
+
   // Get the Durable Object stub
   const stub = c.env.MCP_SESSION.get(id);
-  
+
   // Forward the request to the Durable Object
   return stub.fetch(c.req.raw);
 });
@@ -79,7 +79,7 @@ app.post('/mcp', async (c) => {
 // MCP GET endpoint - SSE streaming
 app.get('/mcp', async (c) => {
   const sessionId = c.req.header('mcp-session-id');
-  
+
   if (!sessionId) {
     return c.json({
       jsonrpc: '2.0',
@@ -90,11 +90,11 @@ app.get('/mcp', async (c) => {
       id: null,
     }, 400);
   }
-  
+
   // Get the Durable Object for this session
-  const id = c.env.MCP_SESSION.idFromName(sessionId);
+  const id = c.env.MCP_SESSION.idFromString(sessionId);
   const stub = c.env.MCP_SESSION.get(id);
-  
+
   // Forward the request to the Durable Object
   return stub.fetch(c.req.raw);
 });
@@ -102,7 +102,7 @@ app.get('/mcp', async (c) => {
 // MCP DELETE endpoint - session termination
 app.delete('/mcp', async (c) => {
   const sessionId = c.req.header('mcp-session-id');
-  
+
   if (!sessionId) {
     return c.json({
       jsonrpc: '2.0',
@@ -113,11 +113,11 @@ app.delete('/mcp', async (c) => {
       id: null,
     }, 400);
   }
-  
+
   // Get the Durable Object for this session
-  const id = c.env.MCP_SESSION.idFromName(sessionId);
+  const id = c.env.MCP_SESSION.idFromString(sessionId);
   const stub = c.env.MCP_SESSION.get(id);
-  
+
   // Forward the request to the Durable Object
   return stub.fetch(c.req.raw);
 });

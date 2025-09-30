@@ -6,6 +6,7 @@
  * - MCP Server instance
  * - Event store for resumability
  * - Heartbeat interval for SSE keep-alive
+ * - Parallel reasoning session state (NEW)
  */
 
 import { DurableObject } from 'cloudflare:workers';
@@ -13,6 +14,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { InMemoryEventStore } from '@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore.js';
 import { createServer } from './everything-workers.js';
 import { ExpressRequestAdapter, ExpressResponseAdapter } from './express-adapter.js';
+import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
 
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;
@@ -24,6 +26,9 @@ export class MCPSession extends DurableObject {
   private cleanup: (() => Promise<void>) | null = null;
   private heartbeatInterval: number | null = null;
   private sessionId: string | null = null;
+
+  // Parallel reasoning state storage
+  private parallelReasoningSessions: Map<string, ParallelReasoningSession> = new Map();
 
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
@@ -59,8 +64,8 @@ export class MCPSession extends DurableObject {
       // Generate a session ID based on the DO ID
       this.sessionId = this.ctx.id.toString();
 
-      // Create the MCP server
-      const { server, cleanup, startNotificationIntervals } = createServer();
+      // Create the MCP server with parallel reasoning session store
+      const { server, cleanup, startNotificationIntervals } = createServer(this.parallelReasoningSessions);
       this.server = server;
       this.cleanup = cleanup;
 
@@ -108,11 +113,12 @@ export class MCPSession extends DurableObject {
 
     // Existing session - handle the request
     if (!sessionIdHeader || sessionIdHeader !== this.sessionId) {
+      console.log(`Session ID mismatch: header="${sessionIdHeader}" expected="${this.sessionId}"`);
       return new Response(JSON.stringify({
         jsonrpc: '2.0',
         error: {
           code: -32000,
-          message: 'Bad Request: Invalid session ID',
+          message: `Bad Request: Invalid session ID (expected ${this.sessionId}, got ${sessionIdHeader})`,
         },
         id: null,
       }), {
@@ -221,6 +227,31 @@ export class MCPSession extends DurableObject {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+  }
+
+  /**
+   * Get parallel reasoning session store (for tool handlers)
+   */
+  getParallelReasoningSessions(): Map<string, ParallelReasoningSession> {
+    return this.parallelReasoningSessions;
+  }
+
+  /**
+   * Persist parallel reasoning sessions to Durable Object storage
+   */
+  async persistParallelReasoningSessions(): Promise<void> {
+    const sessions = Array.from(this.parallelReasoningSessions.entries());
+    await this.ctx.storage.put('parallel_reasoning_sessions', sessions);
+  }
+
+  /**
+   * Load parallel reasoning sessions from Durable Object storage
+   */
+  async loadParallelReasoningSessions(): Promise<void> {
+    const sessions = await this.ctx.storage.get<Array<[string, ParallelReasoningSession]>>('parallel_reasoning_sessions');
+    if (sessions) {
+      this.parallelReasoningSessions = new Map(sessions);
     }
   }
 }

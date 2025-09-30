@@ -23,6 +23,25 @@ import {
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
+// Import parallel reasoning tools
+import {
+  ParallelReasoningToolName,
+  ParallelReasoningInitSchema,
+  AgentReasoningStepSchema,
+  CrossAgentCommunicationSchema,
+  SynthesizeParallelReasoningSchema,
+  ParallelComputeStatusSchema,
+  AgentDebateSchema,
+  handleParallelReasoningInit,
+  handleAgentReasoningStep,
+  handleCrossAgentCommunication,
+  handleSynthesizeParallelReasoning,
+  handleParallelComputeStatus,
+  handleAgentDebate,
+  handleListAgentPersonas
+} from './parallel-reasoning-tools.js';
+import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
+
 // Instructions inlined for Workers compatibility
 const instructions = `Testing and demonstration server for MCP protocol features.
 
@@ -169,12 +188,15 @@ const EXAMPLE_COMPLETIONS = {
   resourceId: ["1", "2", "3", "4", "5"],
 };
 
-export const createServer = () => {
+export const createServer = (parallelReasoningSessions?: Map<string, ParallelReasoningSession>) => {
+  // Initialize parallel reasoning session store if not provided
+  const sessionStore = parallelReasoningSessions || new Map<string, ParallelReasoningSession>();
+
   const server = new Server(
     {
       name: "example-servers/everything",
-      title: "Everything Example Server",
-      version: "1.0.0",
+      title: "Everything Example Server with Parallel Reasoning",
+      version: "2.0.0",
     },
     {
       capabilities: {
@@ -184,7 +206,21 @@ export const createServer = () => {
         logging: {},
         completions: {}
       },
-      instructions
+      instructions: instructions + `
+
+## Parallel Reasoning (NEW!)
+
+This server now supports multi-agent parallel reasoning for complex analysis tasks in management consulting, finance, marketing strategy, and project management.
+
+Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
+- parallel_reasoning_init: Initialize multi-agent session
+- agent_reasoning_step: Submit agent analysis
+- cross_agent_communication: Enable agent collaboration
+- synthesize_parallel_reasoning: Combine all perspectives
+- parallel_compute_status: Monitor progress
+- agent_debate: Facilitate agent debates
+- list_agent_personas: See available expert personas
+`
     }
   );
 
@@ -557,6 +593,45 @@ export const createServer = () => {
         inputSchema: zodToJsonSchema(ElicitationSchema) as ToolInput,
     });
 
+    // Add parallel reasoning tools
+    tools.push(
+      {
+        name: ParallelReasoningToolName.PARALLEL_REASONING_INIT,
+        description: "Initialize a multi-agent parallel reasoning session. Specify task and agent perspectives (e.g., strategy_consultant, financial_analyst, marketing_strategist). Returns agent prompts for parallel execution.",
+        inputSchema: zodToJsonSchema(ParallelReasoningInitSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningToolName.AGENT_REASONING_STEP,
+        description: "Submit an agent's reasoning step with confidence, key points, concerns, and recommendations. Updates agent progress and session status.",
+        inputSchema: zodToJsonSchema(AgentReasoningStepSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION,
+        description: "Enable communication between agents. Agents can ask questions, challenge, support, or share information with each other.",
+        inputSchema: zodToJsonSchema(CrossAgentCommunicationSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING,
+        description: "Synthesize all agent perspectives into a unified recommendation. Choose strategy: consensus, weighted, dialectic, best_of_n, or ensemble.",
+        inputSchema: zodToJsonSchema(SynthesizeParallelReasoningSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS,
+        description: "Get real-time status of parallel reasoning session. Shows agent progress, messages, and estimated completion time.",
+        inputSchema: zodToJsonSchema(ParallelComputeStatusSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningToolName.AGENT_DEBATE,
+        description: "Initiate a structured debate between specific agents on a topic. Agents present arguments, challenge each other, and work toward resolution.",
+        inputSchema: zodToJsonSchema(AgentDebateSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningToolName.LIST_AGENT_PERSONAS,
+        description: "List all available agent personas with their roles, expertise, and thinking styles. Use to select appropriate agents for your task.",
+        inputSchema: zodToJsonSchema(z.object({})) as ToolInput,
+      }
+    );
+
     return { tools };
   });
 
@@ -893,6 +968,41 @@ export const createServer = () => {
           }
         ]
       };
+    }
+
+    // Parallel Reasoning Tool Handlers
+    if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
+      const validatedArgs = ParallelReasoningInitSchema.parse(args);
+      return handleParallelReasoningInit(validatedArgs, sessionStore);
+    }
+
+    if (name === ParallelReasoningToolName.AGENT_REASONING_STEP) {
+      const validatedArgs = AgentReasoningStepSchema.parse(args);
+      return handleAgentReasoningStep(validatedArgs, sessionStore);
+    }
+
+    if (name === ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION) {
+      const validatedArgs = CrossAgentCommunicationSchema.parse(args);
+      return handleCrossAgentCommunication(validatedArgs, sessionStore);
+    }
+
+    if (name === ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING) {
+      const validatedArgs = SynthesizeParallelReasoningSchema.parse(args);
+      return handleSynthesizeParallelReasoning(validatedArgs, sessionStore);
+    }
+
+    if (name === ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS) {
+      const validatedArgs = ParallelComputeStatusSchema.parse(args);
+      return handleParallelComputeStatus(validatedArgs, sessionStore);
+    }
+
+    if (name === ParallelReasoningToolName.AGENT_DEBATE) {
+      const validatedArgs = AgentDebateSchema.parse(args);
+      return handleAgentDebate(validatedArgs, sessionStore);
+    }
+
+    if (name === ParallelReasoningToolName.LIST_AGENT_PERSONAS) {
+      return handleListAgentPersonas();
     }
 
     throw new Error(`Unknown tool: ${name}`);
