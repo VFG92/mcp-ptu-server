@@ -15,7 +15,7 @@ This file provides comprehensive instructions for AI agents working with this re
 **Language**: TypeScript
 **Protocol**: Model Context Protocol (MCP) 2024-11-05
 
-**Production URL**: `https://mcp-server.vf-ghizzoni.workers.dev`
+**Production URL**: `https://mcp-server.vf-ghizzoni.workers.dev/mcp`
 
 ---
 

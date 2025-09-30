@@ -12,7 +12,7 @@ Le modifiche CORS sono state committate ma **NON ancora deployate** in productio
 
 ```bash
 # Opzione A: Con API Token
-export CLOUDFLARE_API_TOKEN="your-token-here"
+export CLOUDFLARE_API_TOKEN="3QLeF33GoOSbb7LXNxPh41q6hbN1PM9BrjmWePtU"
 export CLOUDFLARE_ACCOUNT_ID="a6bc052b995103bc3ac7329151ccd785"
 npm run workers:deploy
 
