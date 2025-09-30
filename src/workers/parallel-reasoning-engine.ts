@@ -1,6 +1,17 @@
 /**
  * Parallel Reasoning Engine Core
  *
+ * ⚠️ LEGACY SYSTEM - BEING REPLACED BY CAPABILITY-DRIVEN ARCHITECTURE
+ *
+ * This persona-based system is being phased out in favor of the new
+ * capability-driven architecture. For new integrations, use:
+ * - CapabilityOrchestrator for task execution
+ * - CapabilityGraph for capability management
+ * - See capability-tools.ts for MCP integration
+ *
+ * This module remains for backward compatibility and will be deprecated
+ * in a future release.
+ *
  * Manages multi-agent parallel reasoning sessions with state tracking,
  * cross-agent communication, and real-time progress monitoring
  */

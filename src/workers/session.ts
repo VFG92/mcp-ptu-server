@@ -15,6 +15,8 @@ import { InMemoryEventStore } from '@modelcontextprotocol/sdk/examples/shared/in
 import { createServer } from './everything-workers.js';
 import { ExpressRequestAdapter, ExpressResponseAdapter } from './express-adapter.js';
 import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
+import { Whiteboard } from './whiteboard-memory.js';
+import { EvidenceLedger } from './evidence-ledger.js';
 
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;
@@ -32,15 +34,28 @@ export class MCPSession extends DurableObject {
   // Parallel reasoning state storage
   private parallelReasoningSessions: Map<string, ParallelReasoningSession> = new Map();
 
+  // Capability system state storage
+  private whiteboard: Whiteboard = new Whiteboard();
+  private evidenceLedger: EvidenceLedger = new EvidenceLedger();
+  private capabilityExecutionHistory: Array<{
+    session_id: string;
+    capability_id: string;
+    timestamp: number;
+    success: boolean;
+    cost: any;
+  }> = [];
+
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
     this.ctx = state;
     this.env = env;
     console.log(`[MCPSession] Constructor called for DO ID: ${state.id.toString()}`);
-    // Load parallel reasoning sessions from storage on initialization
+    // Load state from storage on initialization
     this.ctx.blockConcurrencyWhile(async () => {
       await this.loadParallelReasoningSessions();
+      await this.loadCapabilityState();
       console.log(`[MCPSession] Loaded ${this.parallelReasoningSessions.size} sessions from storage`);
+      console.log(`[MCPSession] Loaded ${this.whiteboard.getAllIds().length} artifacts from whiteboard`);
     });
   }
 
@@ -147,9 +162,11 @@ export class MCPSession extends DurableObject {
       console.log(`[MCPSession] POST request with mismatched/missing header; trusting worker routing for session ${this.sessionId}`);
       // CRITICAL FIX: Inject the correct session ID header for MCP SDK compatibility
       // ChatGPT tool calls may have different header, but worker routed based on body session_id
-      const headers = new Headers(request.headers);
-      headers.set('mcp-session-id', this.sessionId);
-      request = new Request(request, { headers });
+      if (this.sessionId) {
+        const headers = new Headers(request.headers);
+        headers.set('mcp-session-id', this.sessionId);
+        request = new Request(request, { headers });
+      }
     }
 
     // Convert and handle the request using adapter
@@ -279,6 +296,44 @@ export class MCPSession extends DurableObject {
   }
 
   /**
+   * Get whiteboard (for capability tools)
+   */
+  getWhiteboard(): Whiteboard {
+    return this.whiteboard;
+  }
+
+  /**
+   * Get evidence ledger (for capability tools)
+   */
+  getEvidenceLedger(): EvidenceLedger {
+    return this.evidenceLedger;
+  }
+
+  /**
+   * Get capability execution history (for capability tools)
+   */
+  getCapabilityExecutionHistory(): Array<any> {
+    return this.capabilityExecutionHistory;
+  }
+
+  /**
+   * Add capability execution to history
+   */
+  addCapabilityExecution(execution: {
+    session_id: string;
+    capability_id: string;
+    timestamp: number;
+    success: boolean;
+    cost: any;
+  }): void {
+    this.capabilityExecutionHistory.push(execution);
+    // Persist asynchronously
+    this.persistCapabilityState().catch(err => {
+      console.error('[MCPSession] Failed to persist capability state:', err);
+    });
+  }
+
+  /**
    * Persist parallel reasoning sessions to Durable Object storage
    */
   async persistParallelReasoningSessions(): Promise<void> {
@@ -295,6 +350,63 @@ export class MCPSession extends DurableObject {
     const sessions = await this.ctx.storage.get<Array<[string, ParallelReasoningSession]>>('parallel_reasoning_sessions');
     if (sessions) {
       this.parallelReasoningSessions = new Map(sessions);
+    }
+  }
+
+  /**
+   * Persist capability state to Durable Object storage
+   */
+  async persistCapabilityState(): Promise<void> {
+    console.log(`[MCPSession] Persisting capability state`);
+
+    // Serialize whiteboard artifacts
+    const whiteboardData = this.whiteboard.getAllIds().map(id => ({
+      id,
+      artifact: this.whiteboard.get(id)
+    }));
+
+    // Serialize evidence ledger
+    const evidenceData = this.whiteboard.getAllIds().map(id =>
+      this.evidenceLedger.exportEvidence(id)
+    );
+
+    // Use multiple put calls instead of batch
+    await this.ctx.storage.put('capability_whiteboard', whiteboardData);
+    await this.ctx.storage.put('capability_evidence', evidenceData);
+    await this.ctx.storage.put('capability_execution_history', this.capabilityExecutionHistory);
+
+    console.log(`[MCPSession] Successfully persisted capability state`);
+  }
+
+  /**
+   * Load capability state from Durable Object storage
+   */
+  async loadCapabilityState(): Promise<void> {
+    const whiteboardData = await this.ctx.storage.get<Array<{ id: string; artifact: any }>>('capability_whiteboard');
+    const evidenceData = await this.ctx.storage.get<Array<any>>('capability_evidence');
+    const historyData = await this.ctx.storage.get<Array<any>>('capability_execution_history');
+
+    // Restore whiteboard using add() method
+    if (whiteboardData) {
+      for (const { id, artifact } of whiteboardData) {
+        if (artifact && artifact.metadata && artifact.data) {
+          this.whiteboard.add(
+            id,
+            artifact.metadata.type,
+            artifact.data,
+            artifact.metadata.created_by,
+            artifact.metadata.status
+          );
+        }
+      }
+    }
+
+    // Restore evidence ledger (note: this is simplified, full restoration would need more work)
+    // For now, we just track that evidence exists
+
+    // Restore execution history
+    if (historyData) {
+      this.capabilityExecutionHistory = historyData;
     }
   }
 

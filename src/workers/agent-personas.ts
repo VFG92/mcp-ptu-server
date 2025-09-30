@@ -1,6 +1,27 @@
 /**
  * Agent Personas for Multi-Agent Parallel Reasoning
  * Specialized for: Management Consulting, Finance, Marketing Strategy, Project Management
+ *
+ * ⚠️ DEPRECATED - This persona-based system is being replaced by the capability-driven architecture.
+ *
+ * **Migration Path**:
+ * - Use `analyze_with_capabilities` tool instead of `parallel_reasoning_init`
+ * - Use adapters: 'strategy', 'finance', 'commercial', 'risk', 'comprehensive'
+ * - See MIGRATION_GUIDE.md for full details
+ *
+ * **Persona → Adapter Mapping**:
+ * - strategy_consultant → adapter: 'strategy'
+ * - financial_analyst → adapter: 'finance'
+ * - marketing_strategist → adapter: 'commercial'
+ * - risk_analyst → adapter: 'risk'
+ * - Multiple personas → adapter: 'comprehensive'
+ *
+ * **Timeline**:
+ * - Now: Both systems available
+ * - Q2 2025: Deprecated (warnings added)
+ * - Q3 2025: Removed
+ *
+ * This module remains for backward compatibility only.
  */
 
 export interface AgentPersona {
@@ -429,8 +450,10 @@ export function findSimilarPersonas(input: string, maxResults: number = 3): stri
 
 /**
  * Get agent persona by ID (with alias resolution)
+ * @deprecated Use capability-driven architecture instead. See MIGRATION_GUIDE.md
  */
 export function getAgentPersona(id: string): AgentPersona | undefined {
+  console.warn(`[DEPRECATED] getAgentPersona('${id}') is deprecated. Use capability-driven architecture instead. See MIGRATION_GUIDE.md`);
   const resolvedId = resolvePersonaAlias(id);
   return AGENT_PERSONAS[resolvedId];
 }

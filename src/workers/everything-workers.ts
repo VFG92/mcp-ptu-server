@@ -43,6 +43,19 @@ import {
 import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
 import { ParallelReasoningError } from './error-handling.js';
 
+// Import capability tools
+import {
+  CapabilityToolName,
+  AnalyzeWithCapabilitiesSchema,
+  GetCapabilityStatusSchema,
+  ExportSessionSchema,
+  ListCapabilitiesSchema,
+  handleAnalyzeWithCapabilities,
+  handleGetCapabilityStatus,
+  handleExportSession,
+  handleListCapabilities
+} from './capability-tools.js';
+
 // Instructions inlined for Workers compatibility
 const instructions = `Testing and demonstration server for MCP protocol features.
 
@@ -437,6 +450,31 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
           "Validate a session specification before initialization. Checks if all persona IDs are valid and provides suggestions for invalid ones. Use this to catch errors before calling parallel_reasoning_init.",
         inputSchema: zodToJsonSchema(ValidateSessionSpecSchema) as ToolInput,
       },
+      // NEW: Capability-driven tools
+      {
+        name: CapabilityToolName.ANALYZE_WITH_CAPABILITIES,
+        description:
+          "🆕 Analyze business problems using the new capability-driven architecture. Provides evidence-backed analysis with verifiable reasoning, budget tracking, and confidence scores. Supports adapters: strategy, finance, commercial, risk, comprehensive.",
+        inputSchema: zodToJsonSchema(AnalyzeWithCapabilitiesSchema) as ToolInput,
+      },
+      {
+        name: CapabilityToolName.LIST_CAPABILITIES,
+        description:
+          "List all available capabilities in the system. Filter by category (market, financial, operational, risk, strategic, commercial) or tag.",
+        inputSchema: zodToJsonSchema(ListCapabilitiesSchema) as ToolInput,
+      },
+      {
+        name: CapabilityToolName.GET_CAPABILITY_STATUS,
+        description:
+          "Get status of a capability analysis session including progress, artifacts produced, and budget consumed.",
+        inputSchema: zodToJsonSchema(GetCapabilityStatusSchema) as ToolInput,
+      },
+      {
+        name: CapabilityToolName.EXPORT_SESSION,
+        description:
+          "Export complete session data including artifacts, evidence, confidence scores, and audit trail for compliance and review.",
+        inputSchema: zodToJsonSchema(ExportSessionSchema) as ToolInput,
+      },
     ];
 
     return { tools };
@@ -526,6 +564,39 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
       console.log(`[CallTool] validate_session_spec completed successfully`);
       return result;
     }
+
+      // Capability Tool Handlers
+      if (name === CapabilityToolName.ANALYZE_WITH_CAPABILITIES) {
+        console.log(`[CallTool] Handling analyze_with_capabilities`);
+        const validatedArgs = AnalyzeWithCapabilitiesSchema.parse(args);
+        const result = await handleAnalyzeWithCapabilities(validatedArgs);
+        console.log(`[CallTool] analyze_with_capabilities completed successfully`);
+        return result;
+      }
+
+      if (name === CapabilityToolName.LIST_CAPABILITIES) {
+        console.log(`[CallTool] Handling list_capabilities`);
+        const validatedArgs = ListCapabilitiesSchema.parse(args);
+        const result = await handleListCapabilities(validatedArgs);
+        console.log(`[CallTool] list_capabilities completed successfully`);
+        return result;
+      }
+
+      if (name === CapabilityToolName.GET_CAPABILITY_STATUS) {
+        console.log(`[CallTool] Handling get_capability_status`);
+        const validatedArgs = GetCapabilityStatusSchema.parse(args);
+        const result = await handleGetCapabilityStatus(validatedArgs);
+        console.log(`[CallTool] get_capability_status completed successfully`);
+        return result;
+      }
+
+      if (name === CapabilityToolName.EXPORT_SESSION) {
+        console.log(`[CallTool] Handling export_session`);
+        const validatedArgs = ExportSessionSchema.parse(args);
+        const result = await handleExportSession(validatedArgs);
+        console.log(`[CallTool] export_session completed successfully`);
+        return result;
+      }
 
       console.error(`[CallTool] Unknown tool requested: ${name}`);
       throw new Error(`Unknown tool: ${name}`);
