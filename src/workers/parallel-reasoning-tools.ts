@@ -55,7 +55,8 @@ export const CrossAgentCommunicationSchema = z.object({
 
 export const SynthesizeParallelReasoningSchema = z.object({
   session_id: z.string().describe('Session ID'),
-  synthesis_strategy: z.enum(['consensus', 'weighted', 'dialectic', 'best_of_n', 'ensemble']).optional().default('consensus')
+  synthesis_strategy: z.enum(['consensus', 'weighted', 'dialectic', 'best_of_n', 'ensemble']).optional().default('consensus'),
+  require_all_completed: z.boolean().optional().default(false).describe('If true, synthesis fails unless all agents are in "completed" status. Prevents premature synthesis with partial results.')
 });
 
 export const ParallelComputeStatusSchema = z.object({
@@ -194,7 +195,25 @@ export function handleAgentReasoningStep(
   
   const agent = updatedSession.agents[args.agent_id];
   const status = getSessionStatus(updatedSession);
-  
+
+  // Build detailed next_step message with dependency resolution info
+  let nextStepMessage: string;
+  if (agent.status === 'completed') {
+    nextStepMessage = 'Agent completed. Continue with other agents or synthesize if all done.';
+  } else if (agent.status === 'waiting') {
+    if (agent.dependencies.length === 0) {
+      nextStepMessage = 'Agent was waiting but all dependencies are now resolved. Agent can proceed.';
+    } else {
+      const depDetails = agent.dependencies.map(depId => {
+        const depAgent = updatedSession.agents[depId];
+        return depAgent ? `${depAgent.role} (${depAgent.status}, ${depAgent.progress}%)` : depId;
+      }).join(', ');
+      nextStepMessage = `Agent waiting for: ${depDetails}`;
+    }
+  } else {
+    nextStepMessage = 'Continue reasoning or communicate with other agents.';
+  }
+
   return {
     content: [{
       type: 'text',
@@ -203,14 +222,13 @@ export function handleAgentReasoningStep(
         agent_id: args.agent_id,
         agent_status: agent.status,
         agent_progress: agent.progress,
+        agent_confidence: agent.confidence,
         overall_progress: status.overall_progress,
+        overall_progress_note: 'Confidence-weighted average across all agents',
         session_status: status.status,
+        unresolved_dependencies: agent.dependencies.length > 0 ? agent.dependencies : undefined,
         message: `${agent.role} reasoning updated. Progress: ${agent.progress}%. Overall: ${status.overall_progress}%`,
-        next_step: agent.status === 'completed' 
-          ? 'Agent completed. Continue with other agents or synthesize if all done.'
-          : agent.status === 'waiting'
-          ? `Agent waiting for: ${agent.dependencies.join(', ')}`
-          : 'Continue reasoning or communicate with other agents.'
+        next_step: nextStepMessage
       }, null, 2)
     }]
   };
@@ -272,12 +290,46 @@ export function handleSynthesizeParallelReasoning(
       `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
     );
   }
-  
+
+  // GATING: Check if all agents are completed (if required)
+  const agentStates = Object.values(session.agents);
+  const incompleteAgents = agentStates.filter(a => a.status !== 'completed');
+
+  if (args.require_all_completed && incompleteAgents.length > 0) {
+    const incompleteDetails = incompleteAgents.map(a => ({
+      agent_id: a.agent_id,
+      role: a.role,
+      status: a.status,
+      progress: a.progress,
+      waiting_for: a.dependencies.length > 0 ? a.dependencies : undefined
+    }));
+
+    throw new Error(
+      `Synthesis blocked: require_all_completed=true but ${incompleteAgents.length}/${agentStates.length} agents not completed.\n` +
+      `Incomplete agents: ${JSON.stringify(incompleteDetails, null, 2)}\n` +
+      `Tip: Either wait for all agents to complete, or call with require_all_completed=false for partial synthesis.`
+    );
+  }
+
   const updatedSession = synthesizeSession(session, args.synthesis_strategy);
   sessionStore.set(args.session_id, updatedSession);
   
   const synthesis = updatedSession.synthesis!;
-  
+
+  // Include incomplete agents info for transparency
+  const incompleteAgentsInfo = incompleteAgents.length > 0 ? {
+    incomplete_agents_count: incompleteAgents.length,
+    incomplete_agents: incompleteAgents.map(a => ({
+      agent_id: a.agent_id,
+      role: a.role,
+      status: a.status,
+      progress: a.progress,
+      confidence: a.confidence,
+      waiting_for: a.dependencies.length > 0 ? a.dependencies : undefined
+    })),
+    synthesis_note: `Synthesis performed with ${incompleteAgents.length} incomplete agent(s). Results may be partial.`
+  } : undefined;
+
   return {
     content: [{
       type: 'text',
@@ -290,6 +342,8 @@ export function handleSynthesizeParallelReasoning(
         final_answer: synthesis.final_answer,
         agent_contributions: synthesis.agent_contributions,
         conflicts_resolved: synthesis.conflicts_resolved,
+        require_all_completed: args.require_all_completed,
+        ...incompleteAgentsInfo,
         summary: `
 🎉 **Synthesis Complete!**
 

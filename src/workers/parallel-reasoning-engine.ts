@@ -142,9 +142,27 @@ export function updateAgentReasoning(
   if (concerns) agent.concerns.push(...concerns);
   if (recommendations) agent.recommendations.push(...recommendations);
   if (dependencies) agent.dependencies = dependencies;
-  
-  // Update status and progress
+
+  // DEPENDENCY RESOLUTION: Check if dependencies are actually satisfied
+  // Remove dependencies on agents that are already completed
   if (dependencies && dependencies.length > 0) {
+    const unresolvedDeps = dependencies.filter(depId => {
+      const depAgent = session.agents[depId];
+      return depAgent && depAgent.status !== 'completed';
+    });
+
+    agent.dependencies = unresolvedDeps;
+
+    // If all dependencies resolved, agent can proceed
+    if (unresolvedDeps.length === 0) {
+      console.log(`[ParallelReasoning] Agent ${agentId} dependencies resolved, transitioning from waiting to reasoning`);
+    }
+  }
+
+  // Update status and progress based on RESOLVED dependencies
+  const hasUnresolvedDeps = agent.dependencies.length > 0;
+
+  if (hasUnresolvedDeps) {
     agent.status = 'waiting';
     agent.progress = Math.min(agent.progress + 10, 80); // Cap at 80% if waiting
   } else if (confidence >= 0.9) {
@@ -154,10 +172,10 @@ export function updateAgentReasoning(
     agent.status = 'reasoning';
     agent.progress = Math.min(agent.progress + 20, 90);
   }
-  
+
   agent.updated_at = now;
-  
-  // Update overall session progress
+
+  // Update overall session progress (now confidence-weighted)
   session.overall_progress = calculateOverallProgress(session);
   session.updated_at = now;
   
@@ -255,11 +273,29 @@ export function synthesizeSession(
 
 /**
  * Calculate overall session progress
+ *
+ * Uses confidence-weighted average to prevent low-confidence agents
+ * from inflating overall progress. Agents with higher confidence
+ * contribute more to the overall metric.
  */
 function calculateOverallProgress(session: ParallelReasoningSession): number {
-  const agentProgresses = Object.values(session.agents).map(a => a.progress);
-  const avgProgress = agentProgresses.reduce((sum, p) => sum + p, 0) / agentProgresses.length;
-  return Math.round(avgProgress);
+  const agents = Object.values(session.agents);
+
+  if (agents.length === 0) return 0;
+
+  // Weight each agent's progress by their confidence
+  // Agents with 0 confidence get minimum weight of 0.1 to avoid division by zero
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const agent of agents) {
+    const weight = Math.max(agent.confidence, 0.1); // Minimum weight 0.1
+    weightedSum += agent.progress * weight;
+    totalWeight += weight;
+  }
+
+  const weightedAvg = totalWeight > 0 ? weightedSum / totalWeight : 0;
+  return Math.round(weightedAvg);
 }
 
 /**
