@@ -1,6 +1,6 @@
 # 🤖 MCP PTU Server - Complete Technical Documentation
 
-**Version 4.0.0** | **Capability-Driven, Industry-Aware, LLM-Native** | **For AI Agents & Developers**
+**Version 4.1.1** | **Capability-Driven, Industry-Aware, LLM-Native, Persistent** | **For AI Agents & Developers**
 
 ---
 
@@ -1406,36 +1406,210 @@ const { server, cleanup, startNotificationIntervals } = createServer(
 - ✅ **Backward Compatible**: Falls back to globals if refs not provided
 - ✅ **Zero Breaking Changes**: Existing code continues to work
 
-### Testing
+### Testing Persistence
 
-See `test-persistence-flow.md` for complete test plan.
-
-**Quick Test**:
+**Manual Test Flow**:
 ```bash
-# 1. Analyze
+# 1. Analyze with capabilities
 curl -X POST /mcp -d '{"tool": "analyze_with_capabilities", "args": {"session_id": "test-001", "task": "Market analysis"}}'
 
-# 2. Status (should show artifacts)
+# 2. Check status (should show artifacts)
 curl -X POST /mcp -d '{"tool": "get_capability_status", "args": {"session_id": "test-001"}}'
+# Expected: artifacts_count > 0, session_costs populated
 
-# 3. Export (should show full data)
+# 3. Export session (should show full data)
 curl -X POST /mcp -d '{"tool": "export_session", "args": {"session_id": "test-001"}}'
+# Expected: Complete JSON with artifacts, evidence, costs, version history
 ```
 
-### Documentation
+**Automated Tests**:
+```bash
+# Run persistence test suite
+npm test -- __tests__/session-persistence.test.ts
 
-- **Implementation Details**: `PERSISTENCE_IMPLEMENTATION.md`
-- **Test Plan**: `test-persistence-flow.md`
-- **Architecture Diagram**: See Mermaid diagram in implementation doc
+# All tests (includes persistence)
+npm test
+```
+
+**Test Coverage**:
+- ✅ Session state persistence across multiple calls
+- ✅ Artifact version incrementing (1 → 2 → 3)
+- ✅ Version history maintenance
+- ✅ Orchestrator reuse when storage unchanged
+- ✅ New orchestrator creation when storage changes
+- ✅ Export includes all versions and complete data
+- ✅ Separate histories for different artifacts
+- ✅ Diff calculation between versions
+
+---
+
+## 🐛 Bug Fixes (v4.1.1)
+
+### Problem 1: Session State Reset
+
+**Issue**: `initializeCapabilitySystem()` was creating a **new** `CapabilityOrchestrator` instance on every call, which reset the internal `sessionCosts` and `sessionExecutions` Maps.
+
+**Impact**:
+- `get_capability_status` always returned empty costs and zero executions
+- Session tracking was completely broken
+- No way to monitor resource consumption across multiple capability executions
+
+**Solution**: Modified `initializeCapabilitySystem()` to reuse the existing orchestrator instance when the storage references haven't changed:
+
+```typescript
+let orchestrator: CapabilityOrchestrator | null = null;
+let currentWhiteboard: Whiteboard | null = null;
+let currentLedger: EvidenceLedger | null = null;
+
+export function initializeCapabilitySystem(refs?: CapabilitySystemRefs): CapabilityOrchestrator {
+  registerAllCapabilities();
+
+  const whiteboard = refs?.whiteboard || globalWhiteboard;
+  const ledger = refs?.ledger || globalEvidenceLedger;
+
+  // Only create a new orchestrator if:
+  // 1. No orchestrator exists yet, OR
+  // 2. The storage references have changed (e.g., different DO instance)
+  if (!orchestrator || currentWhiteboard !== whiteboard || currentLedger !== ledger) {
+    console.log('[CapabilitySystem] Creating new orchestrator instance');
+    orchestrator = new CapabilityOrchestrator(
+      globalCapabilityGraph,
+      ledger,
+      whiteboard
+    );
+    currentWhiteboard = whiteboard;
+    currentLedger = ledger;
+  } else {
+    console.log('[CapabilitySystem] Reusing existing orchestrator instance');
+  }
+
+  return orchestrator;
+}
+```
+
+**Benefits**:
+- ✅ Session state (costs, executions) persists across multiple calls
+- ✅ `get_capability_status` now returns accurate cumulative data
+- ✅ Resource monitoring works correctly
+- ✅ Still creates new orchestrator when storage changes (e.g., different Durable Object)
+
+### Problem 2: Artifact Version Reset
+
+**Issue**: The orchestrator always called `whiteboard.add()` when storing capability results, even if the artifact already existed. The `add()` method always sets `version: 1` and replaces the entire history.
+
+**Impact**:
+- Artifact versions never incremented beyond 1
+- Version history was lost on each execution
+- Audit trail was broken
+- Compliance requirements not met
+
+**Solution**: Modified the orchestrator to check if an artifact already exists and use `update()` instead of `add()`:
+
+```typescript
+// Check if artifact already exists to maintain version history
+if (this.whiteboard.has(capId)) {
+  // Artifact exists - update it to increment version
+  this.whiteboard.update(
+    capId,
+    result.output,
+    capId,
+    `Updated by capability execution at ${new Date().toISOString()}`
+  );
+} else {
+  // New artifact - add it
+  this.whiteboard.add(
+    capId,
+    capability?.category || 'unknown',
+    result.output,
+    capId,
+    'accepted'
+  );
+}
+```
+
+**Benefits**:
+- ✅ Artifact versions now increment correctly (1 → 2 → 3 → ...)
+- ✅ Version history is maintained in `versionHistory` Map
+- ✅ Audit trail is preserved
+- ✅ Compliance requirements are met
+- ✅ Can use `whiteboard.diff()` to see changes between versions
+
+### Test Coverage
+
+Added comprehensive test suite in `__tests__/session-persistence.test.ts`:
+
+**Session Persistence Tests**:
+1. ✅ Session state persists across multiple calls - Verifies orchestrator reuse
+2. ✅ Artifact versions increment - Verifies version increments on re-execution
+3. ✅ Version history is maintained - Verifies all versions are stored
+4. ✅ New orchestrator on storage change - Verifies new instance when storage changes
+5. ✅ Export includes all versions - Verifies export shows latest version
+
+**Artifact Versioning Edge Cases**:
+6. ✅ add() followed by update() - Verifies basic versioning flow
+7. ✅ Separate histories - Verifies different artifacts have separate histories
+8. ✅ Diff calculation - Verifies diff between versions works
+
+**All 8 tests pass!** ✅
+
+### Files Modified
+
+1. **src/workers/capability-tools.ts**
+   - Added `currentWhiteboard` and `currentLedger` tracking variables
+   - Modified `initializeCapabilitySystem()` to reuse orchestrator when storage is unchanged
+   - Added logging to show when orchestrator is created vs reused
+
+2. **src/workers/capability-orchestrator.ts**
+   - Modified artifact storage logic to check if artifact exists
+   - Uses `whiteboard.update()` for existing artifacts
+   - Uses `whiteboard.add()` only for new artifacts
+   - Added review notes with timestamp on updates
+
+3. **__tests__/session-persistence.test.ts** (NEW)
+   - Comprehensive test suite for both fixes
+   - Tests session state persistence
+   - Tests artifact versioning
+   - Tests edge cases
+
+### Impact
+
+**Before Fix**:
+```
+Session 1: execute capability A
+  → sessionCosts: { A: 100 tokens }
+  → artifact A: version 1
+
+Session 1: get_capability_status
+  → Returns: 0 executions, 0 tokens ❌ (state lost!)
+
+Session 1: execute capability A again
+  → artifact A: version 1 ❌ (should be 2!)
+```
+
+**After Fix**:
+```
+Session 1: execute capability A
+  → sessionCosts: { A: 100 tokens }
+  → artifact A: version 1
+
+Session 1: get_capability_status
+  → Returns: 1 execution, 100 tokens ✅ (state preserved!)
+
+Session 1: execute capability A again
+  → sessionCosts: { A: 200 tokens }
+  → artifact A: version 2 ✅ (incremented!)
+  → history: [v1, v2] ✅ (audit trail!)
+```
 
 ---
 
 **Last Updated**: 2025-09-30
-**Version**: 4.1.0 (Persistence Enhancement)
+**Version**: 4.1.1 (Bug Fixes + Persistence)
 **Deployment**: d4b9fdeb-dabd-4b3f-af42-2be0b63bbad7
 **Status**: Production Ready ✅
 **Compilation**: ✅ TypeScript 0 errors
 **Tool Testing**: ✅ Verified via ChatGPT Developer Mode
 **Documentation**: ✅ Consolidated in 2 files (README.md, AGENT.md)
 **Persistence**: ✅ End-to-end with Durable Objects (v4.1)
+**Bug Fixes**: ✅ Session state + artifact versioning (v4.1.1)
 

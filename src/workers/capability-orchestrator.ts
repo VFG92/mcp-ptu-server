@@ -314,14 +314,26 @@ export class CapabilityOrchestrator {
         }
       }
 
-      // Add to whiteboard
-      this.whiteboard.add(
-        capId,
-        capability?.category || 'unknown',
-        result.output,
-        capId,
-        'accepted'
-      );
+      // Add or update artifact on whiteboard
+      // Check if artifact already exists to maintain version history
+      if (this.whiteboard.has(capId)) {
+        // Artifact exists - update it to increment version
+        this.whiteboard.update(
+          capId,
+          result.output,
+          capId,
+          `Updated by capability execution at ${new Date().toISOString()}`
+        );
+      } else {
+        // New artifact - add it
+        this.whiteboard.add(
+          capId,
+          capability?.category || 'unknown',
+          result.output,
+          capId,
+          'accepted'
+        );
+      }
 
       artifacts.push({
         id: capId,

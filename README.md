@@ -1,6 +1,6 @@
 # 🧠 MCP PTU Server - Capability-Driven Business Analysis
 
-**Version 4.1.0** | **Evidence-Backed, Industry-Aware, LLM-Native, Persistent, Production-Ready**
+**Version 4.1.1** | **Evidence-Backed, Industry-Aware, LLM-Native, Persistent, Production-Ready**
 
 A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server featuring a **capability-driven architecture** for enterprise business analysis with **58 advanced capabilities** across 8 business domains, including **11 capabilities with explicit LLM native integration** (Python execution, web search).
 
@@ -460,7 +460,7 @@ Durable Objects (State Storage)
 
 #### **[README.md](./README.md)** - This File
 - Overview and quick start
-- 46 capabilities list with descriptions
+- 58 capabilities list with descriptions
 - Industry adapters (20+ industries)
 - Usage examples and best practices
 - Version history and what's new
@@ -473,17 +473,15 @@ Durable Objects (State Storage)
 - MCP Tools API reference
 - Deployment and configuration
 - Development guide
+- Bug fixes and improvements (v4.1.1)
 
 ### Key Implementation Files
-- **[src/workers/capabilities/](./src/workers/capabilities/)** - All 46 capability implementations (12 files)
+- **[src/workers/capabilities/](./src/workers/capabilities/)** - All 58 capability implementations (12 files)
 - **[src/workers/industry-adapters.ts](./src/workers/industry-adapters.ts)** - Industry-specific adapters (4 fully implemented)
 - **[src/workers/industry-context.ts](./src/workers/industry-context.ts)** - Industry context system (20+ verticals)
 - **[src/workers/llm-native-capabilities.ts](./src/workers/llm-native-capabilities.ts)** - Native LLM capability integration
 - **[src/workers/capability-orchestrator.ts](./src/workers/capability-orchestrator.ts)** - Main orchestration engine
 - **[src/workers/capability-tools.ts](./src/workers/capability-tools.ts)** - MCP tools implementation
-
-### Migration
-- **[MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)** - Migrate from v2.x persona-based system to v4.0
 
 ---
 
@@ -516,7 +514,12 @@ wrangler deploy      # Deploy
 | No budget tracking | Budget constraints |
 | No confidence | Confidence calculus |
 
-See [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) for details.
+**Key Changes**:
+- Replace persona-based tools with `analyze_with_capabilities`
+- Use `adapter_id` parameter to specify industry context
+- All capabilities now provide evidence backing
+- Budget constraints enforced automatically
+- Confidence scores calculated for all outputs
 
 ---
 
@@ -576,11 +579,17 @@ Built with:
 
 ---
 
-## 📚 Documentation
+## 🆕 What's New in v4.1.1
 
-- **[AGENT.md](./AGENT.md)** - Complete technical documentation (v4.1 with persistence)
-- **[PERSISTENCE_IMPLEMENTATION.md](./PERSISTENCE_IMPLEMENTATION.md)** - Persistence architecture details
-- **[test-persistence-flow.md](./test-persistence-flow.md)** - Persistence testing guide
+### Bug Fixes & Improvements
+- ✅ **Session State Persistence** - Fixed session costs and execution history being reset on every call
+- ✅ **Artifact Versioning** - Fixed artifact versions always resetting to 1, now properly increments (1 → 2 → 3)
+- ✅ **Orchestrator Reuse** - Orchestrator instance now reused when storage references unchanged
+- ✅ **Audit Trail** - Complete version history now maintained for compliance
+- ✅ **Test Coverage** - Added comprehensive test suite for session persistence and versioning
+
+### Technical Details
+See [AGENT.md](./AGENT.md) section "Bug Fixes (v4.1.1)" for complete technical details.
 
 ---
 

@@ -80,6 +80,8 @@ export const ListCapabilitiesSchema = z.object({
  * Now accepts optional DO references for persistence
  */
 let orchestrator: CapabilityOrchestrator | null = null;
+let currentWhiteboard: Whiteboard | null = null;
+let currentLedger: EvidenceLedger | null = null;
 
 export function initializeCapabilitySystem(refs?: CapabilitySystemRefs): CapabilityOrchestrator {
   // Always register capabilities
@@ -91,12 +93,21 @@ export function initializeCapabilitySystem(refs?: CapabilitySystemRefs): Capabil
   const whiteboard = refs?.whiteboard || globalWhiteboard;
   const ledger = refs?.ledger || globalEvidenceLedger;
 
-  // Create orchestrator with appropriate storage
-  orchestrator = new CapabilityOrchestrator(
-    globalCapabilityGraph,
-    ledger,
-    whiteboard
-  );
+  // Only create a new orchestrator if:
+  // 1. No orchestrator exists yet, OR
+  // 2. The storage references have changed (e.g., different DO instance)
+  if (!orchestrator || currentWhiteboard !== whiteboard || currentLedger !== ledger) {
+    console.log('[CapabilitySystem] Creating new orchestrator instance');
+    orchestrator = new CapabilityOrchestrator(
+      globalCapabilityGraph,
+      ledger,
+      whiteboard
+    );
+    currentWhiteboard = whiteboard;
+    currentLedger = ledger;
+  } else {
+    console.log('[CapabilitySystem] Reusing existing orchestrator instance');
+  }
 
   return orchestrator;
 }
