@@ -205,6 +205,16 @@ export class ExpressResponseAdapter {
   }
 
   /**
+   * Flush headers (Node.js ServerResponse compatibility)
+   * In Cloudflare Workers, headers are sent automatically with the first write
+   * This is a no-op stub for MCP SDK compatibility
+   */
+  flushHeaders(): this {
+    this.headersSent = true;
+    return this;
+  }
+
+  /**
    * Write data to the response
    * For SSE, this writes to the stream
    * For regular responses, this buffers the data
