@@ -23,6 +23,9 @@ import {
 } from './parallel-reasoning-engine.js';
 import { getAllAgentPersonas } from './agent-personas.js';
 
+const DURABLE_OBJECT_ID_REGEX = /^[0-9a-f]{64}$/i;
+const SESSION_DELIMITER = '::';
+
 // Tool Schemas
 export const ParallelReasoningInitSchema = z.object({
   task: z.string().describe('The complex task to analyze with multiple perspectives'),
@@ -86,7 +89,10 @@ export function handleParallelReasoningInit(
   getTransportSessionId?: () => string | null | undefined
 ): any {
   const transportSessionId = getTransportSessionId?.() ?? null;
-  const sessionId = transportSessionId ?? `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const baseSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const sessionId = transportSessionId && DURABLE_OBJECT_ID_REGEX.test(transportSessionId)
+    ? `${transportSessionId}${SESSION_DELIMITER}${baseSessionId}`
+    : baseSessionId;
 
   const session = initializeSession(
     sessionId,

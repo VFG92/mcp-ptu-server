@@ -26,12 +26,16 @@ export class MCPSession extends DurableObject {
   private cleanup: (() => Promise<void>) | null = null;
   private heartbeatInterval: number | null = null;
   private sessionId: string | null = null;
+  private readonly ctx: DurableObjectState;
+  private readonly env: Env;
 
   // Parallel reasoning state storage
   private parallelReasoningSessions: Map<string, ParallelReasoningSession> = new Map();
 
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
+    this.ctx = state;
+    this.env = env;
     console.log(`[MCPSession] Constructor called for DO ID: ${state.id.toString()}`);
     // Load parallel reasoning sessions from storage on initialization
     this.ctx.blockConcurrencyWhile(async () => {
@@ -117,7 +121,7 @@ export class MCPSession extends DurableObject {
       await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
 
       // Start notification intervals after initialization
-      startNotificationIntervals(this.sessionId);
+      startNotificationIntervals(this.sessionId ?? undefined);
 
       // Start heartbeat for SSE
       this.startHeartbeat();
@@ -128,7 +132,7 @@ export class MCPSession extends DurableObject {
     }
 
     // Existing session - handle the request
-    if (!sessionIdHeader || sessionIdHeader !== this.sessionId) {
+    if (sessionIdHeader && sessionIdHeader !== this.sessionId) {
       console.log(`Session ID mismatch: header="${sessionIdHeader}" expected="${this.sessionId}"`);
       return new Response(JSON.stringify({
         jsonrpc: '2.0',
@@ -141,6 +145,10 @@ export class MCPSession extends DurableObject {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    if (!sessionIdHeader) {
+      console.log(`[MCPSession] POST request missing session header; trusting worker routing for session ${this.sessionId}`);
     }
 
     // Convert and handle the request using adapter
@@ -157,18 +165,36 @@ export class MCPSession extends DurableObject {
   private async handleGet(request: Request): Promise<Response> {
     const sessionIdHeader = request.headers.get('mcp-session-id');
 
-    if (!this.transport || !sessionIdHeader || sessionIdHeader !== this.sessionId) {
+    if (!this.transport) {
       return new Response(JSON.stringify({
         jsonrpc: '2.0',
         error: {
           code: -32000,
-          message: 'Bad Request: No valid session ID provided',
+          message: 'Bad Request: No valid session transport available',
         },
         id: null,
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    if (sessionIdHeader && sessionIdHeader !== this.sessionId) {
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: `Bad Request: Invalid session ID (expected ${this.sessionId}, got ${sessionIdHeader})`,
+        },
+        id: null,
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!sessionIdHeader) {
+      console.log(`[MCPSession] GET request missing session header; continuing with session ${this.sessionId}`);
     }
 
     // Check for Last-Event-ID for resumability
@@ -193,18 +219,36 @@ export class MCPSession extends DurableObject {
   private async handleDelete(request: Request): Promise<Response> {
     const sessionIdHeader = request.headers.get('mcp-session-id');
 
-    if (!this.transport || !sessionIdHeader || sessionIdHeader !== this.sessionId) {
+    if (!this.transport) {
       return new Response(JSON.stringify({
         jsonrpc: '2.0',
         error: {
           code: -32000,
-          message: 'Bad Request: No valid session ID provided',
+          message: 'Bad Request: No valid session transport available',
         },
         id: null,
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    if (sessionIdHeader && sessionIdHeader !== this.sessionId) {
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: `Bad Request: Invalid session ID (expected ${this.sessionId}, got ${sessionIdHeader})`,
+        },
+        id: null,
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!sessionIdHeader) {
+      console.log(`[MCPSession] DELETE request missing session header; proceeding for session ${this.sessionId}`);
     }
 
     console.log(`Received session termination request for session ${this.sessionId}`);
