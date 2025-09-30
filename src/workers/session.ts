@@ -69,6 +69,7 @@ export class MCPSession extends DurableObject {
   private async handlePost(request: Request): Promise<Response> {
     const sessionIdHeader = request.headers.get('mcp-session-id');
     console.log(`[MCPSession] POST request. Session header: ${sessionIdHeader}, DO ID: ${this.ctx.id.toString()}, Has transport: ${!!this.transport}`);
+    console.log(`[MCPSession] Current sessionStore has ${this.parallelReasoningSessions.size} sessions: ${Array.from(this.parallelReasoningSessions.keys()).join(', ') || 'none'}`);
 
     // If we don't have a transport yet, this is initialization
     if (!this.transport) {
