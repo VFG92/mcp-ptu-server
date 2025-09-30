@@ -89,6 +89,7 @@ export function handleParallelReasoningInit(
   getTransportSessionId?: () => string | null | undefined
 ): any {
   const transportSessionId = getTransportSessionId?.() ?? null;
+  console.log(`[ParallelReasoning] getTransportSessionId returned: ${transportSessionId}`);
 
   // CRITICAL FIX: Use ONLY the DO ID as session_id
   // ChatGPT tool calls don't propagate mcp-session-id header, so composite IDs don't work
@@ -96,6 +97,8 @@ export function handleParallelReasoningInit(
   const sessionId = transportSessionId && DURABLE_OBJECT_ID_REGEX.test(transportSessionId)
     ? transportSessionId  // Use DO ID directly - this ensures persistence!
     : `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`; // Fallback for non-DO environments
+
+  console.log(`[ParallelReasoning] Using session_id: ${sessionId} (from transportSessionId: ${!!transportSessionId})`);
 
   const session = initializeSession(
     sessionId,
