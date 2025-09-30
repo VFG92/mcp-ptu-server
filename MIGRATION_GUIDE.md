@@ -209,8 +209,8 @@ Specify exactly what you need:
 ## Support
 
 For questions or issues during migration:
-1. Check the [TRANSFORMATION_SUMMARY.md](./TRANSFORMATION_SUMMARY.md) for technical details
-2. Review [INTEGRATION_CHECKLIST.md](./INTEGRATION_CHECKLIST.md) for integration steps
+1. Check [AGENT.md](./AGENT.md) for complete technical documentation
+2. Review [README.md](./README.md) for tool verification status
 3. Open an issue on GitHub
 
 ## Benefits Summary

@@ -257,9 +257,8 @@ Durable Objects (State Storage)
 
 ## 📖 Documentation
 
-- **[AGENT.md](./AGENT.md)** - Complete technical documentation & API reference
+- **[AGENT.md](./AGENT.md)** - Complete technical documentation, API reference & deployment guide
 - **[MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md)** - Migrate from v2.x persona-based system
-- **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** - Deploy to Cloudflare Workers
 
 ---
 
