@@ -150,13 +150,17 @@ app.post('/mcp', async (c) => {
   if (routedDoId) {
     try {
       id = c.env.MCP_SESSION.idFromString(routedDoId);
+      const idString = id.toString();
       if (routedDoIdSource === 'header') {
         console.log(`[Worker] Using existing DO for session: ${routedDoId}`);
+        console.log(`[Worker] DO ID after idFromString: ${idString}`);
       } else {
         console.log(
           `[Worker] Derived Durable Object ID ${routedDoId} from ${routedDoIdSource ?? 'request body'} (${routedDoIdRawValue}). ` +
           'Reusing existing session without header.'
         );
+        console.log(`[Worker] DO ID after idFromString: ${idString}`);
+        console.log(`[Worker] IDs match: ${idString === routedDoId}`);
       }
     } catch (error) {
       console.error(
