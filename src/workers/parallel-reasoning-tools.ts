@@ -85,17 +85,18 @@ export function handleParallelReasoningInit(
   sessionStore: Map<string, ParallelReasoningSession>
 ): any {
   const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   const session = initializeSession(
     sessionId,
     args.task,
     args.perspectives,
     args.coordination_strategy
   );
-  
+
   // Store session
   sessionStore.set(sessionId, session);
-  
+  console.log(`[ParallelReasoning] Created session ${sessionId}. Total sessions: ${sessionStore.size}`);
+
   // Get agent prompts for ChatGPT to execute
   const agentPrompts = getAgentPrompts(session);
   
@@ -139,11 +140,18 @@ export function handleAgentReasoningStep(
   args: z.infer<typeof AgentReasoningStepSchema>,
   sessionStore: Map<string, ParallelReasoningSession>
 ): any {
+  console.log(`[ParallelReasoning] Looking for session ${args.session_id}. Total sessions: ${sessionStore.size}`);
   const session = sessionStore.get(args.session_id);
   if (!session) {
-    throw new Error(`Session not found: ${args.session_id}`);
+    const availableSessions = Array.from(sessionStore.keys());
+    console.error(`[ParallelReasoning] Session ${args.session_id} not found. Available: ${availableSessions.join(', ')}`);
+    throw new Error(
+      `Session not found: ${args.session_id}\n` +
+      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
+      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
+    );
   }
-  
+
   const updatedSession = updateAgentReasoning(
     session,
     args.agent_id,
@@ -187,7 +195,12 @@ export function handleCrossAgentCommunication(
 ): any {
   const session = sessionStore.get(args.session_id);
   if (!session) {
-    throw new Error(`Session not found: ${args.session_id}`);
+    const availableSessions = Array.from(sessionStore.keys());
+    throw new Error(
+      `Session not found: ${args.session_id}\n` +
+      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
+      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
+    );
   }
   
   const updatedSession = addCrossAgentMessage(
@@ -225,7 +238,12 @@ export function handleSynthesizeParallelReasoning(
 ): any {
   const session = sessionStore.get(args.session_id);
   if (!session) {
-    throw new Error(`Session not found: ${args.session_id}`);
+    const availableSessions = Array.from(sessionStore.keys());
+    throw new Error(
+      `Session not found: ${args.session_id}\n` +
+      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
+      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
+    );
   }
   
   const updatedSession = synthesizeSession(session, args.synthesis_strategy);
@@ -276,7 +294,12 @@ export function handleParallelComputeStatus(
 ): any {
   const session = sessionStore.get(args.session_id);
   if (!session) {
-    throw new Error(`Session not found: ${args.session_id}`);
+    const availableSessions = Array.from(sessionStore.keys());
+    throw new Error(
+      `Session not found: ${args.session_id}\n` +
+      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
+      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
+    );
   }
   
   const status = getSessionStatus(session);
@@ -314,7 +337,12 @@ export function handleAgentDebate(
 ): any {
   const session = sessionStore.get(args.session_id);
   if (!session) {
-    throw new Error(`Session not found: ${args.session_id}`);
+    const availableSessions = Array.from(sessionStore.keys());
+    throw new Error(
+      `Session not found: ${args.session_id}\n` +
+      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
+      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
+    );
   }
   
   const updatedSession = initiateDebate(session, args.topic, args.agent_ids);

@@ -74,6 +74,7 @@ app.options('/*', (c) => {
 // MCP POST endpoint - initialization and requests
 app.post('/mcp', async (c) => {
   const sessionId = c.req.header('mcp-session-id');
+  console.log(`[Worker] POST /mcp - Session ID from header: ${sessionId || 'none'}`);
 
   // Get or create Durable Object for this session
   let id: DurableObjectId;
@@ -81,9 +82,11 @@ app.post('/mcp', async (c) => {
   if (sessionId) {
     // Existing session - use the session ID (which is the DO ID hex string) to get the DO
     id = c.env.MCP_SESSION.idFromString(sessionId);
+    console.log(`[Worker] Using existing DO for session: ${sessionId}`);
   } else {
     // New session - create a new DO with a unique ID
     id = c.env.MCP_SESSION.newUniqueId();
+    console.log(`[Worker] Creating new DO with ID: ${id.toString()}`);
   }
 
   // Get the Durable Object stub

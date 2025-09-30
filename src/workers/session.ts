@@ -32,9 +32,11 @@ export class MCPSession extends DurableObject {
 
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
+    console.log(`[MCPSession] Constructor called for DO ID: ${state.id.toString()}`);
     // Load parallel reasoning sessions from storage on initialization
     this.ctx.blockConcurrencyWhile(async () => {
       await this.loadParallelReasoningSessions();
+      console.log(`[MCPSession] Loaded ${this.parallelReasoningSessions.size} sessions from storage`);
     });
   }
 
@@ -62,11 +64,13 @@ export class MCPSession extends DurableObject {
 
   private async handlePost(request: Request): Promise<Response> {
     const sessionIdHeader = request.headers.get('mcp-session-id');
+    console.log(`[MCPSession] POST request. Session header: ${sessionIdHeader}, DO ID: ${this.ctx.id.toString()}, Has transport: ${!!this.transport}`);
 
     // If we don't have a transport yet, this is initialization
     if (!this.transport) {
       // Generate a session ID based on the DO ID
       this.sessionId = this.ctx.id.toString();
+      console.log(`[MCPSession] Initializing new session: ${this.sessionId}`);
 
       // Create the MCP server with parallel reasoning session store and persist callback
       const persistCallback = async () => {
@@ -252,7 +256,9 @@ export class MCPSession extends DurableObject {
    */
   async persistParallelReasoningSessions(): Promise<void> {
     const sessions = Array.from(this.parallelReasoningSessions.entries());
+    console.log(`[MCPSession] Persisting ${sessions.length} sessions to storage`);
     await this.ctx.storage.put('parallel_reasoning_sessions', sessions);
+    console.log(`[MCPSession] Successfully persisted sessions`);
   }
 
   /**

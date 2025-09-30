@@ -329,7 +329,7 @@ export class ExpressResponseAdapter {
         setTimeout(() => {
           console.warn('Response timeout - returning buffered content');
           resolve();
-        }, 5000); // 5 second timeout
+        }, 30000); // 30 second timeout (increased for LLM sampling)
       });
 
       await Promise.race([this._finishPromise, timeout]);
