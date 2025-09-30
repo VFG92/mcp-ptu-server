@@ -100,16 +100,14 @@ export function handleParallelReasoningInit(
   // Get agent prompts for ChatGPT to execute
   const agentPrompts = getAgentPrompts(session);
   
-  return {
-    content: [{
-      type: 'text',
-      text: JSON.stringify({
-        session_id: sessionId,
-        task: args.task,
-        agent_count: session.agent_count,
-        coordination_strategy: session.coordination_strategy,
-        agents: agentPrompts,
-        instructions: `
+  // Return response with session_id prominently displayed
+  const responseData = {
+    session_id: sessionId,
+    task: args.task,
+    agent_count: session.agent_count,
+    coordination_strategy: session.coordination_strategy,
+    agents: agentPrompts,
+    instructions: `
 🎯 Parallel Reasoning Session Initialized!
 
 **Session ID**: ${sessionId}
@@ -130,9 +128,16 @@ ${a.prompt}
 `).join('\n')}
 
 ⚡ Start reasoning in parallel now!
-        `.trim()
-      }, null, 2)
-    }]
+    `.trim()
+  };
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `SESSION_ID: ${sessionId}\n\n` + JSON.stringify(responseData, null, 2)
+      }
+    ]
   };
 }
 
