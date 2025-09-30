@@ -584,13 +584,13 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
         outputSchema: zodToJsonSchema(StructuredContentSchema.output) as ToolOutput,
       },
     ];
-    if (clientCapabilities!.roots) tools.push ({
+    if (clientCapabilities?.roots) tools.push ({
         name: ToolName.LIST_ROOTS,
         description:
             "Lists the current MCP roots provided by the client. Demonstrates the roots protocol capability even though this server doesn't access files.",
         inputSchema: zodToJsonSchema(ListRootsSchema) as ToolInput,
     });
-    if (clientCapabilities!.elicitation) tools.push ({
+    if (clientCapabilities?.elicitation) tools.push ({
         name: ToolName.ELICITATION,
         description: "Demonstrates the Elicitation feature by asking the user to provide information about their favorite color, number, and pets.",
         inputSchema: zodToJsonSchema(ElicitationSchema) as ToolInput,
