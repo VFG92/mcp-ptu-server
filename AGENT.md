@@ -1,6 +1,6 @@
 # 🤖 MCP PTU Server - Complete Technical Documentation
 
-**Version 4.1.1** | **Capability-Driven, Industry-Aware, LLM-Native, Persistent** | **For AI Agents & Developers**
+**Version 4.2.0** | **Capability-Driven, Industry-Aware, LLM-Native, Persistent, Peer-Reviewed** | **For AI Agents & Developers**
 
 ---
 
@@ -1443,6 +1443,217 @@ npm test
 
 ---
 
+## 🔄 Peer Review System (v4.2.0)
+
+### Overview
+
+The system now implements **critical peer review between agents**, where agents don't just generate parallel scenarios but actively critique each other's results. This creates an internal self-evaluation mechanism where **consensus/conflict becomes a measure of result robustness**.
+
+### Key Concept
+
+Instead of simply running multiple agents in parallel and picking the best result, agents now act as **peer reviewers** for each other:
+
+1. **Each agent reviews all other agents' results**
+2. **Critiques are generated** based on confidence, evidence quality, and methodology
+3. **Consensus/conflict is measured** across all reviews
+4. **Robustness score** is calculated based on peer agreement
+5. **Tournament rankings** are enhanced with peer review insights
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│         CapabilityOrchestrator                              │
+│  • execute() → generates multiple capability results        │
+│  • peer_review_mode: true (default)                         │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│         TournamentKernel                                    │
+│  • Conducts peer review session (if enabled)                │
+│  • Each result reviews all others                           │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│         PeerReviewKernel                                    │
+│  • generateCritiques() → cross-agent critique generation    │
+│  • analyzeConsensus() → measure agreement/conflict          │
+│  • identifyClusters() → find agreeing result groups         │
+│  • identifyOutliers() → detect controversial results        │
+│  • calculateRobustness() → overall robustness score         │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│         Enhanced Results                                    │
+│  • Consensus score (0-1)                                    │
+│  • Conflict score (0-1)                                     │
+│  • Robustness score (0-1)                                   │
+│  • Critical disagreements identified                        │
+│  • Peer-validated strengths/weaknesses                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Peer Review Process
+
+#### 1. Critique Generation
+
+Each capability result reviews all other results and generates critiques based on:
+
+- **Confidence comparison**: Significant gaps trigger critiques
+- **Evidence quality**: Verification rate differences
+- **Methodology**: Output similarity and approach consistency
+- **Severity levels**: Critical, Major, Minor, Suggestion
+
+Example critique:
+```typescript
+{
+  reviewer_id: 'market_sizing',
+  reviewed_id: 'competitive_analysis',
+  agreement_score: 0.65,
+  critique_points: [
+    {
+      aspect: 'evidence_quality',
+      severity: 'major',
+      description: 'Evidence quality concern: 60% checks passed vs reviewer\'s 90%',
+      suggested_improvement: 'Strengthen evidence backing for key claims'
+    }
+  ],
+  overall_assessment: 'agree',
+  confidence_in_critique: 0.9
+}
+```
+
+#### 2. Consensus Analysis
+
+The system analyzes all critiques to measure:
+
+- **Consensus Score** (0-1): Average agreement across all pairwise reviews
+- **Conflict Score** (0-1): Inverse of consensus (1 - consensus)
+- **Agreement Matrix**: NxN matrix of pairwise agreement scores
+- **Clusters**: Groups of results that agree with each other
+- **Outliers**: Results with low average peer agreement
+- **Critical Disagreements**: High-impact conflicts between results
+
+#### 3. Robustness Scoring
+
+Robustness is calculated from:
+- **60% weight**: Consensus analysis score
+- **30% weight**: Average peer confidence
+- **10% penalty**: Controversy (variance in agreement)
+
+High robustness (>0.8) indicates:
+- ✅ Strong consensus among agents
+- ✅ Few or no critical disagreements
+- ✅ Clear clustering of agreeing results
+- ✅ Low controversy
+
+Low robustness (<0.5) indicates:
+- ⚠️ Significant disagreement among agents
+- ⚠️ Multiple critical conflicts
+- ⚠️ High controversy (variance in opinions)
+- ⚠️ Many outliers
+
+### Usage
+
+#### Enable/Disable Peer Review
+
+```typescript
+// Peer review enabled by default
+const result = await orchestrator.execute({
+  session_id: 'session_001',
+  task: 'Market analysis',
+  budget: defaultBudget,
+  policy: defaultPolicy
+  // peer_review_mode: true (default)
+});
+
+// Disable peer review if needed
+const result = await orchestrator.execute({
+  session_id: 'session_002',
+  task: 'Quick analysis',
+  budget: defaultBudget,
+  policy: defaultPolicy,
+  peer_review_mode: false  // Disable peer review
+});
+```
+
+#### Access Peer Review Results
+
+```typescript
+const result = await orchestrator.execute(request);
+
+if (result.peer_review) {
+  console.log(`Consensus: ${(result.peer_review.consensus_score * 100).toFixed(1)}%`);
+  console.log(`Conflict: ${(result.peer_review.conflict_score * 100).toFixed(1)}%`);
+  console.log(`Robustness: ${(result.peer_review.robustness_score * 100).toFixed(1)}%`);
+  console.log(`Critical disagreements: ${result.peer_review.critical_disagreements}`);
+  console.log(`Review quality: ${(result.peer_review.review_quality * 100).toFixed(1)}%`);
+}
+```
+
+### Benefits
+
+1. **Self-Validation**: Results are validated by peer agents, not just by evidence
+2. **Robustness Measure**: Consensus/conflict provides a quantitative robustness metric
+3. **Conflict Detection**: Critical disagreements are automatically identified
+4. **Quality Insights**: Peer-identified strengths and weaknesses enhance rankings
+5. **Transparency**: Full audit trail of who reviewed what and why
+6. **Adaptive**: Tournament rankings adapt based on peer agreement
+
+### Example Output
+
+```json
+{
+  "success": true,
+  "artifacts": [...],
+  "overall_confidence": 0.85,
+  "peer_review": {
+    "consensus_score": 0.82,
+    "conflict_score": 0.18,
+    "robustness_score": 0.87,
+    "critical_disagreements": 1,
+    "review_quality": 0.91
+  }
+}
+```
+
+**Interpretation**:
+- **82% consensus**: Strong agreement among agents
+- **18% conflict**: Minor disagreements exist
+- **87% robustness**: Results are highly robust
+- **1 critical disagreement**: One significant conflict identified
+- **91% review quality**: High-quality peer review process
+
+### Integration with Tournament
+
+Peer review enhances tournament rankings:
+
+1. **ELO Boost**: Results with high peer agreement get ELO bonus (+100 max)
+2. **Controversy Penalty**: High controversy results lose ELO (-50 max)
+3. **Strengths/Weaknesses**: Peer-identified insights added to rankings
+4. **Final Rankings**: Include both tournament performance and peer validation
+
+### Testing
+
+```bash
+# Run peer review tests
+npm test -- __tests__/peer-review.test.ts
+
+# All tests (includes peer review)
+npm test
+```
+
+**Test Coverage**:
+- ✅ Single result handling
+- ✅ Multi-result critique generation
+- ✅ Consensus score calculation
+- ✅ Conflict detection
+- ✅ Cluster identification
+- ✅ Outlier detection
+- ✅ Review quality assessment
+
+---
+
 ## 🐛 Bug Fixes (v4.1.1)
 
 ### Problem 1: Session State Reset
@@ -1604,7 +1815,7 @@ Session 1: execute capability A again
 ---
 
 **Last Updated**: 2025-09-30
-**Version**: 4.1.1 (Bug Fixes + Persistence)
+**Version**: 4.2.0 (Peer Review System)
 **Deployment**: d4b9fdeb-dabd-4b3f-af42-2be0b63bbad7
 **Status**: Production Ready ✅
 **Compilation**: ✅ TypeScript 0 errors
@@ -1612,4 +1823,6 @@ Session 1: execute capability A again
 **Documentation**: ✅ Consolidated in 2 files (README.md, AGENT.md)
 **Persistence**: ✅ End-to-end with Durable Objects (v4.1)
 **Bug Fixes**: ✅ Session state + artifact versioning (v4.1.1)
+**Peer Review**: ✅ Critical peer review between agents (v4.2.0)
+**Tests**: ✅ 105 tests passing (including 7 peer review tests)
 

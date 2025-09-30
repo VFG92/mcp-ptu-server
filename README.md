@@ -1,6 +1,6 @@
 # 🧠 MCP PTU Server - Capability-Driven Business Analysis
 
-**Version 4.1.1** | **Evidence-Backed, Industry-Aware, LLM-Native, Persistent, Production-Ready**
+**Version 4.2.0** | **Evidence-Backed, Industry-Aware, LLM-Native, Persistent, Peer-Reviewed, Production-Ready**
 
 A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server featuring a **capability-driven architecture** for enterprise business analysis with **58 advanced capabilities** across 8 business domains, including **11 capabilities with explicit LLM native integration** (Python execution, web search).
 
@@ -579,9 +579,17 @@ Built with:
 
 ---
 
-## 🆕 What's New in v4.1.1
+## 🆕 What's New in v4.2.0
 
-### Bug Fixes & Improvements
+### Peer Review System
+- ✅ **Critical Peer Review** - Agents now critique each other's results, not just generate parallel scenarios
+- ✅ **Consensus/Conflict Measurement** - Quantitative robustness metrics based on peer agreement
+- ✅ **Self-Validation** - Internal self-evaluation mechanism where consensus indicates robustness
+- ✅ **Automatic Conflict Detection** - Critical disagreements automatically identified
+- ✅ **Enhanced Tournament** - Rankings now include peer review insights
+- ✅ **Enabled by Default** - Can be disabled with `peer_review_mode: false`
+
+### Bug Fixes (v4.1.1)
 - ✅ **Session State Persistence** - Fixed session costs and execution history being reset on every call
 - ✅ **Artifact Versioning** - Fixed artifact versions always resetting to 1, now properly increments (1 → 2 → 3)
 - ✅ **Orchestrator Reuse** - Orchestrator instance now reused when storage references unchanged
@@ -589,7 +597,7 @@ Built with:
 - ✅ **Test Coverage** - Added comprehensive test suite for session persistence and versioning
 
 ### Technical Details
-See [AGENT.md](./AGENT.md) section "Bug Fixes (v4.1.1)" for complete technical details.
+See [AGENT.md](./AGENT.md) sections "Peer Review System (v4.2.0)" and "Bug Fixes (v4.1.1)" for complete technical details.
 
 ---
 

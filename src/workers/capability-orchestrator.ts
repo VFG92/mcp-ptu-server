@@ -39,6 +39,7 @@ export interface OrchestrationRequest {
   adapter_id?: string;            // Optional adapter (strategy, finance, etc.)
   required_artifacts?: string[];  // Required output types
   tournament_mode?: boolean;      // Run tournament for best results (DEFAULT: true, set to false to disable)
+  peer_review_mode?: boolean;     // Enable peer review between agents (DEFAULT: true, set to false to disable)
   industry_vertical?: IndustryVertical;  // Industry context (auto-detected if not provided)
   geographic_region?: GeographicRegion;  // Geographic region for regulatory context
   entity_names?: Record<string, string>; // Actual entity names to use (e.g., competitors, products)
@@ -79,7 +80,16 @@ export interface OrchestrationResult {
   overall_confidence: number;
   quality_flags: string[];
   warnings: string[];
-  
+
+  // Peer Review (NEW)
+  peer_review?: {
+    consensus_score: number;      // 0-1, level of agreement between agents
+    conflict_score: number;       // 0-1, level of disagreement
+    robustness_score: number;     // 0-1, overall robustness based on peer review
+    critical_disagreements: number;
+    review_quality: number;       // 0-1, quality of the review process
+  };
+
   // Metadata
   execution_time_ms: number;
   capabilities_executed: string[];
@@ -345,13 +355,34 @@ export class CapabilityOrchestrator {
       });
     }
 
-    // Step 4: Tournament mode (enabled by default for multi-agent quality, can be disabled)
+    // Step 4: Tournament mode with peer review (both enabled by default)
     const enableTournament = request.tournament_mode !== false; // Default to true unless explicitly disabled
+    const enablePeerReview = request.peer_review_mode !== false; // Default to true unless explicitly disabled
+
+    let peerReviewSummary: OrchestrationResult['peer_review'] | undefined;
+
     if (enableTournament && executionResult.results.size > 1) {
-      const tournamentResult = await this.tournament.runTournament(
+      // Create tournament kernel with peer review enabled/disabled based on request
+      const tournamentKernel = new TournamentKernel(undefined, 0.3, enablePeerReview);
+
+      const tournamentResult = await tournamentKernel.runTournament(
         Array.from(executionResult.results.values()),
         verifications
       );
+
+      // Extract peer review summary if available
+      if (tournamentResult.peer_review) {
+        const pr = tournamentResult.peer_review;
+        peerReviewSummary = {
+          consensus_score: pr.consensus_analysis.consensus_score,
+          conflict_score: pr.consensus_analysis.conflict_score,
+          robustness_score: pr.overall_robustness,
+          critical_disagreements: pr.consensus_analysis.critical_disagreements.length,
+          review_quality: pr.review_quality
+        };
+
+        console.log(`[Orchestrator] Peer review complete: consensus=${(peerReviewSummary.consensus_score * 100).toFixed(1)}%, robustness=${(peerReviewSummary.robustness_score * 100).toFixed(1)}%`);
+      }
 
       // Use tournament winner as primary result
       // (Implementation would reorder artifacts based on tournament rankings)
@@ -388,6 +419,7 @@ export class CapabilityOrchestrator {
       overall_confidence: overallConfidence.confidence,
       quality_flags: overallConfidence.quality_flags,
       warnings: executionResult.warnings,
+      peer_review: peerReviewSummary,  // NEW: Include peer review summary
       execution_time_ms: Date.now() - startTime,
       capabilities_executed: Array.from(executionResult.results.keys()),
       capabilities_failed: Array.from(executionResult.failed.keys())

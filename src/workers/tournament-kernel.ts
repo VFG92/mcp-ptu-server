@@ -1,15 +1,17 @@
 /**
  * Tournament Kernel
- * 
+ *
  * Replaces theatrical debate with tournament-of-programs:
  * - Best-of-N with forced diversification
  * - Multi-criteria judging panel
  * - Evidence verification
  * - Bandit allocation for budget optimization
+ * - Peer review integration for robustness scoring
  */
 
 import type { CapabilityResult } from './capability-graph.js';
 import type { VerificationResult } from './evidence-ledger.js';
+import { PeerReviewKernel, type PeerReviewSession } from './peer-review-kernel.js';
 
 /**
  * Tournament contestant
@@ -66,6 +68,7 @@ export interface TournamentResult {
     min_diversity: number;
     orthogonality_achieved: boolean;
   };
+  peer_review?: PeerReviewSession;  // NEW: Peer review results
 }
 
 /**
@@ -85,13 +88,18 @@ export interface BanditArm {
 export class TournamentKernel {
   private criteria: JudgingCriteria[];
   private diversityThreshold: number;
+  private peerReviewKernel: PeerReviewKernel;
+  private enablePeerReview: boolean;
 
   constructor(
     criteria?: JudgingCriteria[],
-    diversityThreshold: number = 0.3
+    diversityThreshold: number = 0.3,
+    enablePeerReview: boolean = true
   ) {
     this.criteria = criteria || this.getDefaultCriteria();
     this.diversityThreshold = diversityThreshold;
+    this.peerReviewKernel = new PeerReviewKernel();
+    this.enablePeerReview = enablePeerReview;
   }
 
   /**
@@ -102,8 +110,21 @@ export class TournamentKernel {
     verifications: Map<string, VerificationResult>,
     maxRounds: number = 3
   ): Promise<TournamentResult> {
+    // NEW: Conduct peer review first if enabled
+    let peerReviewSession: PeerReviewSession | undefined;
+    if (this.enablePeerReview && results.length >= 2) {
+      console.log('[TournamentKernel] Conducting peer review session...');
+      peerReviewSession = await this.peerReviewKernel.conductPeerReview(results, verifications);
+      console.log(`[TournamentKernel] Peer review complete: consensus=${(peerReviewSession.consensus_analysis.consensus_score * 100).toFixed(1)}%, robustness=${(peerReviewSession.overall_robustness * 100).toFixed(1)}%`);
+    }
+
     // Create contestants
     const contestants = this.createContestants(results, verifications);
+
+    // NEW: Enhance contestants with peer review data
+    if (peerReviewSession) {
+      this.enhanceContestantsWithPeerReview(contestants, peerReviewSession);
+    }
 
     // Enforce diversity
     const diverseContestants = this.enforceDiversity(contestants);
@@ -121,8 +142,8 @@ export class TournamentKernel {
       activeContestants = activeContestants.filter(c => winners.has(c.id));
     }
 
-    // Final rankings
-    const rankings = this.calculateRankings(diverseContestants);
+    // Final rankings (now includes peer review insights)
+    const rankings = this.calculateRankings(diverseContestants, peerReviewSession);
 
     // Diversity analysis
     const diversity = this.analyzeDiversity(diverseContestants);
@@ -132,8 +153,30 @@ export class TournamentKernel {
       finalists: activeContestants.slice(0, 3),
       rounds,
       final_rankings: rankings,
-      diversity_analysis: diversity
+      diversity_analysis: diversity,
+      peer_review: peerReviewSession  // NEW: Include peer review in results
     };
+  }
+
+  /**
+   * Enhance contestants with peer review data
+   */
+  private enhanceContestantsWithPeerReview(
+    contestants: Contestant[],
+    peerReviewSession: PeerReviewSession
+  ): void {
+    for (const contestant of contestants) {
+      const peerReview = peerReviewSession.peer_reviews.get(contestant.id);
+      if (peerReview) {
+        // Boost ELO rating based on peer agreement
+        const peerBonus = peerReview.avg_peer_agreement * 100;
+        contestant.elo_rating += peerBonus;
+
+        // Penalize for high controversy
+        const controversyPenalty = peerReview.controversy_score * 50;
+        contestant.elo_rating -= controversyPenalty;
+      }
+    }
   }
 
   /**
@@ -283,11 +326,14 @@ export class TournamentKernel {
   /**
    * Calculate final rankings
    */
-  private calculateRankings(contestants: Contestant[]): TournamentResult['final_rankings'] {
+  private calculateRankings(
+    contestants: Contestant[],
+    peerReviewSession?: PeerReviewSession
+  ): TournamentResult['final_rankings'] {
     const sorted = [...contestants].sort((a, b) => {
       // Primary: wins
       if (b.wins !== a.wins) return b.wins - a.wins;
-      // Secondary: ELO
+      // Secondary: ELO (now includes peer review bonus)
       return b.elo_rating - a.elo_rating;
     });
 
@@ -301,6 +347,15 @@ export class TournamentKernel {
           strengths.push(criterion);
         } else if (score < 0.4) {
           weaknesses.push(criterion);
+        }
+      }
+
+      // NEW: Add peer review insights to strengths/weaknesses
+      if (peerReviewSession) {
+        const peerReview = peerReviewSession.peer_reviews.get(c.id);
+        if (peerReview) {
+          strengths.push(...peerReview.strengths);
+          weaknesses.push(...peerReview.weaknesses);
         }
       }
 
