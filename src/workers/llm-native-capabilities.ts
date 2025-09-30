@@ -26,7 +26,8 @@
  * - Custom: Implement NativeCapabilityExecutor interface
  */
 
-import type { ExecutionContext } from './capability-graph.js';
+import type { CapabilityNode, CapabilityResult, ExecutionContext } from './capability-graph.js';
+import { EvidenceType } from './capability-graph.js';
 
 /**
  * Native capability types supported by frontier LLMs
@@ -367,6 +368,302 @@ export class NativeCapabilityManager {
   }
 }
 
+function looksLikeStructuredPythonResult(value: any): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const recognizedKeys = new Set([
+    'revenue',
+    'ebitda',
+    'risk_metrics',
+    'simulation_parameters',
+    'probabilistic_outcomes',
+    'summary_statistics',
+    'insights',
+    'visualizations'
+  ]);
+
+  return Object.keys(value).some(key => recognizedKeys.has(key));
+}
+
+function tryParseJsonFromText(text: unknown): any | null {
+  if (typeof text !== 'string') {
+    return null;
+  }
+
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parseCandidate = (candidate: string): any | null => {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      return null;
+    }
+  };
+
+  const direct = parseCandidate(trimmed);
+  if (direct) {
+    return direct;
+  }
+
+  const firstBrace = Math.min(
+    ...['{', '[']
+      .map(symbol => {
+        const idx = trimmed.indexOf(symbol);
+        return idx === -1 ? Number.POSITIVE_INFINITY : idx;
+      })
+  );
+  const lastBrace = Math.max(
+    trimmed.lastIndexOf('}'),
+    trimmed.lastIndexOf(']')
+  );
+
+  if (Number.isFinite(firstBrace) && lastBrace >= firstBrace) {
+    const candidate = trimmed.slice(firstBrace, lastBrace + 1);
+    const parsed = parseCandidate(candidate);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Attempt to normalize Python execution results into structured data.
+ * Handles direct dict returns, stdout JSON strings, and nested result wrappers.
+ */
+export function parseNativePythonResult(payload: any): any | null {
+  const visited = new Set<any>();
+
+  const normalize = (value: any): any | null => {
+    if (!value || typeof value === 'number' || typeof value === 'boolean') {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      return tryParseJsonFromText(value);
+    }
+
+    if (typeof value === 'object') {
+      if (visited.has(value)) {
+        return null;
+      }
+
+      visited.add(value);
+
+      if (looksLikeStructuredPythonResult(value)) {
+        return value;
+      }
+
+      const stdoutParsed = tryParseJsonFromText((value as Record<string, unknown>).stdout);
+      if (stdoutParsed) {
+        return stdoutParsed;
+      }
+
+      const outputParsed = tryParseJsonFromText((value as Record<string, unknown>).output);
+      if (outputParsed) {
+        return outputParsed;
+      }
+
+      const textParsed = tryParseJsonFromText((value as Record<string, unknown>).text);
+      if (textParsed) {
+        return textParsed;
+      }
+
+      if ('result' in (value as Record<string, unknown>)) {
+        return normalize((value as Record<string, unknown>).result);
+      }
+    }
+
+    return null;
+  };
+
+  return normalize(payload);
+}
+
+export interface NativeEnhancementOutcome {
+  capabilityType: NativeCapabilityType;
+  evidenceType: EvidenceType;
+  result: any;
+  tokens_used?: number;
+  message: string;
+}
+
+const SEARCH_FOCUSED_CATEGORIES = new Set<CapabilityNode['category']>([
+  'market',
+  'strategic',
+  'commercial',
+  'risk'
+]);
+
+/**
+ * Run default native enhancement workflow for a capability result.
+ * Prefers web search for market-like capabilities, otherwise uses data analysis.
+ */
+export async function runNativeEnhancement(
+  capability: CapabilityNode,
+  capabilityResult: CapabilityResult,
+  context: ExecutionContext
+): Promise<NativeEnhancementOutcome | null> {
+  const manager = getNativeCapabilities(context);
+  if (!manager) {
+    return null;
+  }
+
+  const entityNames = context.whiteboard.get('__entity_names__') || {};
+  const industryContext = context.whiteboard.get('__industry_context__');
+  const baseQueryParts = [capability.name, industryContext?.vertical]
+    .concat(Object.values(entityNames || {}).slice(0, 3))
+    .filter(Boolean)
+    .map((part: unknown) => String(part));
+  const searchQuery = baseQueryParts.join(' ');
+
+  const tryWebSearch = async (): Promise<NativeEnhancementOutcome | null> => {
+    if (!searchQuery || !SEARCH_FOCUSED_CATEGORIES.has(capability.category)) {
+      return null;
+    }
+
+    if (!manager.isAvailable(NativeCapabilityType.WEB_SEARCH)) {
+      return null;
+    }
+
+    try {
+      const response = await manager.webSearch(searchQuery, 5);
+      if (response.success && response.result) {
+        return {
+          capabilityType: NativeCapabilityType.WEB_SEARCH,
+          evidenceType: EvidenceType.RETRIEVAL,
+          result: response.result,
+          tokens_used: response.tokens_used,
+          message: `Real-time market intelligence retrieved via LLM web search for "${searchQuery}"`
+        };
+      }
+    } catch (error) {
+      console.warn('[NativeEnhancement] Web search enhancement failed:', error);
+    }
+
+    return null;
+  };
+
+  const tryDataAnalysis = async (): Promise<NativeEnhancementOutcome | null> => {
+    if (!manager.isAvailable(NativeCapabilityType.DATA_ANALYSIS)) {
+      return null;
+    }
+
+    try {
+      const response = await manager.analyzeData(
+        {
+          capability_id: capability.id,
+          capability_name: capability.name,
+          category: capability.category,
+          output_snapshot: capabilityResult.output
+        },
+        `${capability.category}_signal_check`
+      );
+
+      if (response.success && response.result) {
+        return {
+          capabilityType: NativeCapabilityType.DATA_ANALYSIS,
+          evidenceType: EvidenceType.CALCULATION,
+          result: response.result,
+          tokens_used: response.tokens_used,
+          message: 'Capability output reviewed via LLM native data analysis'
+        };
+      }
+    } catch (error) {
+      console.warn('[NativeEnhancement] Data analysis enhancement failed:', error);
+    }
+
+    return null;
+  };
+
+  const tryPythonValidation = async (): Promise<NativeEnhancementOutcome | null> => {
+    if (capability.category !== 'financial' && capability.category !== 'operational') {
+      return null;
+    }
+
+    if (!manager.isAvailable(NativeCapabilityType.PYTHON_EXECUTION)) {
+      return null;
+    }
+
+    try {
+      const serialized = JSON.stringify(capabilityResult.output)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'");
+
+      const pythonCode = `
+import json
+from statistics import mean
+
+data = json.loads('${serialized}')
+
+def collect_numbers(obj, path=""):
+    values = []
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            next_path = f"{path}.{key}" if path else key
+            values.extend(collect_numbers(value, next_path))
+    elif isinstance(obj, list):
+        for idx, value in enumerate(obj):
+            next_path = f"{path}[{idx}]"
+            values.extend(collect_numbers(value, next_path))
+    elif isinstance(obj, (int, float)):
+        values.append({"path": path, "value": obj})
+    return values
+
+numeric_fields = collect_numbers(data)
+summary = {
+    "numeric_fields": len(numeric_fields),
+    "sample": numeric_fields[:10],
+    "mean_values": {
+        field["path"]: field["value"]
+        for field in numeric_fields[:5]
+    }
+}
+
+print(json.dumps(summary))
+`;
+
+      const response = await manager.execute({
+        type: NativeCapabilityType.PYTHON_EXECUTION,
+        payload: { code: pythonCode }
+      });
+
+      if (response.success && response.result) {
+        const parsed = parseNativePythonResult(response.result);
+        if (parsed) {
+          return {
+            capabilityType: NativeCapabilityType.PYTHON_EXECUTION,
+            evidenceType: EvidenceType.SIMULATION,
+            result: parsed,
+            tokens_used: response.tokens_used,
+            message: 'Capability output sanity-checked via LLM native Python execution'
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('[NativeEnhancement] Python execution enhancement failed:', error);
+    }
+
+    return null;
+  };
+
+  const orderedStrategies = [tryWebSearch, tryDataAnalysis, tryPythonValidation];
+  for (const strategy of orderedStrategies) {
+    const enhancement = await strategy();
+    if (enhancement) {
+      return enhancement;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Global native capability manager instance
  */
@@ -385,4 +682,3 @@ export function attachNativeCapabilities(context: ExecutionContext): void {
 export function getNativeCapabilities(context: ExecutionContext): NativeCapabilityManager | null {
   return context.whiteboard.get('__native_capabilities__') || null;
 }
-

@@ -10,7 +10,7 @@
  * - Policy enforcement
  */
 
-import { CapabilityGraph, type ExecutionContext, type PolicyConfig } from './capability-graph.js';
+import { CapabilityGraph, type ExecutionContext, type PolicyConfig, type CostEstimate, type CapabilityNode, type CapabilityResult } from './capability-graph.js';
 import { CapabilityPlanner, type PlanningRequest } from './capability-planner.js';
 import { BudgetScheduler, type BudgetConstraints } from './budget-scheduler.js';
 import { EvidenceLedger } from './evidence-ledger.js';
@@ -20,6 +20,7 @@ import { Whiteboard, Scratchpad, ArtifactMerger } from './whiteboard-memory.js';
 import { validateArtifact } from './output-schemas.js';
 import { getAdapter } from './capability-adapters.js';
 import { detectIndustry, getIndustryContext, type IndustryVertical, type GeographicRegion, type IndustryContext } from './industry-context.js';
+import { attachNativeCapabilities, runNativeEnhancement, type NativeEnhancementOutcome } from './llm-native-capabilities.js';
 
 /**
  * Orchestration request
@@ -191,6 +192,9 @@ export class CapabilityOrchestrator {
       trace: []
     };
 
+    // Attach LLM native capability manager so every capability can invoke native tools
+    attachNativeCapabilities(context);
+
     // Store industry context in whiteboard for capabilities to access
     context.whiteboard.set('__industry_context__', industryContext);
     context.whiteboard.set('__entity_names__', request.entity_names || {});
@@ -236,7 +240,23 @@ export class CapabilityOrchestrator {
     const evidenceQualities = new Map();
 
     for (const [capId, result] of executionResult.results) {
-      // Track execution for session
+      const capability = this.graph.get(capId);
+
+      if (capability) {
+        const enhancement = await runNativeEnhancement(capability, result, context);
+        if (enhancement) {
+          this.integrateNativeEnhancement(
+            capability,
+            result,
+            enhancement,
+            executionResult.cost_actual,
+            request.session_id,
+            executionResult.warnings
+          );
+        }
+      }
+
+      // Track execution for session with final costs
       this.trackCapabilityExecution(request.session_id, {
         capability_id: capId,
         timestamp: Date.now(),
@@ -244,7 +264,6 @@ export class CapabilityOrchestrator {
         cost: result.cost_actual
       });
 
-      // Track costs for session
       this.trackSessionCost(request.session_id, {
         tokens_in: result.cost_actual.expected_tokens_in,
         tokens_out: result.cost_actual.expected_tokens_out,
@@ -252,7 +271,7 @@ export class CapabilityOrchestrator {
         subrequests: result.cost_actual.subrequests
       });
 
-      // Add evidence to ledger
+      // Add evidence to ledger (includes native enhancement evidence)
       for (const [field, evidenceArray] of Object.entries(result.evidence)) {
         this.ledger.addEvidence(
           capId,
@@ -277,8 +296,6 @@ export class CapabilityOrchestrator {
         evidenceQuality
       );
 
-      // Validate against schema
-      const capability = this.graph.get(capId);
       let validationErrors: string[] | undefined;
 
       if (capability) {
@@ -355,7 +372,82 @@ export class CapabilityOrchestrator {
       capabilities_failed: Array.from(executionResult.failed.keys())
     };
 
+    if (plan.recommended_chain.coverage_score < 1) {
+      result.partial = true;
+      result.coverage = Math.min(result.coverage, plan.recommended_chain.coverage_score);
+
+      const missingAspects = plan.coverage_analysis.missing_aspects;
+      if (missingAspects.length > 0) {
+        const coverageGaps = missingAspects.map(aspect => `coverage_gap:${aspect}`);
+        const existing = new Set(result.missing_capabilities);
+        for (const gap of coverageGaps) {
+          if (!existing.has(gap)) {
+            result.missing_capabilities.push(gap);
+            existing.add(gap);
+          }
+        }
+      }
+
+      const coverageWarning = 'Capability coverage limited by budget/plan constraints; some requested aspects remain unresolved.';
+      if (!result.warnings.includes(coverageWarning)) {
+        result.warnings.push(coverageWarning);
+      }
+    }
+
     return result;
+  }
+
+  private integrateNativeEnhancement(
+    capability: CapabilityNode,
+    result: CapabilityResult,
+    enhancement: NativeEnhancementOutcome,
+    executionCost: CostEstimate,
+    sessionId: string,
+    schedulerWarnings: string[]
+  ): void {
+    const tokensUsed = enhancement.tokens_used ?? 0;
+    const tokensInDelta = Math.ceil(tokensUsed / 2);
+    const tokensOutDelta = Math.max(0, tokensUsed - tokensInDelta);
+    const cpuDelta = 50;
+
+    result.cost_actual.expected_tokens_in += tokensInDelta;
+    result.cost_actual.expected_tokens_out += tokensOutDelta;
+    result.cost_actual.cpu_ms += cpuDelta;
+    result.cost_actual.subrequests += 1;
+
+    executionCost.expected_tokens_in += tokensInDelta;
+    executionCost.expected_tokens_out += tokensOutDelta;
+    executionCost.cpu_ms += cpuDelta;
+    executionCost.subrequests += 1;
+
+    if (!result.evidence.native_enhancement) {
+      result.evidence.native_enhancement = [];
+    }
+
+    result.evidence.native_enhancement.push({
+      type: enhancement.evidenceType,
+      rationale: enhancement.message,
+      source: enhancement.capabilityType,
+      timestamp: Date.now()
+    });
+
+    (result.metadata as Record<string, any>).native_enhancement = {
+      type: enhancement.capabilityType,
+      message: enhancement.message,
+      data: enhancement.result
+    };
+
+    const enhancementWarning = `LLM native ${enhancement.capabilityType.replace(/_/g, ' ')} enhancement applied for ${capability.name}`;
+
+    if (!result.warnings.includes(enhancementWarning)) {
+      result.warnings.push(enhancementWarning);
+    }
+    if (!schedulerWarnings.includes(enhancementWarning)) {
+      schedulerWarnings.push(enhancementWarning);
+    }
+
+    result.confidence = Math.min(0.99, result.confidence + 0.08);
+    result.quality_score = Math.min(0.99, result.quality_score + 0.05);
   }
 
   /**
@@ -596,4 +688,3 @@ export function createDefaultBudget(): BudgetConstraints {
     max_subrequests: 20
   };
 }
-

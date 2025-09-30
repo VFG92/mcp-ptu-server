@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import type { CapabilityNode, CapabilityResult, ExecutionContext } from '../capability-graph.js';
 import { EvidenceType, type CapabilityGraph } from '../capability-graph.js';
-import { getNativeCapabilities, NativeCapabilityType } from '../llm-native-capabilities.js';
+import { getNativeCapabilities, NativeCapabilityType, parseNativePythonResult } from '../llm-native-capabilities.js';
 
 // Monte Carlo Finance (already implemented as scenario_forecasting, creating alias)
 const monteCarloFinanceCapability: CapabilityNode = {
@@ -49,6 +49,7 @@ const monteCarloFinanceCapability: CapabilityNode = {
     if (nativeCapabilities?.isAvailable(NativeCapabilityType.PYTHON_EXECUTION)) {
       // REQUEST TO LLM: "Please execute this Python code using your native Python tool"
       const pythonCode = `
+import json
 import numpy as np
 
 # Monte Carlo simulation with 10,000 iterations
@@ -92,7 +93,7 @@ result = {
         'probability_of_loss': prob_loss
     }
 }
-print(result)
+print(json.dumps(result))
 `;
 
       try {
@@ -104,10 +105,16 @@ print(result)
         );
 
         if (response.success && response.result) {
-          // AGENT RECEIVES: Real simulation results from LLM
-          simulationResults = response.result;
-          evidenceType = EvidenceType.SIMULATION;
-          warnings.push('Real Monte Carlo simulation executed via LLM native Python');
+          const parsed = parseNativePythonResult(response.result);
+
+          if (parsed) {
+            // AGENT RECEIVES: Real simulation results from LLM
+            simulationResults = parsed;
+            evidenceType = EvidenceType.SIMULATION;
+            warnings.push('Real Monte Carlo simulation executed via LLM native Python');
+          } else {
+            warnings.push('LLM Python execution returned unexpected format - using heuristic estimates');
+          }
         } else {
           throw new Error('Python execution failed');
         }
@@ -588,4 +595,3 @@ export function registerAdvancedAnalyticsCapabilities(graph: CapabilityGraph): v
   graph.register(pricingAiOptimizerCapability);
   graph.register(digitalTwinOpsCapability);
 }
-
