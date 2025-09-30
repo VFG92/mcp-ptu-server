@@ -190,7 +190,8 @@ const EXAMPLE_COMPLETIONS = {
 
 export const createServer = (
   parallelReasoningSessions?: Map<string, ParallelReasoningSession>,
-  persistCallback?: () => Promise<void>
+  persistCallback?: () => Promise<void>,
+  getTransportSessionId?: () => string | null | undefined
 ) => {
   // Initialize parallel reasoning session store if not provided
   const sessionStore = parallelReasoningSessions || new Map<string, ParallelReasoningSession>();
@@ -979,7 +980,11 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
     // Parallel Reasoning Tool Handlers
     if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
       const validatedArgs = ParallelReasoningInitSchema.parse(args);
-      const result = handleParallelReasoningInit(validatedArgs, sessionStore);
+      const result = handleParallelReasoningInit(
+        validatedArgs,
+        sessionStore,
+        getTransportSessionId
+      );
       // Persist after state change
       if (persistCallback) await persistCallback();
       return result;
