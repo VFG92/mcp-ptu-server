@@ -30,15 +30,18 @@ import {
   SynthesizeParallelReasoningSchema,
   ParallelComputeStatusSchema,
   AgentDebateSchema,
+  ValidateSessionSpecSchema,
   handleParallelReasoningInit,
   handleAgentReasoningStep,
   handleCrossAgentCommunication,
   handleSynthesizeParallelReasoning,
   handleParallelComputeStatus,
   handleAgentDebate,
-  handleListAgentPersonas
+  handleListAgentPersonas,
+  handleValidateSessionSpec
 } from './parallel-reasoning-tools.js';
 import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
+import { ParallelReasoningError } from './error-handling.js';
 
 // Instructions inlined for Workers compatibility
 const instructions = `Testing and demonstration server for MCP protocol features.
@@ -428,6 +431,12 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
           "List all available agent personas with their roles, expertise, and thinking styles. Use to select appropriate agents for your task.",
         inputSchema: zodToJsonSchema(z.object({})) as ToolInput,
       },
+      {
+        name: ParallelReasoningToolName.VALIDATE_SESSION_SPEC,
+        description:
+          "Validate a session specification before initialization. Checks if all persona IDs are valid and provides suggestions for invalid ones. Use this to catch errors before calling parallel_reasoning_init.",
+        inputSchema: zodToJsonSchema(ValidateSessionSpecSchema) as ToolInput,
+      },
     ];
 
     return { tools };
@@ -510,11 +519,27 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
       return result;
     }
 
+    if (name === ParallelReasoningToolName.VALIDATE_SESSION_SPEC) {
+      console.log(`[CallTool] Handling validate_session_spec`);
+      const validatedArgs = ValidateSessionSpecSchema.parse(args);
+      const result = handleValidateSessionSpec(validatedArgs);
+      console.log(`[CallTool] validate_session_spec completed successfully`);
+      return result;
+    }
+
       console.error(`[CallTool] Unknown tool requested: ${name}`);
       throw new Error(`Unknown tool: ${name}`);
     } catch (error) {
       console.error(`[CallTool] Error handling tool ${name}:`, error);
       console.error(`[CallTool] Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+
+      // Handle structured errors from parallel reasoning
+      if (error instanceof ParallelReasoningError) {
+        console.error(`[CallTool] Structured error: ${error.errorType} (HTTP ${error.httpCode})`);
+        // Return structured error as tool response
+        return error.toToolResponse();
+      }
+
       throw error; // Re-throw to let MCP SDK handle it
     }
   });

@@ -1,11 +1,12 @@
 # 🧠 Multi-Agent Parallel Reasoning MCP Server
 
-**Replicate Grok 4 Heavy / GPT-5 Pro style parallel compute for $0**
+**Version 2.1.0** | **Replicate Grok 4 Heavy / GPT-5 Pro style parallel compute for $0**
 
 A production-ready [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that enables multi-agent parallel reasoning for complex business analysis. Built for **management consulting, finance, marketing strategy, and project management**.
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
+[![Version](https://img.shields.io/badge/Version-2.1.0-green)](https://github.com/yourusername/mcp-ptu-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -21,13 +22,40 @@ Think of it as having a virtual consulting team of 15+ experts (Strategy Consult
 ## ✨ Features
 
 - 🤖 **15+ Expert Agent Personas** - Strategy, Finance, Marketing, Operations, Risk, Synthesis
+- 🏷️ **60+ Persona Aliases** - Automatic resolution (e.g., `product_manager` → `project_manager`) ✨ NEW
 - ⚡ **Parallel Compute** - Multiple agents reason simultaneously
 - 🔄 **Cross-Agent Communication** - Agents collaborate and debate
 - 📊 **5 Synthesis Strategies** - Consensus, weighted, dialectic, best-of-n, ensemble
+- ⚠️ **Partial Synthesis Support** - HTTP 206 with warnings and confidence intervals ✨ NEW
+- 🛡️ **Structured Error Handling** - Semantic HTTP codes with actionable suggestions ✨ NEW
+- 🔍 **Fuzzy Matching** - Typo detection with Levenshtein distance ✨ NEW
 - 💾 **Stateful Sessions** - Durable Objects maintain state across requests
 - 📈 **Real-Time Progress** - Monitor agent status and progress
 - 🌐 **Production Ready** - Deployed on Cloudflare Workers edge network
 - 💰 **$0 Cost** - Runs on Cloudflare Workers free tier
+
+---
+
+## 🆕 What's New in v2.1.0
+
+### Phase 1: Error Handling Robustness
+- ✅ **Structured Errors**: Machine-readable errors with `error_type`, `retriable`, and `suggestions`
+- ✅ **Semantic HTTP Codes**: 404 (Not Found), 409 (Conflict), 412 (Precondition Failed), 206 (Partial Content)
+- ✅ **Actionable Messages**: Every error includes suggestions for resolution
+
+### Phase 2: Partial Synthesis Enhancement
+- ✅ **HTTP 206 Partial Content**: Clear distinction between full and partial synthesis
+- ✅ **Confidence Intervals**: Lower/upper bounds for partial results
+- ✅ **Detailed Warnings**: Know exactly which agents are incomplete and why
+- ✅ **Coverage Metrics**: See percentage of agents completed (e.g., "67% coverage")
+
+### Phase 3: Persona Management
+- ✅ **60+ Aliases**: Use `product_manager`, `pm`, `finance`, `marketing` - they auto-resolve!
+- ✅ **Fuzzy Matching**: Typos like `stratgy_consultant` get suggestions
+- ✅ **Pre-Validation**: New `validate_session_spec` tool checks personas before init
+- ✅ **Better DX**: Less friction, faster iteration
+
+**Migration**: Fully backward compatible - no breaking changes!
 
 ---
 
@@ -106,7 +134,7 @@ Synthesize with consensus strategy.
 
 ## 🛠️ MCP Tools
 
-The server provides 7 MCP tools:
+The server provides 8 MCP tools:
 
 1. **`parallel_reasoning_init`** - Initialize multi-agent session
 2. **`agent_reasoning_step`** - Submit agent analysis
@@ -115,6 +143,7 @@ The server provides 7 MCP tools:
 5. **`parallel_compute_status`** - Monitor progress
 6. **`agent_debate`** - Facilitate agent debates
 7. **`list_agent_personas`** - See available experts
+8. **`validate_session_spec`** - Validate personas before initialization (NEW ✨)
 
 ---
 

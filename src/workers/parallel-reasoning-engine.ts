@@ -1,12 +1,13 @@
 /**
  * Parallel Reasoning Engine Core
- * 
+ *
  * Manages multi-agent parallel reasoning sessions with state tracking,
  * cross-agent communication, and real-time progress monitoring
  */
 
-import { getAgentPersona, generateAgentPrompt, type AgentPersona } from './agent-personas.js';
+import { getAgentPersona, generateAgentPrompt, type AgentPersona, getAllAgentPersonas, findSimilarPersonas } from './agent-personas.js';
 import { synthesizeResults, type AgentResult, type SynthesisResult } from './synthesis-strategies.js';
+import { ErrorFactory } from './error-handling.js';
 
 export interface AgentState {
   agent_id: string;
@@ -71,9 +72,16 @@ export function initializeSession(
   perspectives.forEach((personaId, index) => {
     const persona = getAgentPersona(personaId);
     if (!persona) {
-      throw new Error(`Unknown persona: ${personaId}`);
+      // Get all available personas for suggestions
+      const allPersonas = getAllAgentPersonas();
+      const availableIds = allPersonas.map(p => p.id);
+
+      // Use fuzzy matching to find similar personas
+      const suggestions = findSimilarPersonas(personaId, 3);
+
+      throw ErrorFactory.personaNotFound(personaId, availableIds, suggestions);
     }
-    
+
     const agentId = `agent_${index + 1}_${personaId}`;
     agents[agentId] = {
       agent_id: agentId,
@@ -123,7 +131,8 @@ export function updateAgentReasoning(
 ): ParallelReasoningSession {
   const agent = session.agents[agentId];
   if (!agent) {
-    throw new Error(`Agent not found: ${agentId}`);
+    const availableAgents = Object.keys(session.agents);
+    throw ErrorFactory.agentNotFound(agentId, session.session_id, availableAgents);
   }
   
   const now = Date.now();

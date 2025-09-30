@@ -12,6 +12,59 @@ export interface AgentPersona {
   prompt_template: string;
 }
 
+/**
+ * Persona aliases for common variations
+ */
+export const PERSONA_ALIASES: Record<string, string> = {
+  // Product/Project Manager variations
+  'product_manager': 'project_manager',
+  'product_mgr': 'project_manager',
+  'pm': 'project_manager',
+  'program_manager': 'project_manager',
+
+  // Strategy variations
+  'strategist': 'strategy_consultant',
+  'strategy': 'strategy_consultant',
+  'business_strategist': 'strategy_consultant',
+
+  // Finance variations
+  'finance': 'financial_analyst',
+  'finance_analyst': 'financial_analyst',
+  'cfo': 'financial_analyst',
+
+  // Marketing variations
+  'marketing': 'marketing_strategist',
+  'marketer': 'marketing_strategist',
+  'cmo': 'marketing_strategist',
+
+  // Operations variations
+  'ops': 'operations_manager',
+  'operations': 'operations_manager',
+  'coo': 'operations_manager',
+
+  // Risk variations
+  'risk': 'risk_manager',
+  'risk_mgr': 'risk_manager',
+  'cro': 'risk_manager',
+
+  // Change variations
+  'change': 'change_manager',
+  'change_mgmt': 'change_manager',
+
+  // M&A variations
+  'ma': 'ma_advisor',
+  'mergers': 'ma_advisor',
+  'acquisitions': 'ma_advisor',
+
+  // Synthesis variations
+  'synthesis': 'synthesizer',
+  'integrator': 'synthesizer',
+
+  // Judge variations
+  'decision_maker': 'judge',
+  'evaluator': 'judge',
+};
+
 export const AGENT_PERSONAS: Record<string, AgentPersona> = {
   // Strategy & Consulting Agents
   strategy_consultant: {
@@ -315,10 +368,71 @@ Make a final executive decision with clear rationale and action plan.`
 };
 
 /**
- * Get agent persona by ID
+ * Resolve persona ID through aliases
+ */
+export function resolvePersonaAlias(id: string): string {
+  const normalized = id.toLowerCase().trim();
+  return PERSONA_ALIASES[normalized] || normalized;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[b.length][a.length];
+}
+
+/**
+ * Find similar persona IDs using fuzzy matching
+ */
+export function findSimilarPersonas(input: string, maxResults: number = 3): string[] {
+  const normalized = input.toLowerCase().trim();
+  const allPersonaIds = Object.keys(AGENT_PERSONAS);
+
+  // Calculate distances
+  const distances = allPersonaIds.map(id => ({
+    id,
+    distance: levenshteinDistance(normalized, id)
+  }));
+
+  // Sort by distance and return top matches
+  return distances
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, maxResults)
+    .filter(d => d.distance <= 5) // Only return if reasonably close
+    .map(d => d.id);
+}
+
+/**
+ * Get agent persona by ID (with alias resolution)
  */
 export function getAgentPersona(id: string): AgentPersona | undefined {
-  return AGENT_PERSONAS[id];
+  const resolvedId = resolvePersonaAlias(id);
+  return AGENT_PERSONAS[resolvedId];
 }
 
 /**

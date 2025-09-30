@@ -9,6 +9,7 @@ This file provides comprehensive instructions for AI agents working with this re
 ## 📋 Repository Overview
 
 **Project**: Multi-Agent Parallel Reasoning MCP Server
+**Version**: 2.1.0
 **Purpose**: Enable ChatGPT Developer Mode to perform multi-agent parallel reasoning for business analysis
 **Domain**: Management consulting, finance, marketing strategy, project management
 **Platform**: Cloudflare Workers + Durable Objects
@@ -37,28 +38,40 @@ This is an MCP server that enables **multi-agent parallel reasoning**:
 1. **Agent Personas** (`src/workers/agent-personas.ts`)
    - 15 expert personas across Strategy, Finance, Marketing, Operations, Synthesis
    - Each has: role, focus, expertise, thinking_style, prompt_template
+   - 60+ persona aliases for common variations (e.g., `product_manager` → `project_manager`)
+   - Fuzzy matching with Levenshtein distance for typo detection
 
-2. **Synthesis Strategies** (`src/workers/synthesis-strategies.ts`)
+2. **Error Handling** (`src/workers/error-handling.ts`) ✨ NEW
+   - Structured error system with machine-readable error types
+   - HTTP semantic codes (404, 409, 412, 206, 500)
+   - Retriable flag to indicate if errors can be retried
+   - ErrorFactory with pre-built error constructors
+
+3. **Synthesis Strategies** (`src/workers/synthesis-strategies.ts`)
    - 5 algorithms: consensus, weighted, dialectic, best_of_n, ensemble
    - Combine multiple agent outputs into unified recommendations
+   - Support for partial synthesis with confidence intervals
 
-3. **Parallel Reasoning Engine** (`src/workers/parallel-reasoning-engine.ts`)
+4. **Parallel Reasoning Engine** (`src/workers/parallel-reasoning-engine.ts`)
    - Session management, agent state tracking, cross-agent communication
    - Progress monitoring, real-time status updates
+   - Integrated structured error handling
 
-4. **MCP Tools** (`src/workers/parallel-reasoning-tools.ts`)
-   - 7 tools for ChatGPT to orchestrate parallel reasoning
+5. **MCP Tools** (`src/workers/parallel-reasoning-tools.ts`)
+   - 8 tools for ChatGPT to orchestrate parallel reasoning
    - Tool handlers that interact with the engine
+   - Partial synthesis support with HTTP 206 and warnings
 
-5. **Session Management** (`src/workers/session.ts`)
+6. **Session Management** (`src/workers/session.ts`)
    - Durable Objects for stateful sessions
    - Persists agent states, messages, synthesis results
 
-6. **MCP Server Integration** (`src/workers/everything-workers.ts`)
+7. **MCP Server Integration** (`src/workers/everything-workers.ts`)
    - Main MCP server implementation
    - Registers all tools and handlers
+   - Enhanced error handling for ParallelReasoningError
 
-7. **Routing** (`src/workers/index.ts`)
+8. **Routing** (`src/workers/index.ts`)
    - Hono-based HTTP routing
    - Durable Objects session routing
 
@@ -87,12 +100,13 @@ Parallel Reasoning Engine
 
 ```
 src/workers/
-├── agent-personas.ts              # 15 expert personas definitions
+├── agent-personas.ts              # 15 expert personas + 60+ aliases + fuzzy matching
+├── error-handling.ts              # Structured error system (NEW in v2.1.0)
 ├── synthesis-strategies.ts        # 5 synthesis algorithms
 ├── parallel-reasoning-engine.ts   # Core engine (session, agents, messages)
-├── parallel-reasoning-tools.ts    # 7 MCP tool handlers
+├── parallel-reasoning-tools.ts    # 8 MCP tool handlers (added validate_session_spec)
 ├── session.ts                     # Durable Objects state management
-├── everything-workers.ts          # MCP server integration
+├── everything-workers.ts          # MCP server integration + error handling
 ├── everything-adapter.ts          # MCP adapter utilities
 ├── express-adapter.ts             # Express→Workers adapter
 └── index.ts                       # Hono routing + DO routing
@@ -589,9 +603,119 @@ When debugging parallel reasoning issues:
 
 ---
 
-### v2.0.1 - Session Persistence & Timeout Fixes (2025-09-30)
+### v2.1.0 - Phase 1-3 Improvements (2025-09-30)
 
-**Previous Update - Now Superseded by v2.0.2**
+**Latest Update - Operational Effectiveness Enhancements**
+
+This release implements three major phases of improvements based on production usage analysis:
+
+#### Phase 1: Error Handling Robustness ✅
+
+**Problem**: Generic 400/500 errors with no context or retry guidance.
+
+**Solution**:
+- ✅ New `error-handling.ts` module with structured error system
+- ✅ HTTP semantic codes: 404 (Not Found), 409 (Conflict), 412 (Precondition Failed), 206 (Partial Content)
+- ✅ Machine-readable errors with `error_type`, `retriable`, `details`, `suggestions`
+- ✅ ErrorFactory with pre-built constructors for common errors
+- ✅ Integration across all tool handlers
+
+**Example Error**:
+```json
+{
+  "error": "Session not found: abc123",
+  "error_type": "session_not_found",
+  "http_code": 404,
+  "retriable": false,
+  "details": { "session_id": "abc123", "available_sessions": [...] },
+  "suggestions": ["Make sure you're using the correct session_id", ...]
+}
+```
+
+#### Phase 2: Partial Synthesis Enhancement ✅
+
+**Problem**: Synthesis with incomplete agents returned generic success (HTTP 200) with no warnings.
+
+**Solution**:
+- ✅ HTTP 206 Partial Content for incomplete synthesis
+- ✅ `confidence_interval` with lower/upper bounds for partial results
+- ✅ Detailed `warnings` array listing incomplete agents
+- ✅ `coverage_percentage` metric (e.g., "67% coverage - 2 of 3 agents")
+- ✅ Visual distinction: 🎉 HTTP 200 (full) vs ⚠️ HTTP 206 (partial)
+
+**Example Partial Synthesis**:
+```json
+{
+  "http_status": 206,
+  "partial_synthesis": true,
+  "confidence": 0.75,
+  "confidence_interval": {
+    "lower_bound": 0.6375,
+    "upper_bound": 0.75,
+    "note": "Confidence interval widened due to incomplete agents"
+  },
+  "warnings": [
+    "Synthesis performed with 1 of 3 agents incomplete (67% coverage)",
+    "Results may be partial and less comprehensive",
+    "Agent Marketing Strategist is reasoning at 40% progress"
+  ],
+  "coverage_percentage": 67
+}
+```
+
+#### Phase 3: Persona Management ✅
+
+**Problem**: `product_manager` not supported → immediate error. No fuzzy matching for typos.
+
+**Solution**:
+- ✅ 60+ persona aliases (e.g., `product_manager` → `project_manager`, `pm` → `project_manager`, `finance` → `financial_analyst`)
+- ✅ Automatic alias resolution in `getAgentPersona()`
+- ✅ Fuzzy matching with Levenshtein distance for typo detection
+- ✅ New tool: `validate_session_spec` for pre-validation before session init
+- ✅ Enhanced error messages with `did_you_mean` suggestions
+
+**Example Validation**:
+```json
+{
+  "validation_status": "invalid",
+  "results": [
+    {
+      "persona_id": "product_manager",
+      "status": "invalid",
+      "did_you_mean": ["project_manager"],
+      "suggestions": [...]
+    }
+  ]
+}
+```
+
+#### Impact Summary
+
+**Before v2.1.0**:
+- ❌ Generic 400/500 errors
+- ❌ Partial synthesis indistinguishable from full
+- ❌ `product_manager` → immediate failure
+- ❌ No pre-validation capability
+
+**After v2.1.0**:
+- ✅ Semantic HTTP codes with actionable errors
+- ✅ HTTP 206 + warnings + confidence intervals
+- ✅ 60+ aliases + fuzzy matching
+- ✅ `validate_session_spec` tool
+- ✅ Better developer experience
+
+#### Files Modified
+- `src/workers/error-handling.ts` (NEW)
+- `src/workers/agent-personas.ts` (aliases + fuzzy matching)
+- `src/workers/parallel-reasoning-engine.ts` (error integration)
+- `src/workers/parallel-reasoning-tools.ts` (partial synthesis + new tool)
+- `src/workers/everything-workers.ts` (error handling)
+
+---
+
+### v2.0.2 - Status Endpoint Improvements (2025-09-30)
+
+**Previous Update**
 
 #### Issues Resolved:
 

@@ -21,7 +21,8 @@ import {
   initiateDebate,
   type ParallelReasoningSession
 } from './parallel-reasoning-engine.js';
-import { getAllAgentPersonas } from './agent-personas.js';
+import { getAllAgentPersonas, getAgentPersona, findSimilarPersonas } from './agent-personas.js';
+import { ErrorFactory, ParallelReasoningError } from './error-handling.js';
 
 // Regex to validate Durable Object IDs (64 hex characters)
 const DURABLE_OBJECT_ID_REGEX = /^[0-9a-f]{64}$/i;
@@ -69,6 +70,11 @@ export const AgentDebateSchema = z.object({
   agent_ids: z.array(z.string()).describe('Agent IDs to participate in debate')
 });
 
+export const ValidateSessionSpecSchema = z.object({
+  task: z.string().describe('The task to validate'),
+  perspectives: z.array(z.string()).describe('Array of agent persona IDs to validate')
+});
+
 // Tool Names
 export enum ParallelReasoningToolName {
   PARALLEL_REASONING_INIT = 'parallel_reasoning_init',
@@ -77,7 +83,8 @@ export enum ParallelReasoningToolName {
   SYNTHESIZE_PARALLEL_REASONING = 'synthesize_parallel_reasoning',
   PARALLEL_COMPUTE_STATUS = 'parallel_compute_status',
   AGENT_DEBATE = 'agent_debate',
-  LIST_AGENT_PERSONAS = 'list_agent_personas'
+  LIST_AGENT_PERSONAS = 'list_agent_personas',
+  VALIDATE_SESSION_SPEC = 'validate_session_spec'
 }
 
 /**
@@ -173,11 +180,7 @@ export function handleAgentReasoningStep(
   if (!session) {
     const availableSessions = Array.from(sessionStore.keys());
     console.error(`[ParallelReasoning] Session ${args.session_id} not found. Available: ${availableSessions.join(', ')}`);
-    throw new Error(
-      `Session not found: ${args.session_id}\n` +
-      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
-      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
-    );
+    throw ErrorFactory.sessionNotFound(args.session_id, availableSessions);
   }
 
   const updatedSession = updateAgentReasoning(
@@ -241,11 +244,7 @@ export function handleCrossAgentCommunication(
   const session = sessionStore.get(args.session_id);
   if (!session) {
     const availableSessions = Array.from(sessionStore.keys());
-    throw new Error(
-      `Session not found: ${args.session_id}\n` +
-      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
-      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
-    );
+    throw ErrorFactory.sessionNotFound(args.session_id, availableSessions);
   }
   
   const updatedSession = addCrossAgentMessage(
@@ -284,11 +283,7 @@ export function handleSynthesizeParallelReasoning(
   const session = sessionStore.get(args.session_id);
   if (!session) {
     const availableSessions = Array.from(sessionStore.keys());
-    throw new Error(
-      `Session not found: ${args.session_id}\n` +
-      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
-      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
-    );
+    throw ErrorFactory.sessionNotFound(args.session_id, availableSessions);
   }
 
   // GATING: Check if all agents are completed (if required)
@@ -306,27 +301,45 @@ export function handleSynthesizeParallelReasoning(
 
     const completedCount = agentStates.length - incompleteAgents.length;
 
-    throw new Error(
-      `❌ Synthesis Blocked: Waiting for ${incompleteAgents.length} more agent(s) to complete.\n\n` +
-      `Progress: ${completedCount}/${agentStates.length} agents completed (${Math.round(completedCount/agentStates.length*100)}%)\n\n` +
-      `Incomplete agents:\n${incompleteDetails.map(a =>
-        `  • ${a.role} (${a.agent_id}): ${a.status} - ${a.progress}% complete${a.waiting_for ? ` [waiting for: ${a.waiting_for.join(', ')}]` : ''}`
-      ).join('\n')}\n\n` +
-      `💡 Options:\n` +
-      `  1. Wait for all agents to complete their reasoning steps\n` +
-      `  2. Call synthesize_parallel_reasoning with require_all_completed=false for partial synthesis\n` +
-      `  3. Use parallel_compute_status to monitor progress`
+    throw ErrorFactory.agentsNotCompleted(
+      incompleteDetails,
+      completedCount,
+      agentStates.length
     );
   }
 
   const updatedSession = synthesizeSession(session, args.synthesis_strategy);
   sessionStore.set(args.session_id, updatedSession);
-  
+
   const synthesis = updatedSession.synthesis!;
 
+  // Determine if this is a partial synthesis
+  const isPartialSynthesis = incompleteAgents.length > 0;
+  const completedCount = agentStates.length - incompleteAgents.length;
+
+  // Calculate confidence interval for partial synthesis
+  const confidenceInterval = isPartialSynthesis ? {
+    lower_bound: synthesis.confidence * 0.85, // Reduce confidence by 15% for partial
+    upper_bound: synthesis.confidence,
+    note: 'Confidence interval widened due to incomplete agents'
+  } : undefined;
+
+  // Build warnings for partial synthesis
+  const warnings = isPartialSynthesis ? [
+    `Synthesis performed with ${incompleteAgents.length} of ${agentStates.length} agents incomplete (${Math.round(completedCount/agentStates.length*100)}% coverage)`,
+    'Results may be partial and less comprehensive',
+    'Consider waiting for all agents to complete for full analysis',
+    ...incompleteAgents.map(a =>
+      `Agent ${a.role} (${a.agent_id}) is ${a.status} at ${a.progress}% progress`
+    )
+  ] : undefined;
+
   // Include incomplete agents info for transparency
-  const incompleteAgentsInfo = incompleteAgents.length > 0 ? {
+  const incompleteAgentsInfo = isPartialSynthesis ? {
+    http_status: 206, // Partial Content
     incomplete_agents_count: incompleteAgents.length,
+    completed_agents_count: completedCount,
+    coverage_percentage: Math.round((completedCount / agentStates.length) * 100),
     incomplete_agents: incompleteAgents.map(a => ({
       agent_id: a.agent_id,
       role: a.role,
@@ -335,8 +348,9 @@ export function handleSynthesizeParallelReasoning(
       confidence: a.confidence,
       waiting_for: a.dependencies.length > 0 ? a.dependencies : undefined
     })),
-    synthesis_note: `Synthesis performed with ${incompleteAgents.length} incomplete agent(s). Results may be partial.`
-  } : undefined;
+    warnings,
+    confidence_interval: confidenceInterval
+  } : { http_status: 200 };
 
   return {
     content: [{
@@ -344,6 +358,7 @@ export function handleSynthesizeParallelReasoning(
       text: JSON.stringify({
         session_id: args.session_id,
         synthesis_complete: true,
+        partial_synthesis: isPartialSynthesis,
         strategy_used: synthesis.strategy_used,
         confidence: synthesis.confidence,
         consensus_level: synthesis.consensus_level,
@@ -353,17 +368,23 @@ export function handleSynthesizeParallelReasoning(
         require_all_completed: args.require_all_completed,
         ...incompleteAgentsInfo,
         summary: `
-🎉 **Synthesis Complete!**
+${isPartialSynthesis ? '⚠️ **Partial Synthesis Complete** (HTTP 206)' : '🎉 **Synthesis Complete** (HTTP 200)'}
 
 **Strategy**: ${synthesis.strategy_used}
-**Confidence**: ${(synthesis.confidence * 100).toFixed(1)}%
+**Confidence**: ${(synthesis.confidence * 100).toFixed(1)}%${confidenceInterval ? ` (range: ${(confidenceInterval.lower_bound * 100).toFixed(1)}% - ${(confidenceInterval.upper_bound * 100).toFixed(1)}%)` : ''}
 **Consensus Level**: ${(synthesis.consensus_level * 100).toFixed(1)}%
+${isPartialSynthesis ? `**Coverage**: ${completedCount}/${agentStates.length} agents (${Math.round(completedCount/agentStates.length*100)}%)` : ''}
+
+${isPartialSynthesis ? `
+⚠️ **Warnings**:
+${warnings!.map(w => `  • ${w}`).join('\n')}
+` : ''}
 
 **Final Recommendation**:
 ${synthesis.final_answer}
 
 **Agent Contributions**:
-${Object.entries(synthesis.agent_contributions).map(([id, contrib]) => 
+${Object.entries(synthesis.agent_contributions).map(([id, contrib]) =>
   `- ${id}: Weight ${(contrib.weight * 100).toFixed(0)}%, Influence ${(contrib.influence * 100).toFixed(0)}%`
 ).join('\n')}
 
@@ -463,11 +484,7 @@ export function handleAgentDebate(
   const session = sessionStore.get(args.session_id);
   if (!session) {
     const availableSessions = Array.from(sessionStore.keys());
-    throw new Error(
-      `Session not found: ${args.session_id}\n` +
-      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
-      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
-    );
+    throw ErrorFactory.sessionNotFound(args.session_id, availableSessions);
   }
   
   const updatedSession = initiateDebate(session, args.topic, args.agent_ids);
@@ -506,7 +523,7 @@ ${debatingAgents.map((a, i) => `${i + 1}. ${a.role} (${a.agent_id})`).join('\n')
 
 export function handleListAgentPersonas(): any {
   const personas = getAllAgentPersonas();
-  
+
   return {
     content: [{
       type: 'text',
@@ -526,6 +543,69 @@ export function handleListAgentPersonas(): any {
           expertise: p.expertise,
           thinking_style: p.thinking_style
         }))
+      }, null, 2)
+    }]
+  };
+}
+
+export function handleValidateSessionSpec(
+  args: z.infer<typeof ValidateSessionSpecSchema>
+): any {
+  const allPersonas = getAllAgentPersonas();
+  const availableIds = allPersonas.map(p => p.id);
+
+  const validationResults = args.perspectives.map(personaId => {
+    const persona = getAgentPersona(personaId);
+
+    if (persona) {
+      return {
+        persona_id: personaId,
+        status: 'valid',
+        resolved_to: personaId,
+        persona: {
+          id: persona.id,
+          role: persona.role,
+          focus: persona.focus
+        }
+      };
+    } else {
+      // Find suggestions
+      const suggestions = findSimilarPersonas(personaId, 3);
+
+      return {
+        persona_id: personaId,
+        status: 'invalid',
+        error: `Unknown persona: ${personaId}`,
+        did_you_mean: suggestions.length > 0 ? suggestions : undefined,
+        suggestions: suggestions.length > 0
+          ? suggestions.map(id => {
+              const p = getAgentPersona(id);
+              return p ? { id: p.id, role: p.role, focus: p.focus } : null;
+            }).filter(Boolean)
+          : undefined
+      };
+    }
+  });
+
+  const invalidCount = validationResults.filter(r => r.status === 'invalid').length;
+  const validCount = validationResults.length - invalidCount;
+
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        task: args.task,
+        validation_status: invalidCount === 0 ? 'valid' : 'invalid',
+        valid_count: validCount,
+        invalid_count: invalidCount,
+        total_count: validationResults.length,
+        results: validationResults,
+        summary: invalidCount === 0
+          ? `✅ All ${validCount} personas are valid. Ready to initialize session.`
+          : `❌ ${invalidCount} of ${validationResults.length} personas are invalid. Please correct before initializing.`,
+        next_step: invalidCount === 0
+          ? 'Call parallel_reasoning_init with these perspectives'
+          : 'Fix invalid personas using the suggestions provided'
       }, null, 2)
     }]
   };
