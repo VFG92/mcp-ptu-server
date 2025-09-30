@@ -137,25 +137,16 @@ export class MCPSession extends DurableObject {
     }
 
     // Existing session - handle the request
+    // IMPORTANT: Trust worker routing - header may differ from DO ID when using body-based routing
+    // The worker has already routed to the correct DO based on session_id in body parameters
     if (sessionIdHeader && sessionIdHeader !== this.sessionId) {
-      console.log(`Session ID mismatch: header="${sessionIdHeader}" expected="${this.sessionId}"`);
-      return new Response(JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: `Bad Request: Invalid session ID (expected ${this.sessionId}, got ${sessionIdHeader})`,
-        },
-        id: null,
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      console.log(`[MCPSession] Header mismatch (header="${sessionIdHeader}" vs DO="${this.sessionId}") - trusting worker routing from body`);
     }
 
-    if (!sessionIdHeader) {
-      console.log(`[MCPSession] POST request missing session header; trusting worker routing for session ${this.sessionId}`);
-      // CRITICAL FIX: Inject the session ID header for MCP SDK compatibility
-      // ChatGPT tool calls don't include the header, but we know the correct session from routing
+    if (!sessionIdHeader || sessionIdHeader !== this.sessionId) {
+      console.log(`[MCPSession] POST request with mismatched/missing header; trusting worker routing for session ${this.sessionId}`);
+      // CRITICAL FIX: Inject the correct session ID header for MCP SDK compatibility
+      // ChatGPT tool calls may have different header, but worker routed based on body session_id
       const headers = new Headers(request.headers);
       headers.set('mcp-session-id', this.sessionId);
       request = new Request(request, { headers });
