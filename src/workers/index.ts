@@ -16,16 +16,28 @@ export interface Env {
 // Create the main Hono app
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS middleware - mirror the Express configuration
+// CORS middleware - Enhanced for ChatGPT compatibility
 app.use('/*', cors({
-  origin: '*', // Use with caution in production
-  allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  origin: '*', // Allow all origins for MCP clients
+  allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS', 'PUT', 'PATCH'],
+  allowHeaders: [
+    'Content-Type',
+    'Accept',
+    'Authorization',
+    'mcp-session-id',
+    'last-event-id',
+    'mcp-protocol-version',
+    'X-Requested-With',
+    'Cache-Control'
+  ],
   exposeHeaders: [
     'mcp-session-id',
     'last-event-id',
-    'mcp-protocol-version'
+    'mcp-protocol-version',
+    'Content-Type'
   ],
   credentials: false,
+  maxAge: 86400, // 24 hours
 }));
 
 // Root endpoint with server info
@@ -52,6 +64,11 @@ app.get('/health', (c) => {
     timestamp: new Date().toISOString(),
     runtime: 'Cloudflare Workers'
   });
+});
+
+// OPTIONS handler for CORS preflight
+app.options('/*', (c) => {
+  return c.text('', 204);
 });
 
 // MCP POST endpoint - initialization and requests
