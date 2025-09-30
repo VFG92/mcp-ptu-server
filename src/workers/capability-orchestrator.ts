@@ -18,6 +18,7 @@ import { ConfidenceCalculus } from './confidence-calculus.js';
 import { TournamentKernel, BudgetBandit } from './tournament-kernel.js';
 import { Whiteboard, Scratchpad, ArtifactMerger } from './whiteboard-memory.js';
 import { validateArtifact } from './output-schemas.js';
+import { getAdapter } from './capability-adapters.js';
 
 /**
  * Orchestration request
@@ -124,10 +125,20 @@ export class CapabilityOrchestrator {
       trace: []
     };
 
+    // Get adapter preferences if specified
+    let preferredCategories: string[] | undefined;
+    if (request.adapter_id) {
+      const adapter = getAdapter(request.adapter_id);
+      if (adapter) {
+        preferredCategories = adapter.preferred_categories;
+      }
+    }
+
     // Step 1: Plan capability chain
     const planningRequest: PlanningRequest = {
       task_description: request.task,
       required_outputs: request.required_artifacts,
+      preferred_categories: preferredCategories,
       budget: request.budget,
       context
     };

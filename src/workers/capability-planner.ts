@@ -64,12 +64,38 @@ export class CapabilityPlanner {
   async plan(request: PlanningRequest): Promise<PlanningResult> {
     // Extract key aspects from task description
     const aspects = this.extractAspects(request.task_description);
-    
+
     // Find candidate capabilities
     const candidates = this.findCandidateCapabilities(
       request.task_description,
       request.preferred_categories
     );
+
+    // If no candidates found, return empty result
+    if (candidates.length === 0) {
+      const emptyChain: CapabilityChain = {
+        capabilities: [],
+        estimated_cost: {
+          expected_tokens_in: 0,
+          expected_tokens_out: 0,
+          cpu_ms: 0,
+          subrequests: 0
+        },
+        coverage_score: 0,
+        confidence_score: 0,
+        rationale: 'No capabilities found matching the request'
+      };
+
+      return {
+        recommended_chain: emptyChain,
+        alternatives: [],
+        coverage_analysis: {
+          requested_aspects: aspects,
+          covered_aspects: [],
+          missing_aspects: aspects
+        }
+      };
+    }
 
     // Generate multiple chains using beam search
     const chains = this.beamSearch(
@@ -81,6 +107,27 @@ export class CapabilityPlanner {
 
     // Rank chains by coverage and cost
     const rankedChains = this.rankChains(chains, aspects, request.budget);
+
+    // If no valid chains found, return best single capability
+    if (rankedChains.length === 0) {
+      const fallbackChain: CapabilityChain = {
+        capabilities: [candidates[0].id],
+        estimated_cost: candidates[0].cost_estimate,
+        coverage_score: this.calculateCoverage([candidates[0]], aspects),
+        confidence_score: candidates[0].expected_precision,
+        rationale: `Fallback to single capability: ${candidates[0].name}`
+      };
+
+      return {
+        recommended_chain: fallbackChain,
+        alternatives: [],
+        coverage_analysis: this.analyzeCoverage(
+          fallbackChain,
+          aspects,
+          request.required_outputs
+        )
+      };
+    }
 
     // Analyze coverage
     const coverage = this.analyzeCoverage(

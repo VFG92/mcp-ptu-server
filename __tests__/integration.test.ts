@@ -7,7 +7,12 @@ import { CapabilityOrchestrator, createDefaultBudget, createDefaultPolicy } from
 import { CapabilityGraph } from '../src/workers/capability-graph.js';
 import { EvidenceLedger } from '../src/workers/evidence-ledger.js';
 import { Whiteboard } from '../src/workers/whiteboard-memory.js';
-import { registerAllCapabilities } from '../src/workers/capabilities/index.js';
+import {
+  registerMarketCapabilities,
+  registerFinancialCapabilities,
+  registerRiskCapabilities,
+  registerStrategicCapabilities
+} from '../src/workers/capabilities/index.js';
 
 describe('Integration Tests', () => {
   let orchestrator: CapabilityOrchestrator;
@@ -19,10 +24,13 @@ describe('Integration Tests', () => {
     graph = new CapabilityGraph();
     ledger = new EvidenceLedger();
     whiteboard = new Whiteboard();
-    
-    // Register all capabilities
-    registerAllCapabilities();
-    
+
+    // Register all capabilities to the local graph
+    registerMarketCapabilities(graph);
+    registerFinancialCapabilities(graph);
+    registerRiskCapabilities(graph);
+    registerStrategicCapabilities(graph);
+
     orchestrator = new CapabilityOrchestrator(graph, ledger, whiteboard);
   });
 
