@@ -225,63 +225,35 @@ export class MCPSession extends DurableObject {
   private async handleDelete(request: Request): Promise<Response> {
     const sessionIdHeader = request.headers.get('mcp-session-id');
 
-    if (!this.transport) {
-      return new Response(JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: 'Bad Request: No valid session transport available',
-        },
-        id: null,
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+    console.log(`[MCPSession] DELETE request received. Session header: ${sessionIdHeader}, DO ID: ${this.sessionId}`);
+    console.log(`[MCPSession] IGNORING DELETE to preserve session state for parallel reasoning`);
 
-    if (sessionIdHeader && sessionIdHeader !== this.sessionId) {
-      return new Response(JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: `Bad Request: Invalid session ID (expected ${this.sessionId}, got ${sessionIdHeader})`,
-        },
-        id: null,
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+    // CRITICAL FIX: Do NOT close the transport when ChatGPT sends DELETE
+    // ChatGPT closes MCP connections after each tool call, but we need to preserve
+    // the session state (parallel reasoning sessions) across multiple tool calls.
+    //
+    // Instead of closing the transport, we:
+    // 1. Acknowledge the DELETE request
+    // 2. Keep the transport and server alive
+    // 3. Allow subsequent tool calls to reuse the same session
+    //
+    // This fixes the issue where agent_reasoning_step fails because the session
+    // was lost when the transport was closed after parallel_reasoning_init.
 
-    if (!sessionIdHeader) {
-      console.log(`[MCPSession] DELETE request missing session header; proceeding for session ${this.sessionId}`);
-    }
-
-    console.log(`Received session termination request for session ${this.sessionId}`);
-
-    try {
-      const expressReq = new ExpressRequestAdapter(request);
-      await expressReq.parseBody();
-      const expressRes = new ExpressResponseAdapter();
-
-      await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
-
-      const response = await expressRes.toResponse();
-      return this.attachSessionHeader(response);
-    } catch (error) {
-      console.error('Error handling session termination:', error);
-      return new Response(JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: 'Error handling session termination',
-        },
-        id: null,
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+    return new Response(JSON.stringify({
+      jsonrpc: '2.0',
+      result: {
+        success: true,
+        message: 'Session preserved for stateful operations'
+      },
+      id: null,
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'mcp-session-id': this.sessionId || ''
+      }
+    });
   }
 
   private startHeartbeat() {
