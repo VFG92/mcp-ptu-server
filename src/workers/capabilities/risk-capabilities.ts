@@ -9,6 +9,7 @@ import type {
   ExecutionContext
 } from '../capability-graph.js';
 import { EvidenceType, type CapabilityGraph } from '../capability-graph.js';
+import { getNativeCapabilities, NativeCapabilityType, parseNativePythonResult } from '../llm-native-capabilities.js';
 
 /**
  * Risk Register Builder
