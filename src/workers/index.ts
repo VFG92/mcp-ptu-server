@@ -111,6 +111,7 @@ app.post('/mcp', async (c) => {
     let parsedBody: unknown = null;
     try {
       parsedBody = await rawRequest.clone().json();
+      console.log(`[Worker] Request body for routing: ${JSON.stringify(parsedBody).substring(0, 500)}`);
     } catch (error) {
       console.log(`[Worker] Unable to parse request body for session routing: ${error}`);
     }
@@ -124,6 +125,7 @@ app.post('/mcp', async (c) => {
         routedDoId = extracted;
         routedDoIdSource = source;
         routedDoIdRawValue = value;
+        console.log(`[Worker] Found session_id candidate from ${source}: ${value}`);
       }
     };
 
@@ -142,6 +144,10 @@ app.post('/mcp', async (c) => {
           considerCandidate(args['session_id'], 'body.params.arguments.session_id');
         }
       }
+    }
+
+    if (!routedDoId) {
+      console.log(`[Worker] No session_id found in request body after checking all paths`);
     }
   }
 
