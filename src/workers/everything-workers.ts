@@ -525,78 +525,81 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Only expose parallel reasoning tools - demo/test tools are disabled
     const tools: Tool[] = [
-      {
-        name: ToolName.ECHO,
-        description: "Echoes back the input",
-        inputSchema: zodToJsonSchema(EchoSchema) as ToolInput,
-      },
-      {
-        name: ToolName.ADD,
-        description: "Adds two numbers",
-        inputSchema: zodToJsonSchema(AddSchema) as ToolInput,
-      },
-      {
-        name: ToolName.LONG_RUNNING_OPERATION,
-        description:
-          "Demonstrates a long running operation with progress updates",
-        inputSchema: zodToJsonSchema(LongRunningOperationSchema) as ToolInput,
-      },
-      {
-        name: ToolName.PRINT_ENV,
-        description:
-          "Prints all environment variables, helpful for debugging MCP server configuration",
-        inputSchema: zodToJsonSchema(PrintEnvSchema) as ToolInput,
-      },
-      {
-        name: ToolName.SAMPLE_LLM,
-        description: "Samples from an LLM using MCP's sampling feature",
-        inputSchema: zodToJsonSchema(SampleLLMSchema) as ToolInput,
-      },
-      {
-        name: ToolName.GET_TINY_IMAGE,
-        description: "Returns the MCP_TINY_IMAGE",
-        inputSchema: zodToJsonSchema(GetTinyImageSchema) as ToolInput,
-      },
-      {
-        name: ToolName.ANNOTATED_MESSAGE,
-        description:
-          "Demonstrates how annotations can be used to provide metadata about content",
-        inputSchema: zodToJsonSchema(AnnotatedMessageSchema) as ToolInput,
-      },
-      {
-        name: ToolName.GET_RESOURCE_REFERENCE,
-        description:
-          "Returns a resource reference that can be used by MCP clients",
-        inputSchema: zodToJsonSchema(GetResourceReferenceSchema) as ToolInput,
-      },
-      {
-        name: ToolName.GET_RESOURCE_LINKS,
-        description:
-          "Returns multiple resource links that reference different types of resources",
-        inputSchema: zodToJsonSchema(GetResourceLinksSchema) as ToolInput,
-      },
-      {
-        name: ToolName.STRUCTURED_CONTENT,
-        description:
-          "Returns structured content along with an output schema for client data validation",
-        inputSchema: zodToJsonSchema(StructuredContentSchema.input) as ToolInput,
-        outputSchema: zodToJsonSchema(StructuredContentSchema.output) as ToolOutput,
-      },
+      // Demo tools disabled - uncomment if needed for testing
+      // {
+      //   name: ToolName.ECHO,
+      //   description: "Echoes back the input",
+      //   inputSchema: zodToJsonSchema(EchoSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.ADD,
+      //   description: "Adds two numbers",
+      //   inputSchema: zodToJsonSchema(AddSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.LONG_RUNNING_OPERATION,
+      //   description:
+      //     "Demonstrates a long running operation with progress updates",
+      //   inputSchema: zodToJsonSchema(LongRunningOperationSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.PRINT_ENV,
+      //   description:
+      //     "Prints all environment variables, helpful for debugging MCP server configuration",
+      //   inputSchema: zodToJsonSchema(PrintEnvSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.SAMPLE_LLM,
+      //   description: "Samples from an LLM using MCP's sampling feature",
+      //   inputSchema: zodToJsonSchema(SampleLLMSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.GET_TINY_IMAGE,
+      //   description: "Returns the MCP_TINY_IMAGE",
+      //   inputSchema: zodToJsonSchema(GetTinyImageSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.ANNOTATED_MESSAGE,
+      //   description:
+      //     "Demonstrates how annotations can be used to provide metadata about content",
+      //   inputSchema: zodToJsonSchema(AnnotatedMessageSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.GET_RESOURCE_REFERENCE,
+      //   description:
+      //     "Returns a resource reference that can be used by MCP clients",
+      //   inputSchema: zodToJsonSchema(GetResourceReferenceSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.GET_RESOURCE_LINKS,
+      //   description:
+      //     "Returns multiple resource links that reference different types of resources",
+      //   inputSchema: zodToJsonSchema(GetResourceLinksSchema) as ToolInput,
+      // },
+      // {
+      //   name: ToolName.STRUCTURED_CONTENT,
+      //   description:
+      //     "Returns structured content along with an output schema for client data validation",
+      //   inputSchema: zodToJsonSchema(StructuredContentSchema.input) as ToolInput,
+      //   outputSchema: zodToJsonSchema(StructuredContentSchema.output) as ToolOutput,
+      // },
     ];
-    if (clientCapabilities?.roots) tools.push ({
-        name: ToolName.LIST_ROOTS,
-        description:
-            "Lists the current MCP roots provided by the client. Demonstrates the roots protocol capability even though this server doesn't access files.",
-        inputSchema: zodToJsonSchema(ListRootsSchema) as ToolInput,
-    });
-    if (clientCapabilities?.elicitation) tools.push ({
-        name: ToolName.ELICITATION,
-        description: "Demonstrates the Elicitation feature by asking the user to provide information about their favorite color, number, and pets.",
-        inputSchema: zodToJsonSchema(ElicitationSchema) as ToolInput,
-    });
+    // Optional demo tools disabled
+    // if (clientCapabilities?.roots) tools.push ({
+    //     name: ToolName.LIST_ROOTS,
+    //     description:
+    //         "Lists the current MCP roots provided by the client. Demonstrates the roots protocol capability even though this server doesn't access files.",
+    //     inputSchema: zodToJsonSchema(ListRootsSchema) as ToolInput,
+    // });
+    // if (clientCapabilities?.elicitation) tools.push ({
+    //     name: ToolName.ELICITATION,
+    //     description: "Demonstrates the Elicitation feature by asking the user to provide information about their favorite color, number, and pets.",
+    //     inputSchema: zodToJsonSchema(ElicitationSchema) as ToolInput,
+    // });
 
-    // Add parallel reasoning tools
+    // Parallel reasoning tools - the only tools exposed
     tools.push(
       {
         name: ParallelReasoningToolName.PARALLEL_REASONING_INIT,
