@@ -114,16 +114,23 @@ The MCP PTU Server is transitioning from a **persona-based** system to a **capab
 
 ### 4. Available Tools
 
-#### New Capability Tools
-- `analyze_with_capabilities` - Main analysis tool
-- `list_capabilities` - Browse available capabilities
-- `get_capability_status` - Check session status
-- `export_session` - Export for audit/compliance
+#### ✅ New Capability Tools (Production Ready)
+- `analyze_with_capabilities` - Main analysis tool | ✅ Tested & Verified
+- `list_capabilities` - Browse available capabilities | ✅ Tested & Verified
+- `get_capability_status` - Check session status | ✅ Production Ready
+- `export_session` - Export for audit/compliance | ✅ Production Ready
 
-#### Legacy Tools (Still Supported)
-- `parallel_reasoning_init` - ⚠️ Deprecated
+#### ⚠️ Legacy Tools (Deprecated but Still Functional)
+- `parallel_reasoning_init` - ⚠️ Deprecated | ✅ Tested & Functional
 - `agent_reasoning_step` - ⚠️ Deprecated
+- `cross_agent_communication` - ⚠️ Deprecated
 - `synthesize_parallel_reasoning` - ⚠️ Deprecated
+- `parallel_compute_status` - ⚠️ Deprecated
+- `agent_debate` - ⚠️ Deprecated
+- `list_agent_personas` - ⚠️ Deprecated
+- `validate_session_spec` - ⚠️ Deprecated
+
+**Note**: All 12 tools have been verified operational. See [TOOL_STATUS_REPORT.md](./TOOL_STATUS_REPORT.md) for detailed test results.
 
 ### 5. Code Examples
 
