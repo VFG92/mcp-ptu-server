@@ -56,7 +56,7 @@ export const CrossAgentCommunicationSchema = z.object({
 export const SynthesizeParallelReasoningSchema = z.object({
   session_id: z.string().describe('Session ID'),
   synthesis_strategy: z.enum(['consensus', 'weighted', 'dialectic', 'best_of_n', 'ensemble']).optional().default('consensus'),
-  require_all_completed: z.boolean().optional().default(false).describe('If true, synthesis fails unless all agents are in "completed" status. Prevents premature synthesis with partial results.')
+  require_all_completed: z.boolean().optional().default(true).describe('If true (default), synthesis fails unless all agents are in "completed" status. Set to false for partial synthesis with incomplete agents.')
 });
 
 export const ParallelComputeStatusSchema = z.object({
@@ -304,10 +304,18 @@ export function handleSynthesizeParallelReasoning(
       waiting_for: a.dependencies.length > 0 ? a.dependencies : undefined
     }));
 
+    const completedCount = agentStates.length - incompleteAgents.length;
+
     throw new Error(
-      `Synthesis blocked: require_all_completed=true but ${incompleteAgents.length}/${agentStates.length} agents not completed.\n` +
-      `Incomplete agents: ${JSON.stringify(incompleteDetails, null, 2)}\n` +
-      `Tip: Either wait for all agents to complete, or call with require_all_completed=false for partial synthesis.`
+      `❌ Synthesis Blocked: Waiting for ${incompleteAgents.length} more agent(s) to complete.\n\n` +
+      `Progress: ${completedCount}/${agentStates.length} agents completed (${Math.round(completedCount/agentStates.length*100)}%)\n\n` +
+      `Incomplete agents:\n${incompleteDetails.map(a =>
+        `  • ${a.role} (${a.agent_id}): ${a.status} - ${a.progress}% complete${a.waiting_for ? ` [waiting for: ${a.waiting_for.join(', ')}]` : ''}`
+      ).join('\n')}\n\n` +
+      `💡 Options:\n` +
+      `  1. Wait for all agents to complete their reasoning steps\n` +
+      `  2. Call synthesize_parallel_reasoning with require_all_completed=false for partial synthesis\n` +
+      `  3. Use parallel_compute_status to monitor progress`
     );
   }
 
@@ -374,17 +382,53 @@ export function handleParallelComputeStatus(
   sessionStore: Map<string, ParallelReasoningSession>
 ): any {
   const session = sessionStore.get(args.session_id);
+
+  // IMPORTANT: Never throw error for status check - always return status info
+  // This allows clients to diagnose issues even when session is not found
   if (!session) {
     const availableSessions = Array.from(sessionStore.keys());
-    throw new Error(
-      `Session not found: ${args.session_id}\n` +
-      `Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}\n` +
-      `Tip: Make sure you're using the session_id returned by parallel_reasoning_init`
-    );
+    console.warn(`[ParallelComputeStatus] Session ${args.session_id} not found. Available: ${availableSessions.join(', ')}`);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          session_id: args.session_id,
+          status: 'not_found',
+          error: true,
+          error_type: 'session_not_found',
+          message: `Session not found: ${args.session_id}`,
+          available_sessions: availableSessions,
+          available_sessions_count: availableSessions.length,
+          troubleshooting: {
+            tip: 'Make sure you are using the session_id returned by parallel_reasoning_init',
+            possible_causes: [
+              'Session was never created',
+              'Session expired or was cleaned up',
+              'Wrong Durable Object instance (routing issue)',
+              'Session storage not persisted correctly'
+            ]
+          },
+          visualization: `
+❌ **Session Not Found**
+
+Session ID: ${args.session_id}
+Status: NOT FOUND
+
+Available sessions: ${availableSessions.length > 0 ? availableSessions.join(', ') : 'none'}
+
+💡 **Troubleshooting**:
+- Verify you're using the session_id from parallel_reasoning_init
+- Check if the session expired or was cleaned up
+- Ensure proper session routing to the correct Durable Object
+          `.trim()
+        }, null, 2)
+      }]
+    };
   }
-  
+
   const status = getSessionStatus(session);
-  
+
   return {
     content: [{
       type: 'text',

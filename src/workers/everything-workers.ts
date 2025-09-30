@@ -407,7 +407,7 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
       {
         name: ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING,
         description:
-          "Synthesize all agent perspectives into a unified recommendation. Choose strategy: consensus, weighted, dialectic, best_of_n, or ensemble.",
+          "Synthesize all agent perspectives into a unified recommendation. By default, requires all agents to complete before synthesis (require_all_completed=true). Use parallel_compute_status to check progress first. Choose strategy: consensus, weighted, dialectic, best_of_n, or ensemble.",
         inputSchema: zodToJsonSchema(SynthesizeParallelReasoningSchema) as ToolInput,
       },
       {
