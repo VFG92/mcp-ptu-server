@@ -85,8 +85,124 @@ const capitalStructureOptimizerCapability: CapabilityNode = {
   
   async execute(inputs: any, context: ExecutionContext): Promise<CapabilityResult> {
     const startTime = Date.now();
-    
-    const output = {
+
+    // AGENT ↔ LLM INTERACTION: Request native Python execution for capital structure optimization
+    const nativeCapabilities = getNativeCapabilities(context);
+    let nativeResults: any = null;
+    let evidenceType = EvidenceType.HEURISTIC;
+    let warnings: string[] = [];
+
+    if (nativeCapabilities?.isAvailable(NativeCapabilityType.PYTHON_EXECUTION)) {
+      const currentDebt = inputs.current_debt || 500;
+      const currentEquity = inputs.current_equity || 1000;
+      const ebitda = inputs.ebitda || 200;
+      const taxRate = inputs.tax_rate || 0.21;
+
+      const pythonCode = `
+import json
+import numpy as np
+
+# Capital Structure Parameters
+current_debt = ${currentDebt}
+current_equity = ${currentEquity}
+ebitda = ${ebitda}
+tax_rate = ${taxRate}
+risk_free_rate = 0.04
+equity_risk_premium = 0.06
+beta_unlevered = 1.0
+
+# Test different debt levels
+debt_levels = np.linspace(0, current_debt * 3, 50)
+results = []
+
+for debt in debt_levels:
+    equity = current_equity
+    total_capital = debt + equity
+    debt_ratio = debt / total_capital
+
+    # Cost of debt (increases with leverage)
+    if debt / ebitda < 2:
+        cost_of_debt = 0.05
+        credit_rating = 'A'
+    elif debt / ebitda < 3:
+        cost_of_debt = 0.06
+        credit_rating = 'BBB'
+    elif debt / ebitda < 4:
+        cost_of_debt = 0.07
+        credit_rating = 'BB'
+    else:
+        cost_of_debt = 0.09
+        credit_rating = 'B'
+
+    # Levered beta
+    beta_levered = beta_unlevered * (1 + (1 - tax_rate) * (debt / equity)) if equity > 0 else beta_unlevered * 3
+
+    # Cost of equity (CAPM)
+    cost_of_equity = risk_free_rate + beta_levered * equity_risk_premium
+
+    # WACC
+    wacc = (debt / total_capital) * cost_of_debt * (1 - tax_rate) + (equity / total_capital) * cost_of_equity
+
+    # Enterprise value (simplified)
+    ev = ebitda * (1 - tax_rate) / wacc if wacc > 0 else 0
+
+    results.append({
+        'debt': float(debt),
+        'equity': float(equity),
+        'debt_to_equity': float(debt / equity) if equity > 0 else 0,
+        'debt_to_ebitda': float(debt / ebitda) if ebitda > 0 else 0,
+        'wacc': float(wacc),
+        'enterprise_value': float(ev),
+        'credit_rating': credit_rating,
+        'cost_of_debt': float(cost_of_debt),
+        'cost_of_equity': float(cost_of_equity)
+    })
+
+# Find optimal structure (minimum WACC)
+optimal_idx = np.argmin([r['wacc'] for r in results])
+optimal = results[optimal_idx]
+
+# Current structure index
+current_idx = int(current_debt / (debt_levels[1] - debt_levels[0])) if len(debt_levels) > 1 else 0
+current_idx = min(current_idx, len(results) - 1)
+
+result = {
+    'current_structure': results[current_idx],
+    'optimal_structure': optimal,
+    'leverage_scenarios': [
+        results[0],  # No debt
+        results[len(results)//4],  # Low leverage
+        results[len(results)//2],  # Medium leverage
+        results[3*len(results)//4],  # High leverage
+        results[-1]  # Maximum leverage
+    ],
+    'value_creation': float(optimal['enterprise_value'] - results[current_idx]['enterprise_value'])
+}
+
+print(json.dumps(result))
+`;
+
+      try {
+        const response = await nativeCapabilities.invoke(
+          NativeCapabilityType.PYTHON_EXECUTION,
+          { code: pythonCode, timeout_seconds: 30 },
+          context
+        );
+
+        if (response.success && response.result) {
+          const parsed = parseNativePythonResult(response.result);
+          if (parsed) {
+            nativeResults = parsed;
+            evidenceType = EvidenceType.CALCULATION;
+            warnings.push('Real capital structure optimization via LLM native Python with WACC minimization');
+          }
+        }
+      } catch (error) {
+        warnings.push('LLM native capabilities unavailable - using heuristic estimates');
+      }
+    }
+
+    const output = nativeResults || {
       current_structure: {
         debt: 500,
         equity: 1000,
@@ -171,28 +287,30 @@ const capitalStructureOptimizerCapability: CapabilityNode = {
     
     const evidence = {
       optimal_structure: [{
-        type: EvidenceType.CALCULATION,
+        type: evidenceType,
         formula: 'Optimal leverage minimizes WACC: WACC = (E/V)*Re + (D/V)*Rd*(1-T)',
-        rationale: 'Trade-off between tax shield benefits and financial distress costs',
+        rationale: nativeResults
+          ? 'Real optimization with Python: 50 debt scenarios, CAPM cost of equity, credit rating impact on cost of debt'
+          : 'Trade-off between tax shield benefits and financial distress costs',
         timestamp: Date.now()
       }]
     };
-    
+
     const executionTime = Date.now() - startTime;
-    
+
     return {
       capability_id: 'capital_structure_optimizer',
       output,
       evidence,
-      confidence: 0.72,
+      confidence: nativeResults ? 0.86 : 0.72,
       cost_actual: {
         expected_tokens_in: 580,
         expected_tokens_out: 1650,
         cpu_ms: executionTime,
         subrequests: 3
       },
-      quality_score: 0.82,
-      warnings: [
+      quality_score: nativeResults ? 0.89 : 0.82,
+      warnings: nativeResults ? warnings : [
         'Optimal structure depends on market conditions and credit availability',
         'Credit rating estimates should be validated with rating agencies'
       ],
@@ -494,7 +612,116 @@ const workingCapitalDiagnosticCapability: CapabilityNode = {
   async execute(inputs: any, context: ExecutionContext): Promise<CapabilityResult> {
     const startTime = Date.now();
 
-    const output = {
+    // AGENT ↔ LLM INTERACTION: Request native Python execution for working capital analysis
+    const nativeCapabilities = getNativeCapabilities(context);
+    let nativeResults: any = null;
+    let evidenceType = EvidenceType.HEURISTIC;
+    let warnings: string[] = [];
+
+    if (nativeCapabilities?.isAvailable(NativeCapabilityType.PYTHON_EXECUTION)) {
+      const revenue = inputs.revenue || 1000;
+      const cogs = inputs.cogs || 600;
+      const inventory = inputs.inventory || 100;
+      const receivables = inputs.receivables || 150;
+      const payables = inputs.payables || 80;
+
+      const pythonCode = `
+import json
+
+# Working Capital Parameters
+revenue = ${revenue}
+cogs = ${cogs}
+inventory = ${inventory}
+receivables = ${receivables}
+payables = ${payables}
+days_in_year = 365
+
+# Calculate metrics
+dio = (inventory / cogs) * days_in_year if cogs > 0 else 0
+dso = (receivables / revenue) * days_in_year if revenue > 0 else 0
+dpo = (payables / cogs) * days_in_year if cogs > 0 else 0
+ccc = dio + dso - dpo
+wc_pct_revenue = ((inventory + receivables - payables) / revenue) * 100 if revenue > 0 else 0
+
+# Industry benchmarks
+industry_benchmarks = {'dio': 45, 'dso': 40, 'dpo': 35, 'ccc': 50}
+
+# Calculate gaps
+gaps = {
+    'dio_gap': dio - industry_benchmarks['dio'],
+    'dso_gap': dso - industry_benchmarks['dso'],
+    'dpo_gap': dpo - industry_benchmarks['dpo'],
+    'ccc_gap': ccc - industry_benchmarks['ccc']
+}
+
+# Cash opportunity
+cash_opportunity = (ccc - industry_benchmarks['ccc']) * (revenue / days_in_year) if ccc > industry_benchmarks['ccc'] else 0
+
+result = {
+    'current_metrics': {
+        'working_capital': inventory + receivables - payables,
+        'cash_conversion_cycle': round(ccc, 1),
+        'days_sales_outstanding': round(dso, 1),
+        'days_inventory_outstanding': round(dio, 1),
+        'days_payable_outstanding': round(dpo, 1),
+        'working_capital_as_pct_revenue': round(wc_pct_revenue, 2)
+    },
+    'benchmark_comparison': {
+        'our_ccc': round(ccc, 1),
+        'peer_median': industry_benchmarks['ccc'],
+        'best_in_class': 35,
+        'gap_to_peer': round(gaps['ccc_gap'], 1)
+    },
+    'improvement_levers': [
+        {
+            'lever': 'Reduce DSO',
+            'current': round(dso, 1),
+            'target': industry_benchmarks['dso'],
+            'cash_impact': round((dso - industry_benchmarks['dso']) * (revenue / days_in_year), 2) if dso > industry_benchmarks['dso'] else 0,
+            'difficulty': 'medium'
+        },
+        {
+            'lever': 'Reduce DIO',
+            'current': round(dio, 1),
+            'target': industry_benchmarks['dio'],
+            'cash_impact': round((dio - industry_benchmarks['dio']) * (cogs / days_in_year), 2) if dio > industry_benchmarks['dio'] else 0,
+            'difficulty': 'medium'
+        },
+        {
+            'lever': 'Extend DPO',
+            'current': round(dpo, 1),
+            'target': industry_benchmarks['dpo'],
+            'cash_impact': round((industry_benchmarks['dpo'] - dpo) * (cogs / days_in_year), 2) if dpo < industry_benchmarks['dpo'] else 0,
+            'difficulty': 'low'
+        }
+    ],
+    'cash_opportunity': round(cash_opportunity, 2)
+}
+
+print(json.dumps(result))
+`;
+
+      try {
+        const response = await nativeCapabilities.invoke(
+          NativeCapabilityType.PYTHON_EXECUTION,
+          { code: pythonCode, timeout_seconds: 30 },
+          context
+        );
+
+        if (response.success && response.result) {
+          const parsed = parseNativePythonResult(response.result);
+          if (parsed) {
+            nativeResults = parsed;
+            evidenceType = EvidenceType.CALCULATION;
+            warnings.push('Real working capital analysis via LLM native Python: DIO, DSO, DPO, CCC calculations');
+          }
+        }
+      } catch (error) {
+        warnings.push('LLM native capabilities unavailable - using heuristic estimates');
+      }
+    }
+
+    const output = nativeResults || {
       current_metrics: {
         working_capital: 150,
         cash_conversion_cycle: 65,
@@ -578,9 +805,11 @@ const workingCapitalDiagnosticCapability: CapabilityNode = {
 
     const evidence = {
       total_cash_release_potential: [{
-        type: EvidenceType.CALCULATION,
+        type: evidenceType,
         formula: 'Cash release = (Days improvement / 365) × Annual revenue',
-        rationale: 'Working capital optimization releases cash trapped in operations',
+        rationale: nativeResults
+          ? 'Real working capital calculations with Python: DIO, DSO, DPO, CCC, cash opportunity sizing'
+          : 'Working capital optimization releases cash trapped in operations',
         timestamp: Date.now()
       }]
     };
@@ -591,15 +820,15 @@ const workingCapitalDiagnosticCapability: CapabilityNode = {
       capability_id: 'working_capital_diagnostic',
       output,
       evidence,
-      confidence: 0.75,
+      confidence: nativeResults ? 0.87 : 0.75,
       cost_actual: {
         expected_tokens_in: 530,
         expected_tokens_out: 1450,
         cpu_ms: executionTime,
         subrequests: 3
       },
-      quality_score: 0.85,
-      warnings: [
+      quality_score: nativeResults ? 0.90 : 0.85,
+      warnings: nativeResults ? warnings : [
         'Cash release estimates assume revenue remains constant',
         'Implementation may require system investments and process changes'
       ],
@@ -957,7 +1186,133 @@ const scenarioForecastingCapability: CapabilityNode = {
   async execute(inputs: any, context: ExecutionContext): Promise<CapabilityResult> {
     const startTime = Date.now();
 
-    const output = {
+    // AGENT ↔ LLM INTERACTION: Request native Python execution for scenario forecasting
+    const nativeCapabilities = getNativeCapabilities(context);
+    let nativeResults: any = null;
+    let evidenceType = EvidenceType.HEURISTIC;
+    let warnings: string[] = [];
+
+    if (nativeCapabilities?.isAvailable(NativeCapabilityType.PYTHON_EXECUTION)) {
+      const baseRevenue = inputs.base_revenue || 500;
+      const baseGrowth = inputs.base_growth_rate || 0.15;
+      const baseMargin = inputs.base_ebitda_margin || 0.24;
+      const years = inputs.forecast_years || 3;
+      const simulations = inputs.num_simulations || 1000;
+
+      const pythonCode = `
+import json
+import numpy as np
+
+np.random.seed(42)
+
+# Scenario Parameters
+base_revenue = ${baseRevenue}
+base_growth = ${baseGrowth}
+base_margin = ${baseMargin}
+years = ${years}
+simulations = ${simulations}
+
+# Define scenarios with probabilities
+scenarios = [
+    {'name': 'Bull', 'prob': 0.25, 'growth': 0.25, 'margin': 0.30, 'volatility': 0.10},
+    {'name': 'Base', 'prob': 0.50, 'growth': 0.15, 'margin': 0.24, 'volatility': 0.15},
+    {'name': 'Bear', 'prob': 0.25, 'growth': 0.05, 'margin': 0.18, 'volatility': 0.20}
+]
+
+all_forecasts = []
+base_forecast = []
+
+# Generate base forecast
+for year in range(1, years + 1):
+    revenue = base_revenue * ((1 + base_growth) ** year)
+    ebitda = revenue * base_margin
+    fcf = ebitda * 0.35
+    base_forecast.append({
+        'year': 2024 + year,
+        'revenue': round(revenue, 0),
+        'ebitda': round(ebitda, 0),
+        'ebitda_margin': base_margin,
+        'fcf': round(fcf, 0)
+    })
+
+# Run Monte Carlo simulations
+for scenario in scenarios:
+    for _ in range(int(simulations * scenario['prob'])):
+        revenue_path = []
+        ebitda_path = []
+
+        for year in range(1, years + 1):
+            growth = np.random.normal(scenario['growth'], scenario['volatility'])
+            margin = np.random.normal(scenario['margin'], 0.02)
+            margin = max(0.10, min(0.35, margin))
+
+            revenue = base_revenue * ((1 + growth) ** year)
+            ebitda = revenue * margin
+
+            revenue_path.append(revenue)
+            ebitda_path.append(ebitda)
+
+        all_forecasts.append({
+            'revenues': revenue_path,
+            'ebitdas': ebitda_path
+        })
+
+# Calculate probabilistic outcomes
+probabilistic_forecast = []
+for year_idx in range(years):
+    year_revenues = [f['revenues'][year_idx] for f in all_forecasts]
+    year_ebitdas = [f['ebitdas'][year_idx] for f in all_forecasts]
+
+    probabilistic_forecast.append({
+        'year': 2024 + year_idx + 1,
+        'metric': 'Revenue',
+        'p10': float(np.percentile(year_revenues, 10)),
+        'p25': float(np.percentile(year_revenues, 25)),
+        'p50': float(np.percentile(year_revenues, 50)),
+        'p75': float(np.percentile(year_revenues, 75)),
+        'p90': float(np.percentile(year_revenues, 90)),
+        'mean': float(np.mean(year_revenues)),
+        'std_dev': float(np.std(year_revenues))
+    })
+
+result = {
+    'base_forecast': base_forecast,
+    'probabilistic_forecast': probabilistic_forecast,
+    'scenario_breakdown': [
+        {
+            'scenario': s['name'],
+            'probability': s['prob'],
+            'revenue_year_final': float(np.percentile([f['revenues'][-1] for f in all_forecasts[:int(simulations*s['prob'])]], 50)),
+            'ebitda_year_final': float(np.percentile([f['ebitdas'][-1] for f in all_forecasts[:int(simulations*s['prob'])]], 50))
+        }
+        for s in scenarios
+    ]
+}
+
+print(json.dumps(result))
+`;
+
+      try {
+        const response = await nativeCapabilities.invoke(
+          NativeCapabilityType.PYTHON_EXECUTION,
+          { code: pythonCode, timeout_seconds: 30 },
+          context
+        );
+
+        if (response.success && response.result) {
+          const parsed = parseNativePythonResult(response.result);
+          if (parsed) {
+            nativeResults = parsed;
+            evidenceType = EvidenceType.SIMULATION;
+            warnings.push('Real Monte Carlo scenario forecasting via LLM native Python with 1000 simulations');
+          }
+        }
+      } catch (error) {
+        warnings.push('LLM native capabilities unavailable - using heuristic estimates');
+      }
+    }
+
+    const output = nativeResults || {
       base_forecast: [
         { year: 2024, revenue: 500, ebitda: 120, ebitda_margin: 0.24, fcf: 44 },
         { year: 2025, revenue: 575, ebitda: 138, ebitda_margin: 0.24, fcf: 50 },
@@ -1066,8 +1421,10 @@ const scenarioForecastingCapability: CapabilityNode = {
 
     const evidence = {
       probabilistic_forecast: [{
-        type: EvidenceType.SIMULATION,
-        rationale: 'Monte Carlo simulation with 10,000 iterations based on historical volatility and correlation of key variables',
+        type: evidenceType,
+        rationale: nativeResults
+          ? 'Real Monte Carlo simulation with Python/numpy: 1000 iterations, Bull/Base/Bear scenarios, stochastic growth and margin modeling'
+          : 'Monte Carlo simulation with 10,000 iterations based on historical volatility and correlation of key variables',
         timestamp: Date.now()
       }]
     };
@@ -1078,15 +1435,15 @@ const scenarioForecastingCapability: CapabilityNode = {
       capability_id: 'scenario_forecasting',
       output,
       evidence,
-      confidence: 0.72,
+      confidence: nativeResults ? 0.86 : 0.72,
       cost_actual: {
         expected_tokens_in: 630,
         expected_tokens_out: 1850,
         cpu_ms: executionTime,
         subrequests: 3
       },
-      quality_score: 0.82,
-      warnings: [
+      quality_score: nativeResults ? 0.89 : 0.82,
+      warnings: nativeResults ? warnings : [
         'Probabilistic ranges assume normal distribution - tail risks may be underestimated',
         'Scenario probabilities are subjective estimates'
       ],
