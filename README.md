@@ -1,6 +1,6 @@
 # 🧠 MCP PTU Server - Capability-Driven Business Analysis
 
-**Version 4.0.0** | **Evidence-Backed, Industry-Aware, LLM-Native, Production-Ready**
+**Version 4.1.0** | **Evidence-Backed, Industry-Aware, LLM-Native, Persistent, Production-Ready**
 
 A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server featuring a **capability-driven architecture** for enterprise business analysis with **58 advanced capabilities** across 8 business domains, including **11 capabilities with explicit LLM native integration** (Python execution, web search).
 
@@ -25,6 +25,7 @@ An MCP server that enables **ChatGPT Developer Mode** to perform **evidence-back
 - **Output Validation** - Strong Zod schemas for type safety
 - **Tournament Mode** - Multi-criteria judging for best results (enabled by default)
 - **Full Audit Trail** - Complete execution history with artifact versioning
+- **🆕 Persistent Storage** - End-to-end persistence with Durable Objects (v4.1)
 
 ---
 
@@ -572,6 +573,14 @@ Built with:
 - [Cloudflare Workers](https://workers.cloudflare.com/)
 - [TypeScript](https://www.typescriptlang.org/)
 - [Zod](https://zod.dev/)
+
+---
+
+## 📚 Documentation
+
+- **[AGENT.md](./AGENT.md)** - Complete technical documentation (v4.1 with persistence)
+- **[PERSISTENCE_IMPLEMENTATION.md](./PERSISTENCE_IMPLEMENTATION.md)** - Persistence architecture details
+- **[test-persistence-flow.md](./test-persistence-flow.md)** - Persistence testing guide
 
 ---
 

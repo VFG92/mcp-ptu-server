@@ -53,7 +53,8 @@ import {
   handleAnalyzeWithCapabilities,
   handleGetCapabilityStatus,
   handleExportSession,
-  handleListCapabilities
+  handleListCapabilities,
+  type CapabilitySystemRefs
 } from './capability-tools.js';
 
 // Instructions inlined for Workers compatibility
@@ -98,13 +99,27 @@ const EXAMPLE_COMPLETIONS = {
   resourceId: ["1", "2", "3", "4", "5"],
 };
 
+// Import capability system types (moved to top with other imports)
+import { Whiteboard } from './whiteboard-memory.js';
+import { EvidenceLedger } from './evidence-ledger.js';
+
 export const createServer = (
   parallelReasoningSessions?: Map<string, ParallelReasoningSession>,
   persistCallback?: () => Promise<void>,
-  getTransportSessionId?: () => string | null | undefined
+  getTransportSessionId?: () => string | null | undefined,
+  capabilityWhiteboard?: Whiteboard,
+  capabilityLedger?: EvidenceLedger,
+  capabilityPersistCallback?: () => Promise<void>
 ) => {
   // Initialize parallel reasoning session store if not provided
   const sessionStore = parallelReasoningSessions || new Map<string, ParallelReasoningSession>();
+
+  // Store capability system references for tool handlers
+  const capabilitySystemRefs = {
+    whiteboard: capabilityWhiteboard,
+    ledger: capabilityLedger,
+    persistCallback: capabilityPersistCallback
+  };
 
   const server = new Server(
     {
@@ -525,7 +540,7 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
       if (name === CapabilityToolName.ANALYZE_WITH_CAPABILITIES) {
         console.log(`[CallTool] Handling analyze_with_capabilities`);
         const validatedArgs = AnalyzeWithCapabilitiesSchema.parse(args);
-        const result = await handleAnalyzeWithCapabilities(validatedArgs);
+        const result = await handleAnalyzeWithCapabilities(validatedArgs, capabilitySystemRefs);
         console.log(`[CallTool] analyze_with_capabilities completed successfully`);
         return result;
       }
@@ -533,7 +548,7 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
       if (name === CapabilityToolName.LIST_CAPABILITIES) {
         console.log(`[CallTool] Handling list_capabilities`);
         const validatedArgs = ListCapabilitiesSchema.parse(args);
-        const result = await handleListCapabilities(validatedArgs);
+        const result = await handleListCapabilities(validatedArgs, capabilitySystemRefs);
         console.log(`[CallTool] list_capabilities completed successfully`);
         return result;
       }
@@ -541,7 +556,7 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
       if (name === CapabilityToolName.GET_CAPABILITY_STATUS) {
         console.log(`[CallTool] Handling get_capability_status`);
         const validatedArgs = GetCapabilityStatusSchema.parse(args);
-        const result = await handleGetCapabilityStatus(validatedArgs);
+        const result = await handleGetCapabilityStatus(validatedArgs, capabilitySystemRefs);
         console.log(`[CallTool] get_capability_status completed successfully`);
         return result;
       }
@@ -549,7 +564,7 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
       if (name === CapabilityToolName.EXPORT_SESSION) {
         console.log(`[CallTool] Handling export_session`);
         const validatedArgs = ExportSessionSchema.parse(args);
-        const result = await handleExportSession(validatedArgs);
+        const result = await handleExportSession(validatedArgs, capabilitySystemRefs);
         console.log(`[CallTool] export_session completed successfully`);
         return result;
       }

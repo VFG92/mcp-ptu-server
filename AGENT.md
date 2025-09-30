@@ -1283,11 +1283,159 @@ Use descriptive session IDs for tracking:
 
 ---
 
+## 💾 Capability Persistence Architecture (v4.1)
+
+### Problem Solved
+**Before v4.1**: Capability artifacts were generated but **not persisted** in Durable Object storage. When calling `get_capability_status` or `export_session`, data was lost because the orchestrator used in-memory storage that didn't survive across requests.
+
+**After v4.1**: Complete end-to-end persistence with Durable Objects integration.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MCPSession (Durable Object)              │
+├─────────────────────────────────────────────────────────────┤
+│  • whiteboard: Whiteboard (persistent)                      │
+│  • evidenceLedger: EvidenceLedger (persistent)              │
+│  • capabilityExecutionHistory: Array (persistent)           │
+│                                                              │
+│  Methods:                                                    │
+│  • persistCapabilityState() → storage.put()                 │
+│  • loadCapabilityState() → storage.get()                    │
+└─────────────────────────────────────────────────────────────┘
+                            ↓ (injects references)
+┌─────────────────────────────────────────────────────────────┐
+│                    CapabilityOrchestrator                   │
+├─────────────────────────────────────────────────────────────┤
+│  Uses DO whiteboard/ledger instead of globals               │
+│  • execute() → writes to DO whiteboard                      │
+│  • getSessionStatus() → reads from DO whiteboard            │
+│  • exportSession() → reads from DO whiteboard               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Persistence Flow
+
+1. **analyze_with_capabilities**
+   - Orchestrator executes capabilities
+   - Artifacts saved to DO whiteboard (in-memory)
+   - `persistCallback()` called → `storage.put('capability_whiteboard', data)`
+   - Artifacts now persisted ✅
+
+2. **get_capability_status**
+   - DO loads whiteboard from storage (constructor)
+   - Orchestrator reads from DO whiteboard
+   - Returns `artifacts_count > 0` ✅
+
+3. **export_session**
+   - Orchestrator reads all data from DO whiteboard
+   - Returns complete JSON with artifacts, evidence, costs ✅
+
+### Key Changes (v4.1)
+
+**1. createServer() - everything-workers.ts**
+```typescript
+export const createServer = (
+  // ... existing params ...
+  capabilityWhiteboard?: Whiteboard,        // NEW
+  capabilityLedger?: EvidenceLedger,        // NEW
+  capabilityPersistCallback?: () => Promise<void>  // NEW
+) => {
+  const capabilitySystemRefs = {
+    whiteboard: capabilityWhiteboard,
+    ledger: capabilityLedger,
+    persistCallback: capabilityPersistCallback
+  };
+  // Pass refs to tool handlers
+}
+```
+
+**2. initializeCapabilitySystem() - capability-tools.ts**
+```typescript
+export function initializeCapabilitySystem(refs?: CapabilitySystemRefs) {
+  // Use DO storage if provided, otherwise globals
+  const whiteboard = refs?.whiteboard || globalWhiteboard;
+  const ledger = refs?.ledger || globalEvidenceLedger;
+
+  orchestrator = new CapabilityOrchestrator(
+    globalCapabilityGraph,
+    ledger,
+    whiteboard  // Uses DO storage!
+  );
+}
+```
+
+**3. handleAnalyzeWithCapabilities() - capability-tools.ts**
+```typescript
+export async function handleAnalyzeWithCapabilities(
+  args: z.infer<typeof AnalyzeWithCapabilitiesSchema>,
+  refs?: CapabilitySystemRefs  // NEW
+) {
+  const orch = initializeCapabilitySystem(refs);
+  const result = await orch.execute(request);
+
+  // Persist after execution
+  if (refs?.persistCallback) {
+    await refs.persistCallback();  // Saves to DO storage
+  }
+}
+```
+
+**4. MCPSession - session.ts**
+```typescript
+const capabilityPersistCallback = async () => {
+  await this.persistCapabilityState();
+};
+
+const { server, cleanup, startNotificationIntervals } = createServer(
+  this.parallelReasoningSessions,
+  persistCallback,
+  getTransportSessionId,
+  this.whiteboard,              // Pass DO whiteboard
+  this.evidenceLedger,          // Pass DO ledger
+  capabilityPersistCallback     // Pass persist callback
+);
+```
+
+### Benefits
+
+- ✅ **100% Persistence**: All artifacts saved to Durable Object storage
+- ✅ **Cross-Request Consistency**: Data survives reconnects
+- ✅ **Complete Audit Trail**: Full export with artifacts, evidence, costs
+- ✅ **Backward Compatible**: Falls back to globals if refs not provided
+- ✅ **Zero Breaking Changes**: Existing code continues to work
+
+### Testing
+
+See `test-persistence-flow.md` for complete test plan.
+
+**Quick Test**:
+```bash
+# 1. Analyze
+curl -X POST /mcp -d '{"tool": "analyze_with_capabilities", "args": {"session_id": "test-001", "task": "Market analysis"}}'
+
+# 2. Status (should show artifacts)
+curl -X POST /mcp -d '{"tool": "get_capability_status", "args": {"session_id": "test-001"}}'
+
+# 3. Export (should show full data)
+curl -X POST /mcp -d '{"tool": "export_session", "args": {"session_id": "test-001"}}'
+```
+
+### Documentation
+
+- **Implementation Details**: `PERSISTENCE_IMPLEMENTATION.md`
+- **Test Plan**: `test-persistence-flow.md`
+- **Architecture Diagram**: See Mermaid diagram in implementation doc
+
+---
+
 **Last Updated**: 2025-09-30
-**Version**: 4.0.0
+**Version**: 4.1.0 (Persistence Enhancement)
 **Deployment**: d4b9fdeb-dabd-4b3f-af42-2be0b63bbad7
 **Status**: Production Ready ✅
 **Compilation**: ✅ TypeScript 0 errors
 **Tool Testing**: ✅ Verified via ChatGPT Developer Mode
 **Documentation**: ✅ Consolidated in 2 files (README.md, AGENT.md)
+**Persistence**: ✅ End-to-end with Durable Objects (v4.1)
 

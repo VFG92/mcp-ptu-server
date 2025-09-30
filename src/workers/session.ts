@@ -100,10 +100,16 @@ export class MCPSession extends DurableObject {
         console.log(`[MCPSession] getTransportSessionId called, returning: ${this.sessionId}`);
         return this.sessionId;
       };
+      const capabilityPersistCallback = async () => {
+        await this.persistCapabilityState();
+      };
       const { server, cleanup, startNotificationIntervals } = createServer(
         this.parallelReasoningSessions,
         persistCallback,
-        getTransportSessionId
+        getTransportSessionId,
+        this.whiteboard,
+        this.evidenceLedger,
+        capabilityPersistCallback
       );
       this.server = server;
       this.cleanup = cleanup;

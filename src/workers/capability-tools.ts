@@ -7,9 +7,18 @@
 import { z } from 'zod';
 import { CapabilityOrchestrator, type OrchestrationRequest, createDefaultBudget, createDefaultPolicy } from './capability-orchestrator.js';
 import { globalCapabilityGraph } from './capability-graph.js';
-import { globalEvidenceLedger } from './evidence-ledger.js';
-import { globalWhiteboard } from './whiteboard-memory.js';
+import { globalEvidenceLedger, EvidenceLedger } from './evidence-ledger.js';
+import { globalWhiteboard, Whiteboard } from './whiteboard-memory.js';
 import { registerAllCapabilities } from './capabilities/index.js';
+
+/**
+ * Capability system references from Durable Object
+ */
+export interface CapabilitySystemRefs {
+  whiteboard?: Whiteboard;
+  ledger?: EvidenceLedger;
+  persistCallback?: () => Promise<void>;
+}
 
 /**
  * Tool names
@@ -68,24 +77,27 @@ export const ListCapabilitiesSchema = z.object({
 
 /**
  * Initialize capability system (call once at startup)
+ * Now accepts optional DO references for persistence
  */
 let orchestrator: CapabilityOrchestrator | null = null;
 
-export function initializeCapabilitySystem(): CapabilityOrchestrator {
-  if (!orchestrator) {
-    // Register all capabilities
-    registerAllCapabilities();
-    
-    console.log(`[CapabilitySystem] Registered ${globalCapabilityGraph.size()} capabilities`);
-    
-    // Create orchestrator
-    orchestrator = new CapabilityOrchestrator(
-      globalCapabilityGraph,
-      globalEvidenceLedger,
-      globalWhiteboard
-    );
-  }
-  
+export function initializeCapabilitySystem(refs?: CapabilitySystemRefs): CapabilityOrchestrator {
+  // Always register capabilities
+  registerAllCapabilities();
+
+  console.log(`[CapabilitySystem] Registered ${globalCapabilityGraph.size()} capabilities`);
+
+  // Use DO whiteboard/ledger if provided, otherwise use globals
+  const whiteboard = refs?.whiteboard || globalWhiteboard;
+  const ledger = refs?.ledger || globalEvidenceLedger;
+
+  // Create orchestrator with appropriate storage
+  orchestrator = new CapabilityOrchestrator(
+    globalCapabilityGraph,
+    ledger,
+    whiteboard
+  );
+
   return orchestrator;
 }
 
@@ -94,9 +106,10 @@ export function initializeCapabilitySystem(): CapabilityOrchestrator {
  */
 
 export async function handleAnalyzeWithCapabilities(
-  args: z.infer<typeof AnalyzeWithCapabilitiesSchema>
+  args: z.infer<typeof AnalyzeWithCapabilitiesSchema>,
+  refs?: CapabilitySystemRefs
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const orch = initializeCapabilitySystem();
+  const orch = initializeCapabilitySystem(refs);
 
   const request: OrchestrationRequest = {
     session_id: args.session_id,
@@ -110,9 +123,16 @@ export async function handleAnalyzeWithCapabilities(
     geographic_region: args.geographic_region,
     entity_names: args.entity_names
   };
-  
+
   try {
     const result = await orch.execute(request);
+
+    // Persist to Durable Object storage after execution
+    if (refs?.persistCallback) {
+      console.log(`[CapabilityTools] Persisting capability state after execution`);
+      await refs.persistCallback();
+      console.log(`[CapabilityTools] Capability state persisted successfully`);
+    }
     
     // Format response
     let response = `# Analysis Results\n\n`;
@@ -166,9 +186,10 @@ export async function handleAnalyzeWithCapabilities(
 }
 
 export async function handleGetCapabilityStatus(
-  args: z.infer<typeof GetCapabilityStatusSchema>
+  args: z.infer<typeof GetCapabilityStatusSchema>,
+  refs?: CapabilitySystemRefs
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const orch = initializeCapabilitySystem();
+  const orch = initializeCapabilitySystem(refs);
 
   try {
     const status = orch.getSessionStatus(args.session_id);
@@ -210,10 +231,11 @@ export async function handleGetCapabilityStatus(
 }
 
 export async function handleExportSession(
-  args: z.infer<typeof ExportSessionSchema>
+  args: z.infer<typeof ExportSessionSchema>,
+  refs?: CapabilitySystemRefs
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const orch = initializeCapabilitySystem();
-  
+  const orch = initializeCapabilitySystem(refs);
+
   try {
     const exported = orch.exportSession(args.session_id);
     
@@ -234,9 +256,10 @@ export async function handleExportSession(
 }
 
 export async function handleListCapabilities(
-  args: z.infer<typeof ListCapabilitiesSchema>
+  args: z.infer<typeof ListCapabilitiesSchema>,
+  refs?: CapabilitySystemRefs
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  initializeCapabilitySystem();
+  initializeCapabilitySystem(refs);
   
   let capabilities = globalCapabilityGraph.getAllIds().map(id => globalCapabilityGraph.get(id)!);
   
