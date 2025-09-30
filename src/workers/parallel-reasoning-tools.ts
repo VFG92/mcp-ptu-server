@@ -88,6 +88,7 @@ export function handleParallelReasoningInit(
   sessionStore: Map<string, ParallelReasoningSession>,
   getTransportSessionId?: () => string | null | undefined
 ): any {
+  console.log(`[ParallelReasoning] VERSION: 2025-09-30-v3 - handleParallelReasoningInit called`);
   const transportSessionId = getTransportSessionId?.() ?? null;
   console.log(`[ParallelReasoning] getTransportSessionId returned: ${transportSessionId}`);
 
