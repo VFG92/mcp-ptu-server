@@ -1,0 +1,241 @@
+# Cursor AI Rules for Multi-Agent Parallel Reasoning MCP Server
+
+## Project Context
+
+This is a production MCP (Model Context Protocol) server for multi-agent parallel reasoning in business consulting, finance, marketing strategy, and project management.
+
+**NOT a software development tool** - Focus is on business analysis.
+
+## Core Technologies
+
+- TypeScript (strict mode)
+- Cloudflare Workers + Durable Objects
+- Hono (routing)
+- MCP Protocol 2024-11-05
+- SSE (Server-Sent Events)
+
+## Code Style
+
+- Use TypeScript strict types (no `any`)
+- Prefer `const` over `let`
+- Use async/await over promises
+- Descriptive variable names
+- Add JSDoc comments for public functions
+- Keep functions under 50 lines
+- Use early returns to reduce nesting
+
+## File Organization
+
+```
+src/workers/
+├── agent-personas.ts              # Business consulting personas only
+├── synthesis-strategies.ts        # Mathematical synthesis algorithms
+├── parallel-reasoning-engine.ts   # Core session/agent management
+├── parallel-reasoning-tools.ts    # MCP tool handlers
+├── session.ts                     # Durable Objects state
+├── everything-workers.ts          # MCP server integration
+├── express-adapter.ts             # Express→Workers adapter
+└── index.ts                       # Routing (USE idFromString!)
+```
+
+## Critical Rules
+
+### ✅ DO
+
+1. **Business Domain Focus**
+   - Agent personas: Strategy Consultant, Financial Analyst, Marketing Strategist, etc.
+   - Use cases: Market entry, M&A, digital transformation, strategic decisions
+   - NO software development personas
+
+2. **Type Safety**
+   - Define interfaces for all data structures
+   - Use strict TypeScript
+   - Validate inputs at boundaries
+
+3. **Session Management**
+   - ALWAYS use `idFromString()` for Durable Objects (NOT `idFromName()`)
+   - Persist all state in Durable Objects
+   - Handle session not found gracefully
+
+4. **MCP Protocol**
+   - Follow MCP 2024-11-05 spec exactly
+   - Use JSON-RPC 2.0 format
+   - Support SSE streaming
+
+5. **Testing**
+   - Test locally with `npm run workers:dev`
+   - Run `./test-parallel-reasoning-v2.sh`
+   - Verify in production before marking complete
+
+6. **Documentation**
+   - Update .md files when changing functionality
+   - Keep PARALLEL_REASONING_GUIDE.md in sync
+   - Add JSDoc comments
+
+### ❌ DON'T
+
+1. **Don't add software development personas** (e.g., "Software Engineer", "DevOps")
+2. **Don't use `idFromName()`** - Use `idFromString()` for session IDs
+3. **Don't break MCP protocol** - Version locked to 2024-11-05
+4. **Don't add heavy dependencies** - Workers have size limits
+5. **Don't modify synthesis algorithms** without understanding the math
+6. **Don't skip local testing** before deploying
+
+## Common Patterns
+
+### Adding Agent Persona
+
+```typescript
+// In agent-personas.ts
+export const NEW_PERSONA: AgentPersona = {
+  id: "unique_id",
+  role: "Expert Title",
+  focus: "Primary focus area",
+  expertise: ["skill1", "skill2", "skill3"],
+  thinking_style: "Analytical, data-driven, strategic",
+  prompt_template: "You are a [role] with expertise in..."
+};
+
+// Add to AGENT_PERSONAS object
+export const AGENT_PERSONAS = {
+  // ... existing
+  unique_id: NEW_PERSONA,
+};
+```
+
+### Adding MCP Tool
+
+```typescript
+// 1. Define schema in parallel-reasoning-tools.ts
+export const myToolSchema = {
+  name: "my_tool",
+  description: "What it does",
+  inputSchema: {
+    type: "object",
+    properties: {
+      param: { type: "string", description: "Parameter description" }
+    },
+    required: ["param"]
+  }
+};
+
+// 2. Implement handler
+export async function handleMyTool(args: any, session: MCPSession) {
+  // Implementation
+  return { content: [{ type: "text", text: "Result" }] };
+}
+
+// 3. Register in everything-workers.ts
+// Add to tools array and handler switch
+```
+
+### Session State Access
+
+```typescript
+// Get parallel reasoning sessions
+const sessions = await session.getParallelReasoningSessions();
+
+// Modify session
+const prSession = sessions.get(sessionId);
+if (prSession) {
+  prSession.status = 'completed';
+  await session.persistParallelReasoningSessions(sessions);
+}
+```
+
+## Error Handling
+
+```typescript
+// Always handle errors gracefully
+try {
+  const result = await operation();
+  return { success: true, data: result };
+} catch (error) {
+  console.error('Operation failed:', error);
+  return {
+    success: false,
+    error: error instanceof Error ? error.message : 'Unknown error'
+  };
+}
+```
+
+## Testing Commands
+
+```bash
+# Local development
+npm run workers:dev
+
+# Run tests
+./test-parallel-reasoning-v2.sh
+
+# Deploy to production
+npm run workers:deploy
+
+# Check production
+curl https://mcp-server.vf-ghizzoni.workers.dev/
+```
+
+## Documentation Files
+
+- `README.md` - Project overview
+- `PARALLEL_REASONING_GUIDE.md` - Complete system guide
+- `CHATGPT_INTEGRATION.md` - ChatGPT integration
+- `AGENT.md` - AI agent instructions (read this!)
+- `REPOSITORY_STATUS.md` - Current status
+
+## Git Commit Format
+
+```
+<type>: <description>
+
+Types: feat, fix, docs, chore, refactor, test, style
+```
+
+Examples:
+- `feat: Add new financial analyst persona`
+- `fix: Correct session routing in index.ts`
+- `docs: Update PARALLEL_REASONING_GUIDE.md`
+- `chore: Update dependencies`
+
+## Performance Tips
+
+- Minimize Durable Objects writes (they're slower)
+- Use batch operations
+- Cache frequently accessed data
+- Optimize JSON serialization
+- Keep Workers bundle size small
+
+## Security
+
+- No API keys required
+- Session isolation via Durable Objects
+- No external API calls
+- Input validation on all tools
+- Cloudflare provides DDoS protection
+
+## When Stuck
+
+1. Read `AGENT.md` for detailed instructions
+2. Check `PARALLEL_REASONING_GUIDE.md` for system architecture
+3. Look at existing code for patterns
+4. Test locally to reproduce issues
+5. Check Cloudflare Workers logs
+6. Ask user for clarification
+
+## Success Criteria
+
+Before suggesting code:
+- ✅ Maintains business consulting focus
+- ✅ Type-safe TypeScript
+- ✅ Follows MCP protocol
+- ✅ Tested locally
+- ✅ Documented
+- ✅ No breaking changes
+
+## Remember
+
+This system enables ChatGPT to perform multi-agent parallel reasoning for business analysis. Every change should enhance this capability while maintaining reliability and performance.
+
+**Production**: https://mcp-server.vf-ghizzoni.workers.dev
+**Status**: ✅ OPERATIONAL
+
