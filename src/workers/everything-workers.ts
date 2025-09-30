@@ -402,59 +402,11 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools: Tool[] = [
-      {
-        name: ParallelReasoningToolName.PARALLEL_REASONING_INIT,
-        description:
-          "Initialize a multi-agent parallel reasoning session. Specify task and agent perspectives (e.g., strategy_consultant, financial_analyst, marketing_strategist). Returns agent prompts for parallel execution.",
-        inputSchema: zodToJsonSchema(ParallelReasoningInitSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningToolName.AGENT_REASONING_STEP,
-        description:
-          "Submit an agent's reasoning step with confidence, key points, concerns, and recommendations. Updates agent progress and session status.",
-        inputSchema: zodToJsonSchema(AgentReasoningStepSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION,
-        description:
-          "Enable communication between agents. Agents can ask questions, challenge, support, or share information with each other.",
-        inputSchema: zodToJsonSchema(CrossAgentCommunicationSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING,
-        description:
-          "Synthesize all agent perspectives into a unified recommendation. By default, requires all agents to complete before synthesis (require_all_completed=true). Use parallel_compute_status to check progress first. Choose strategy: consensus, weighted, dialectic, best_of_n, or ensemble.",
-        inputSchema: zodToJsonSchema(SynthesizeParallelReasoningSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS,
-        description:
-          "Get real-time status of parallel reasoning session. Shows agent progress, messages, and estimated completion time.",
-        inputSchema: zodToJsonSchema(ParallelComputeStatusSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningToolName.AGENT_DEBATE,
-        description:
-          "Initiate a structured debate between specific agents on a topic. Agents present arguments, challenge each other, and work toward resolution.",
-        inputSchema: zodToJsonSchema(AgentDebateSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningToolName.LIST_AGENT_PERSONAS,
-        description:
-          "List all available agent personas with their roles, expertise, and thinking styles. Use to select appropriate agents for your task.",
-        inputSchema: zodToJsonSchema(z.object({})) as ToolInput,
-      },
-      {
-        name: ParallelReasoningToolName.VALIDATE_SESSION_SPEC,
-        description:
-          "Validate a session specification before initialization. Checks if all persona IDs are valid and provides suggestions for invalid ones. Use this to catch errors before calling parallel_reasoning_init.",
-        inputSchema: zodToJsonSchema(ValidateSessionSpecSchema) as ToolInput,
-      },
-      // NEW: Capability-driven tools
+      // Capability-driven tools (v3.0 - Production Ready)
       {
         name: CapabilityToolName.ANALYZE_WITH_CAPABILITIES,
         description:
-          "🆕 Analyze business problems using the new capability-driven architecture. Provides evidence-backed analysis with verifiable reasoning, budget tracking, and confidence scores. Supports adapters: strategy, finance, commercial, risk, comprehensive.",
+          "Analyze business problems using the capability-driven architecture. Provides evidence-backed analysis with verifiable reasoning, budget tracking, and confidence scores. Supports adapters: strategy, finance, commercial, risk, comprehensive.",
         inputSchema: zodToJsonSchema(AnalyzeWithCapabilitiesSchema) as ToolInput,
       },
       {
@@ -475,6 +427,10 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
           "Export complete session data including artifacts, evidence, confidence scores, and audit trail for compliance and review.",
         inputSchema: zodToJsonSchema(ExportSessionSchema) as ToolInput,
       },
+
+      // Legacy parallel reasoning tools are still handled by CallToolRequestSchema
+      // but not exposed in the tool list to discourage their use.
+      // They remain functional for backward compatibility if called directly.
     ];
 
     return { tools };

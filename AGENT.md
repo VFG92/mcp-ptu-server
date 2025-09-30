@@ -209,9 +209,9 @@ Weights: [0.3, 0.2, 0.25, 0.15, 0.1]
 
 ## 🔌 MCP Tools API
 
-### 🆕 Capability-Driven Tools (4 tools)
+**4 production-ready tools exposed via MCP protocol**
 
-#### `analyze_with_capabilities`
+### `analyze_with_capabilities`
 
 Main analysis tool with evidence tracking and budget awareness.
 
@@ -308,22 +308,11 @@ Export complete session for audit/compliance.
 
 ---
 
-### ⚠️ Legacy Tools (8 tools - Deprecated)
+### 📝 Note on Legacy Tools
 
-The following tools are part of the legacy persona-based system. While still functional, they are **deprecated** and will be removed in Q3 2025.
+Legacy persona-based tools (8 tools) have been **removed from the public MCP API** to encourage adoption of the capability-driven architecture. They remain functional internally for backward compatibility but are not exposed to ChatGPT or other MCP clients.
 
-- `parallel_reasoning_init` - ⚠️ Deprecated (use `analyze_with_capabilities`)
-- `agent_reasoning_step` - ⚠️ Deprecated
-- `cross_agent_communication` - ⚠️ Deprecated
-- `synthesize_parallel_reasoning` - ⚠️ Deprecated
-- `parallel_compute_status` - ⚠️ Deprecated
-- `agent_debate` - ⚠️ Deprecated
-- `list_agent_personas` - ⚠️ Deprecated
-- `validate_session_spec` - ⚠️ Deprecated
-
-**Migration Path**: See [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) for complete migration guide.
-
-**Test Status**: All 8 legacy tools verified operational via ChatGPT Developer Mode (2025-09-30).
+**Migration**: All users should migrate to `analyze_with_capabilities`. See [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) for complete migration guide.
 
 ---
 
@@ -479,12 +468,12 @@ src/workers/
 - **Files Created**: 21 new TypeScript modules
 - **Lines of Code**: ~4,500 lines
 - **Capabilities**: 9 atomic capabilities (registered and tested)
-- **Tools Available**: 12 total (4 capability-driven + 8 legacy)
+- **Tools Exposed**: 4 capability-driven tools (production ready)
 - **Tests**: 15+ unit tests + integration + performance
-- **Documentation**: 6 comprehensive guides
+- **Documentation**: 3 essential markdown files
 - **TypeScript Errors Fixed**: 13
 - **Integration Status**: Production Ready ✅
-- **Tool Verification**: ✅ Complete (see [TOOL_STATUS_REPORT.md](./TOOL_STATUS_REPORT.md))
+- **Tool Verification**: ✅ Complete (tested via ChatGPT Developer Mode)
 
 ---
 

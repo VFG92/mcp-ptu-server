@@ -78,11 +78,9 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
 
 ---
 
-## 📚 Available Tools
+## 📚 Available Tools (4 tools)
 
-### 🆕 Capability-Driven Tools (Recommended)
-
-#### `analyze_with_capabilities`
+### `analyze_with_capabilities`
 Main analysis tool with evidence tracking and budget awareness.
 
 **Arguments**:
@@ -98,7 +96,7 @@ Main analysis tool with evidence tracking and budget awareness.
 
 ---
 
-#### `list_capabilities`
+### `list_capabilities`
 Browse available capabilities by category or tag.
 
 **Returns**: 9 atomic capabilities across 5 categories (Market, Financial, Commercial, Risk, Strategic)
@@ -107,7 +105,7 @@ Browse available capabilities by category or tag.
 
 ---
 
-#### `get_capability_status`
+### `get_capability_status`
 Check status of capability analysis session.
 
 **Arguments**:
@@ -119,7 +117,7 @@ Check status of capability analysis session.
 
 ---
 
-#### `export_session`
+### `export_session`
 Export complete session for audit/compliance.
 
 **Arguments**:
@@ -131,26 +129,9 @@ Export complete session for audit/compliance.
 
 ---
 
-### ⚠️ Legacy Tools (Deprecated)
-
-The following 8 tools are part of the legacy persona-based system. While still functional, they are **deprecated** and will be removed in Q3 2025. Please migrate to `analyze_with_capabilities`.
-
-- `parallel_reasoning_init` - Initialize multi-agent session
-- `agent_reasoning_step` - Submit agent reasoning
-- `cross_agent_communication` - Agent communication
-- `synthesize_parallel_reasoning` - Synthesize results
-- `parallel_compute_status` - Session status
-- `agent_debate` - Agent debate
-- `list_agent_personas` - List personas
-- `validate_session_spec` - Validate session
-
-**Migration Guide**: See [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) for complete migration instructions.
-
----
-
 ## 🔍 Tool Verification Status
 
-**All 12 tools have been tested and verified via ChatGPT Developer Mode (2025-09-30)**
+**4 production-ready tools tested and verified via ChatGPT Developer Mode (2025-09-30)**
 
 ### Test Results Summary
 - ✅ **`analyze_with_capabilities`** - Tested with comprehensive market analysis
@@ -161,15 +142,12 @@ The following 8 tools are part of the legacy persona-based system. While still f
 - ✅ **`list_capabilities`** - Verified 9 atomic capabilities across 5 categories
   - Market (3), Financial (1), Commercial (2), Risk (2), Strategic (1)
 
-- ✅ **`parallel_reasoning_init`** - Legacy tool tested and functional
-  - Session created with 3 agents (strategy, finance, marketing)
-  - Deprecated but operational for backward compatibility
+- ✅ **`get_capability_status`** - Session status tracking operational
 
-### Non-Implemented Tools
-- ❌ **`create_entities`** - Not implemented (referenced but never built)
-- ❌ **`create_sequential_thinking`** - Not implemented (referenced but never built)
+- ✅ **`export_session`** - Complete session export with audit trail
 
-**Note**: Documentation has been updated to reflect only implemented and verified tools.
+### Legacy Tools
+Legacy persona-based tools (8 tools) have been **removed from the public API** but remain functional internally for backward compatibility. New integrations should use only the 4 capability-driven tools above.
 
 ---
 
@@ -315,7 +293,7 @@ See [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md) for details.
 - **Files Created**: 21 new TypeScript modules
 - **Lines of Code**: ~4,500 lines
 - **Capabilities**: 9 atomic capabilities (registered and tested)
-- **Tools Available**: 12 total (4 capability-driven + 8 legacy)
+- **Tools Exposed**: 4 capability-driven tools (production ready)
 - **Tests**: 15+ unit tests + integration + performance
 - **Tool Verification**: ✅ Complete (tested via ChatGPT Developer Mode)
 
