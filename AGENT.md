@@ -370,6 +370,23 @@ curl https://mcp-server.vf-ghizzoni.workers.dev/
 - Cache frequently accessed data
 - Optimize JSON serialization
 
+### Timeouts
+
+**Current Configuration**:
+- **Regular Responses**: 30 seconds (`express-adapter.ts:332`)
+- **LLM Sampling**: 30 seconds (same timeout)
+- **Long Running Operations**: Configurable via tool parameters
+
+**When to Adjust**:
+- If operations consistently take >25 seconds, consider increasing timeout
+- If operations are fast (<5 seconds), current timeout is fine
+- Monitor logs for "Response timeout - returning buffered content" warnings
+
+**Cloudflare Workers Limits**:
+- Free Plan: 10ms CPU time per request
+- Paid Plan: 50ms CPU time per request
+- Wall-clock time: No hard limit, but keep under 30 seconds for UX
+
 ---
 
 ## 🆘 Getting Help
@@ -377,8 +394,36 @@ curl https://mcp-server.vf-ghizzoni.workers.dev/
 1. **Check Documentation** - Read PARALLEL_REASONING_GUIDE.md first
 2. **Review Code** - Look at existing implementations
 3. **Test Locally** - Reproduce issues in local environment
-4. **Check Logs** - Cloudflare Workers dashboard
-5. **Ask User** - If unclear, ask for clarification
+4. **Check Logs** - Use `npx wrangler tail` for real-time logs
+5. **Review Recent Updates** - Check the "Recent Updates" section above
+6. **Ask User** - If unclear, ask for clarification
+
+### Debugging Session Issues
+
+If parallel reasoning tools fail with "Session not found":
+
+1. **Check Logs** - Look for these patterns:
+   ```
+   [Worker] POST /mcp - Session ID from header: <id>
+   [MCPSession] Loaded N sessions from storage
+   [ParallelReasoning] Looking for session <id>. Total sessions: N
+   ```
+
+2. **Verify Session ID** - Ensure the session_id from `parallel_reasoning_init` is used exactly
+
+3. **Check Durable Object Routing**:
+   - Same session_id should route to same DO
+   - Look for "Using existing DO" vs "Creating new DO" in logs
+
+4. **Verify Persistence**:
+   - Look for "Persisting N sessions to storage"
+   - Look for "Successfully persisted sessions"
+   - Check if N matches expected count
+
+5. **Common Causes**:
+   - Client not passing `mcp-session-id` header → New DO created each time
+   - Storage not persisting → Sessions lost between requests
+   - Typo in session_id → Wrong session requested
 
 ---
 
@@ -415,5 +460,111 @@ A successful change should:
 
 **Production URL**: https://mcp-server.vf-ghizzoni.workers.dev
 **Status**: ✅ OPERATIONAL
-**Version**: 2.0.0
+**Version**: 2.0.1
+
+---
+
+## 🔧 Recent Updates (v2.0.1)
+
+### Session Persistence & Timeout Fixes
+
+**Date**: 2025-09-30
+
+#### Issues Resolved:
+
+1. **sampleLLM Timeout** ✅
+   - **Problem**: 5-second timeout too short for LLM sampling requests
+   - **Solution**: Increased timeout to 30 seconds in `express-adapter.ts`
+   - **Impact**: Tool now completes successfully without 500 errors
+
+2. **Session Not Found Diagnostics** ✅
+   - **Problem**: Parallel reasoning tools couldn't find sessions after creation
+   - **Solution**: Added extensive logging throughout the session lifecycle
+   - **Files Modified**:
+     - `src/workers/index.ts` - Request routing logs
+     - `src/workers/session.ts` - Durable Object lifecycle logs
+     - `src/workers/parallel-reasoning-tools.ts` - Session operation logs
+   - **Impact**: Can now diagnose session persistence issues in production
+
+3. **Improved Error Messages** ✅
+   - **Problem**: Generic "Session not found" errors
+   - **Solution**: Enhanced error messages showing:
+     - Requested session ID
+     - List of available sessions
+     - Helpful tips for users
+   - **Impact**: Faster debugging and better user experience
+
+#### Key Changes:
+
+**Timeout Configuration** (`src/workers/express-adapter.ts:332`):
+```typescript
+setTimeout(() => {
+  console.warn('Response timeout - returning buffered content');
+  resolve();
+}, 30000); // Increased from 5000 to 30000 (30 seconds)
+```
+
+**Logging Points**:
+- `[Worker]` - HTTP request routing to Durable Objects
+- `[MCPSession]` - Durable Object lifecycle (constructor, load, persist)
+- `[ParallelReasoning]` - Session operations (create, lookup, update)
+
+**Error Message Format**:
+```
+Session not found: session_1759193023694_qtqf5ernm
+Available sessions: session_1759193023694_qtqf5ernm, session_1759193023695_abc123
+Tip: Make sure you're using the session_id returned by parallel_reasoning_init
+```
+
+#### Documentation Added:
+
+- `BUGFIX_SESSION_PERSISTENCE.md` - Technical analysis of the fixes
+- `DEPLOYMENT_INSTRUCTIONS.md` - Step-by-step deploy and test guide
+- `SUMMARY_FIXES.md` - Executive summary of changes
+
+#### Known Issues:
+
+**Session Persistence** (Under Investigation):
+- ChatGPT may not pass `mcp-session-id` header between requests
+- This causes each request to create a new Durable Object
+- Logging now helps identify if this is the root cause
+- Alternative solutions being considered:
+  - Session ID in request body
+  - Cookie-based session tracking
+  - Query parameter session tracking
+
+#### Testing:
+
+To verify the fixes work:
+
+1. **Test sampleLLM**:
+   ```json
+   {"tool": "sampleLLM", "arguments": {"prompt": "Hello", "maxTokens": 50}}
+   ```
+   Expected: Completes within 30 seconds (no timeout)
+
+2. **Test Session Persistence**:
+   ```json
+   // Step 1: Create session
+   {"tool": "parallel_reasoning_init", "arguments": {...}}
+
+   // Step 2: Check status (use session_id from step 1)
+   {"tool": "parallel_compute_status", "arguments": {"session_id": "..."}}
+   ```
+   Expected: Status found OR logs show why it failed
+
+3. **Monitor Logs**:
+   ```bash
+   npx wrangler tail
+   ```
+   Look for `[Worker]`, `[MCPSession]`, `[ParallelReasoning]` prefixes
+
+#### For AI Agents:
+
+When debugging session issues:
+1. Check logs for `[Worker]` to see if same Durable Object is used
+2. Check logs for `[MCPSession]` to see if sessions are persisted/loaded
+3. Check logs for `[ParallelReasoning]` to see session operations
+4. Look for "Total sessions: N" to verify session count
+5. If session not found, check "Available sessions" in error message
 
