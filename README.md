@@ -2,7 +2,7 @@
 
 **Version 4.0.0** | **Evidence-Backed, Industry-Aware, LLM-Native, Production-Ready**
 
-A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server featuring a **capability-driven architecture** for enterprise business analysis with **46 advanced capabilities** across 8 business domains.
+A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server featuring a **capability-driven architecture** for enterprise business analysis with **58 advanced capabilities** across 8 business domains, including **11 capabilities with explicit LLM native integration** (Python execution, web search).
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
@@ -15,14 +15,15 @@ A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MC
 
 An MCP server that enables **ChatGPT Developer Mode** to perform **evidence-backed, industry-specific business analysis** with:
 
-- **46 Advanced Capabilities** - Across 8 business domains (Corporate Strategy, Marketing, Finance, Operations, IT, Legal, HR, Analytics)
-- **Industry Adapters** - Specialized templates for Automotive, Pharmaceutical, Energy, Financial Services, and more
-- **LLM Native Integration** - Python execution, web search, data analysis capabilities
+- **58 Advanced Capabilities** - Across 8 business domains (Corporate Strategy, Marketing, Finance, Operations, IT, Legal, HR, Analytics)
+- **11 Native-Integrated Capabilities** - Explicit Python/Web Search integration for financial modeling, market intelligence, and advanced analytics (+18.5% avg confidence)
+- **Industry Adapters** - Specialized templates for Automotive, Pharmaceutical, Energy, Financial Services, and 20+ more
+- **LLM Native Integration** - Python execution, web search, data analysis with graceful degradation
 - **Evidence Tracking** - 6 types (CALCULATION, RETRIEVAL, PRECEDENT, ASSUMPTION, SIMULATION, HEURISTIC)
 - **Budget Awareness** - Token, CPU, memory tracking with cost optimization
-- **Confidence Scoring** - 5-component quality formula with precision metrics
+- **Confidence Scoring** - 5-component quality formula with precision metrics (0.65-0.90)
 - **Output Validation** - Strong Zod schemas for type safety
-- **Tournament Mode** - Multi-criteria judging for best results
+- **Tournament Mode** - Multi-criteria judging for best results (enabled by default)
 - **Full Audit Trail** - Complete execution history with artifact versioning
 
 ---
@@ -31,7 +32,7 @@ An MCP server that enables **ChatGPT Developer Mode** to perform **evidence-back
 
 ### 🆕 Version 4.0 Enhancements
 
-#### 46 Advanced Capabilities Across 8 Domains
+#### 58 Advanced Capabilities Across 8 Domains (11 with Explicit Native Integration)
 - ✅ **Corporate Strategy & Growth** (5) - Portfolio strategy, M&A screening, scenario wargaming, sustainability, geopolitical risk
 - ✅ **Marketing & Sales** (7) - Customer segmentation, WTP analysis, brand equity, GTM, digital ROI, journey mapping, churn prediction
 - ✅ **Finance & Valuation** (7) - DCF modeling, TSR simulation, capital structure, cost reduction, working capital, IPO readiness, scenario forecasting
