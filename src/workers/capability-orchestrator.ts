@@ -20,7 +20,13 @@ import { Whiteboard, Scratchpad, ArtifactMerger } from './whiteboard-memory.js';
 import { validateArtifact } from './output-schemas.js';
 import { getAdapter } from './capability-adapters.js';
 import { detectIndustry, getIndustryContext, type IndustryVertical, type GeographicRegion, type IndustryContext } from './industry-context.js';
-import { attachNativeCapabilities, runNativeEnhancement, type NativeEnhancementOutcome } from './llm-native-capabilities.js';
+import {
+  attachNativeCapabilities,
+  runNativeEnhancement,
+  type NativeEnhancementOutcome,
+  type NativeEnhancementAttempt,
+  type NativeEnhancementResult
+} from './llm-native-capabilities.js';
 
 /**
  * Orchestration request
@@ -243,16 +249,19 @@ export class CapabilityOrchestrator {
       const capability = this.graph.get(capId);
 
       if (capability) {
-        const enhancement = await runNativeEnhancement(capability, result, context);
-        if (enhancement) {
+        const enhancementResult = await runNativeEnhancement(capability, result, context);
+        if (enhancementResult.outcome) {
           this.integrateNativeEnhancement(
             capability,
             result,
-            enhancement,
+            enhancementResult.outcome,
+            enhancementResult.attempts,
             executionResult.cost_actual,
             request.session_id,
             executionResult.warnings
           );
+        } else if (enhancementResult.attempts.length > 0) {
+          this.attachNativeRequest(result, enhancementResult.attempts);
         }
       }
 
@@ -401,6 +410,7 @@ export class CapabilityOrchestrator {
     capability: CapabilityNode,
     result: CapabilityResult,
     enhancement: NativeEnhancementOutcome,
+    attempts: NativeEnhancementAttempt[],
     executionCost: CostEstimate,
     sessionId: string,
     schedulerWarnings: string[]
@@ -431,11 +441,21 @@ export class CapabilityOrchestrator {
       timestamp: Date.now()
     });
 
-    (result.metadata as Record<string, any>).native_enhancement = {
+    const metadata = result.metadata as Record<string, any>;
+
+    metadata.native_enhancement = {
       type: enhancement.capabilityType,
       message: enhancement.message,
       data: enhancement.result
     };
+
+    metadata.native_requests = attempts.map(attempt => ({
+      type: attempt.capabilityType,
+      status: attempt.status,
+      message: attempt.message,
+      payload: attempt.request.payload,
+      error: attempt.error
+    }));
 
     const enhancementWarning = `LLM native ${enhancement.capabilityType.replace(/_/g, ' ')} enhancement applied for ${capability.name}`;
 
@@ -448,6 +468,26 @@ export class CapabilityOrchestrator {
 
     result.confidence = Math.min(0.99, result.confidence + 0.08);
     result.quality_score = Math.min(0.99, result.quality_score + 0.05);
+  }
+
+  private attachNativeRequest(result: CapabilityResult, attempts: NativeEnhancementAttempt[]): void {
+    if (attempts.length === 0) {
+      return;
+    }
+
+    const metadata = result.metadata as Record<string, any>;
+    metadata.native_requests = attempts.map(attempt => ({
+      type: attempt.capabilityType,
+      status: attempt.status,
+      message: attempt.message,
+      payload: attempt.request.payload,
+      error: attempt.error
+    }));
+
+    const pendingWarning = 'LLM native enhancement pending client execution';
+    if (!result.warnings.includes(pendingWarning)) {
+      result.warnings.push(pendingWarning);
+    }
   }
 
   /**

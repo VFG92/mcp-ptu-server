@@ -2,7 +2,7 @@ import { describe, it, expect } from '@jest/globals';
 
 import { registerAllCapabilities } from '../src/workers/capabilities/index.js';
 import { globalCapabilityGraph, type CapabilityNode, type ExecutionContext } from '../src/workers/capability-graph.js';
-import { attachNativeCapabilities, runNativeEnhancement } from '../src/workers/llm-native-capabilities.js';
+import { attachNativeCapabilities, runNativeEnhancement, isNativeRequestForwardingEnabled } from '../src/workers/llm-native-capabilities.js';
 import { getIndustryContext } from '../src/workers/industry-context.js';
 import { createDefaultPolicy } from '../src/workers/capability-orchestrator.js';
 
@@ -91,7 +91,11 @@ describe('Capability smoke validation', () => {
       expect(validation.success).toBe(true);
 
       const enhancement = await runNativeEnhancement(capability, result, context);
-      expect(enhancement).not.toBeNull();
+      expect(enhancement.attempts.length).toBeGreaterThan(0);
+
+      if (!isNativeRequestForwardingEnabled()) {
+        expect(enhancement.outcome).not.toBeNull();
+      }
     }, 20000);
   }
 });

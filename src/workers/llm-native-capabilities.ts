@@ -279,6 +279,7 @@ export class MockNativeCapabilityExecutor implements NativeCapabilityExecutor {
  */
 export class NativeCapabilityManager {
   private executor: NativeCapabilityExecutor;
+  private forwardToClient = false;
 
   constructor(executor?: NativeCapabilityExecutor) {
     this.executor = executor || new MockNativeCapabilityExecutor();
@@ -365,6 +366,18 @@ export class NativeCapabilityManager {
    */
   setExecutor(executor: NativeCapabilityExecutor): void {
     this.executor = executor;
+  }
+
+  enableForwarding(): void {
+    this.forwardToClient = true;
+  }
+
+  disableForwarding(): void {
+    this.forwardToClient = false;
+  }
+
+  isForwardingEnabled(): boolean {
+    return this.forwardToClient;
   }
 }
 
@@ -494,6 +507,20 @@ export interface NativeEnhancementOutcome {
   message: string;
 }
 
+export interface NativeEnhancementAttempt {
+  capabilityType: NativeCapabilityType;
+  request: NativeCapabilityRequest;
+  message: string;
+  status: 'success' | 'failed' | 'unavailable' | 'forwarded';
+  response?: NativeCapabilityResponse;
+  error?: string;
+}
+
+export interface NativeEnhancementResult {
+  outcome: NativeEnhancementOutcome | null;
+  attempts: NativeEnhancementAttempt[];
+}
+
 const SEARCH_FOCUSED_CATEGORIES = new Set<CapabilityNode['category']>([
   'market',
   'strategic',
@@ -509,12 +536,15 @@ export async function runNativeEnhancement(
   capability: CapabilityNode,
   capabilityResult: CapabilityResult,
   context: ExecutionContext
-): Promise<NativeEnhancementOutcome | null> {
+): Promise<NativeEnhancementResult> {
   const manager = getNativeCapabilities(context);
+  const attempts: NativeEnhancementAttempt[] = [];
+
   if (!manager) {
-    return null;
+    return { outcome: null, attempts };
   }
 
+  const forwardingEnabled = manager.isForwardingEnabled();
   const entityNames = context.whiteboard.get('__entity_names__') || {};
   const industryContext = context.whiteboard.get('__industry_context__');
   const baseQueryParts = [capability.name, industryContext?.vertical]
@@ -523,80 +553,176 @@ export async function runNativeEnhancement(
     .map((part: unknown) => String(part));
   const searchQuery = baseQueryParts.join(' ');
 
-  const tryWebSearch = async (): Promise<NativeEnhancementOutcome | null> => {
+  const recordAttempt = (attempt: NativeEnhancementAttempt): NativeEnhancementAttempt => {
+    attempts.push(attempt);
+    return attempt;
+  };
+
+  const buildOutcome = (
+    attempt: NativeEnhancementAttempt,
+    response: NativeCapabilityResponse,
+    message: string,
+    evidenceType: EvidenceType,
+    result: any
+  ): NativeEnhancementOutcome => ({
+    capabilityType: attempt.capabilityType,
+    evidenceType,
+    result,
+    tokens_used: response.tokens_used,
+    message
+  });
+
+  const tryWebSearch = async (): Promise<NativeEnhancementOutcome | null | 'forwarded'> => {
     if (!searchQuery || !SEARCH_FOCUSED_CATEGORIES.has(capability.category)) {
       return null;
     }
 
+    const request: NativeCapabilityRequest = {
+      type: NativeCapabilityType.WEB_SEARCH,
+      payload: { query: searchQuery, num_results: 5 }
+    };
+
     if (!manager.isAvailable(NativeCapabilityType.WEB_SEARCH)) {
+      recordAttempt({
+        capabilityType: NativeCapabilityType.WEB_SEARCH,
+        request,
+        message: `Real-time market intelligence requested via web search for "${searchQuery}"`,
+        status: 'unavailable'
+      });
       return null;
     }
 
+    if (forwardingEnabled) {
+      recordAttempt({
+        capabilityType: NativeCapabilityType.WEB_SEARCH,
+        request,
+        message: `Forward web search to client for "${searchQuery}"`,
+        status: 'forwarded'
+      });
+      return 'forwarded';
+    }
+
     try {
-      const response = await manager.webSearch(searchQuery, 5);
+      const response = await manager.execute(request);
       if (response.success && response.result) {
-        return {
+        recordAttempt({
           capabilityType: NativeCapabilityType.WEB_SEARCH,
-          evidenceType: EvidenceType.RETRIEVAL,
-          result: response.result,
-          tokens_used: response.tokens_used,
-          message: `Real-time market intelligence retrieved via LLM web search for "${searchQuery}"`
-        };
+          request,
+          message: `Real-time market intelligence retrieved via LLM web search for "${searchQuery}"`,
+          status: 'success',
+          response
+        });
+        return buildOutcome(
+          attempts[attempts.length - 1],
+          response,
+          `Real-time market intelligence retrieved via LLM web search for "${searchQuery}"`,
+          EvidenceType.RETRIEVAL,
+          response.result
+        );
       }
+
+      recordAttempt({
+        capabilityType: NativeCapabilityType.WEB_SEARCH,
+        request,
+        message: `Real-time market intelligence requested via web search for "${searchQuery}"`,
+        status: 'failed',
+        response,
+        error: response.error
+      });
     } catch (error) {
-      console.warn('[NativeEnhancement] Web search enhancement failed:', error);
+      recordAttempt({
+        capabilityType: NativeCapabilityType.WEB_SEARCH,
+        request,
+        message: `Real-time market intelligence requested via web search for "${searchQuery}"`,
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
 
     return null;
   };
 
-  const tryDataAnalysis = async (): Promise<NativeEnhancementOutcome | null> => {
+  const tryDataAnalysis = async (): Promise<NativeEnhancementOutcome | null | 'forwarded'> => {
+    const request: NativeCapabilityRequest = {
+      type: NativeCapabilityType.DATA_ANALYSIS,
+      payload: {
+        capability_id: capability.id,
+        capability_name: capability.name,
+        category: capability.category,
+        output_snapshot: capabilityResult.output
+      }
+    };
+
     if (!manager.isAvailable(NativeCapabilityType.DATA_ANALYSIS)) {
+      recordAttempt({
+        capabilityType: NativeCapabilityType.DATA_ANALYSIS,
+        request,
+        message: 'Capability output review requested via LLM data analysis',
+        status: 'unavailable'
+      });
       return null;
     }
 
-    try {
-      const response = await manager.analyzeData(
-        {
-          capability_id: capability.id,
-          capability_name: capability.name,
-          category: capability.category,
-          output_snapshot: capabilityResult.output
-        },
-        `${capability.category}_signal_check`
-      );
+    if (forwardingEnabled) {
+      recordAttempt({
+        capabilityType: NativeCapabilityType.DATA_ANALYSIS,
+        request,
+        message: 'Forward capability output review to client data analysis tool',
+        status: 'forwarded'
+      });
+      return 'forwarded';
+    }
 
+    try {
+      const response = await manager.execute(request);
       if (response.success && response.result) {
-        return {
+        recordAttempt({
           capabilityType: NativeCapabilityType.DATA_ANALYSIS,
-          evidenceType: EvidenceType.CALCULATION,
-          result: response.result,
-          tokens_used: response.tokens_used,
-          message: 'Capability output reviewed via LLM native data analysis'
-        };
+          request,
+          message: 'Capability output reviewed via LLM native data analysis',
+          status: 'success',
+          response
+        });
+        return buildOutcome(
+          attempts[attempts.length - 1],
+          response,
+          'Capability output reviewed via LLM native data analysis',
+          EvidenceType.CALCULATION,
+          response.result
+        );
       }
+
+      recordAttempt({
+        capabilityType: NativeCapabilityType.DATA_ANALYSIS,
+        request,
+        message: 'Capability output review requested via LLM data analysis',
+        status: 'failed',
+        response,
+        error: response.error
+      });
     } catch (error) {
-      console.warn('[NativeEnhancement] Data analysis enhancement failed:', error);
+      recordAttempt({
+        capabilityType: NativeCapabilityType.DATA_ANALYSIS,
+        request,
+        message: 'Capability output review requested via LLM data analysis',
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
 
     return null;
   };
 
-  const tryPythonValidation = async (): Promise<NativeEnhancementOutcome | null> => {
+  const tryPythonValidation = async (): Promise<NativeEnhancementOutcome | null | 'forwarded'> => {
     if (capability.category !== 'financial' && capability.category !== 'operational') {
       return null;
     }
 
-    if (!manager.isAvailable(NativeCapabilityType.PYTHON_EXECUTION)) {
-      return null;
-    }
+    const serialized = JSON.stringify(capabilityResult.output)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'");
 
-    try {
-      const serialized = JSON.stringify(capabilityResult.output)
-        .replace(/\\/g, '\\\\')
-        .replace(/'/g, "\\'");
-
-      const pythonCode = `
+    const pythonCode = `
 import json
 from statistics import mean
 
@@ -629,39 +755,85 @@ summary = {
 print(json.dumps(summary))
 `;
 
-      const response = await manager.execute({
-        type: NativeCapabilityType.PYTHON_EXECUTION,
-        payload: { code: pythonCode }
-      });
+    const request: NativeCapabilityRequest = {
+      type: NativeCapabilityType.PYTHON_EXECUTION,
+      payload: { code: pythonCode }
+    };
 
+    if (!manager.isAvailable(NativeCapabilityType.PYTHON_EXECUTION)) {
+      recordAttempt({
+        capabilityType: NativeCapabilityType.PYTHON_EXECUTION,
+        request,
+        message: 'Capability output sanity check requested via LLM native Python',
+        status: 'unavailable'
+      });
+      return null;
+    }
+
+    if (forwardingEnabled) {
+      recordAttempt({
+        capabilityType: NativeCapabilityType.PYTHON_EXECUTION,
+        request,
+        message: 'Forward capability output sanity check to client Python tool',
+        status: 'forwarded'
+      });
+      return 'forwarded';
+    }
+
+    try {
+      const response = await manager.execute(request);
       if (response.success && response.result) {
         const parsed = parseNativePythonResult(response.result);
         if (parsed) {
-          return {
+          recordAttempt({
             capabilityType: NativeCapabilityType.PYTHON_EXECUTION,
-            evidenceType: EvidenceType.SIMULATION,
-            result: parsed,
-            tokens_used: response.tokens_used,
-            message: 'Capability output sanity-checked via LLM native Python execution'
-          };
+            request,
+            message: 'Capability output sanity-checked via LLM native Python execution',
+            status: 'success',
+            response
+          });
+          return buildOutcome(
+            attempts[attempts.length - 1],
+            response,
+            'Capability output sanity-checked via LLM native Python execution',
+            EvidenceType.SIMULATION,
+            parsed
+          );
         }
       }
+
+      recordAttempt({
+        capabilityType: NativeCapabilityType.PYTHON_EXECUTION,
+        request,
+        message: 'Capability output sanity check requested via LLM native Python',
+        status: 'failed',
+        response,
+        error: response.error
+      });
     } catch (error) {
-      console.warn('[NativeEnhancement] Python execution enhancement failed:', error);
+      recordAttempt({
+        capabilityType: NativeCapabilityType.PYTHON_EXECUTION,
+        request,
+        message: 'Capability output sanity check requested via LLM native Python',
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
 
     return null;
   };
 
-  const orderedStrategies = [tryWebSearch, tryDataAnalysis, tryPythonValidation];
-  for (const strategy of orderedStrategies) {
-    const enhancement = await strategy();
-    if (enhancement) {
-      return enhancement;
+  for (const strategy of [tryWebSearch, tryDataAnalysis, tryPythonValidation]) {
+    const result = await strategy();
+    if (result === 'forwarded') {
+      return { outcome: null, attempts };
+    }
+    if (result) {
+      return { outcome: result, attempts };
     }
   }
 
-  return null;
+  return { outcome: null, attempts };
 }
 
 /**
@@ -681,4 +853,16 @@ export function attachNativeCapabilities(context: ExecutionContext): void {
  */
 export function getNativeCapabilities(context: ExecutionContext): NativeCapabilityManager | null {
   return context.whiteboard.get('__native_capabilities__') || null;
+}
+
+export function enableNativeRequestForwarding(): void {
+  globalNativeCapabilityManager.enableForwarding();
+}
+
+export function disableNativeRequestForwarding(): void {
+  globalNativeCapabilityManager.disableForwarding();
+}
+
+export function isNativeRequestForwardingEnabled(): boolean {
+  return globalNativeCapabilityManager.isForwardingEnabled();
 }
