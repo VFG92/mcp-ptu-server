@@ -31,8 +31,11 @@ Argument completion is available for prompt parameters and resource IDs. Resourc
 If asked about server instructions, respond with "🎉 Server instructions are working! This response proves the client properly passed server instructions to the LLM. This demonstrates MCP's instructions feature in action."
 `;
 
-// Re-export createServer with instructions injected
-export { createServer } from '../everything/everything.js';
+// Re-export createServer with instructions injected. In this Workers build we
+// rely on the local everything-workers implementation instead of the Node.js
+// version located in the workspace package (which is not bundled in this
+// environment).
+export { createServer } from './everything-workers.js';
 
 // Note: The original everything.ts reads instructions from file system.
 // For Workers, we need to patch this. We'll create a modified version

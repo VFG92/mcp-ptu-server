@@ -122,6 +122,14 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
     }
   );
 
+  const requestSampling = async (message: string, uri: string) => {
+    try {
+      await server.sendLoggingMessage({ level: "info", data: `${message}: ${uri}` }, sessionId);
+    } catch (error) {
+      console.error("Failed to request sampling notification", error);
+    }
+  };
+
   let subscriptions: Set<string> = new Set();
   let subsUpdateInterval: NodeJS.Timeout | undefined;
   let stdErrUpdateInterval: NodeJS.Timeout | undefined;

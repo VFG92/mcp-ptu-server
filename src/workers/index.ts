@@ -8,6 +8,32 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
+const DURABLE_OBJECT_ID_REGEX = /^[0-9a-f]{64}$/i;
+const SESSION_DELIMITER = '::';
+
+const extractDurableObjectId = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (DURABLE_OBJECT_ID_REGEX.test(value)) {
+    return value;
+  }
+
+  const delimiterIndex = value.indexOf(SESSION_DELIMITER);
+  if (delimiterIndex > 0) {
+    const candidate = value.slice(0, delimiterIndex);
+    if (DURABLE_OBJECT_ID_REGEX.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
 // Type definitions for Cloudflare Workers environment
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;
@@ -68,45 +94,84 @@ app.get('/health', (c) => {
 
 // OPTIONS handler for CORS preflight
 app.options('/*', (c) => {
-  return c.text('', 204);
+  return c.newResponse(null, { status: 204 });
 });
 
 // MCP POST endpoint - initialization and requests
 app.post('/mcp', async (c) => {
-  const sessionId = c.req.header('mcp-session-id');
-  console.log(`[Worker] POST /mcp - Session ID from header: ${sessionId || 'none'}`);
+  const rawRequest = c.req.raw;
+  const headerSessionId = c.req.header('mcp-session-id');
+  console.log(`[Worker] POST /mcp - Session ID from header: ${headerSessionId || 'none'}`);
 
-  // Get or create Durable Object for this session
+  let routedDoId: string | null = extractDurableObjectId(headerSessionId ?? null);
+  let routedDoIdSource: string | null = routedDoId ? 'header' : null;
+  let routedDoIdRawValue: string | null = routedDoId ? headerSessionId ?? null : null;
+
+  if (!routedDoId) {
+    let parsedBody: unknown = null;
+    try {
+      parsedBody = await rawRequest.clone().json();
+    } catch (error) {
+      console.log(`[Worker] Unable to parse request body for session routing: ${error}`);
+    }
+
+    const considerCandidate = (value: unknown, source: string) => {
+      if (routedDoId || typeof value !== 'string') {
+        return;
+      }
+      const extracted = extractDurableObjectId(value);
+      if (extracted) {
+        routedDoId = extracted;
+        routedDoIdSource = source;
+        routedDoIdRawValue = value;
+      }
+    };
+
+    if (isRecord(parsedBody)) {
+      considerCandidate(parsedBody['transport_session_id'], 'body.transport_session_id');
+      considerCandidate(parsedBody['session_id'], 'body.session_id');
+
+      const params = isRecord(parsedBody['params']) ? parsedBody['params'] : null;
+      if (params) {
+        considerCandidate(params['transport_session_id'], 'body.params.transport_session_id');
+        considerCandidate(params['session_id'], 'body.params.session_id');
+
+        const args = isRecord(params['arguments']) ? params['arguments'] : null;
+        if (args) {
+          considerCandidate(args['transport_session_id'], 'body.params.arguments.transport_session_id');
+          considerCandidate(args['session_id'], 'body.params.arguments.session_id');
+        }
+      }
+    }
+  }
+
   let id: DurableObjectId;
 
-  if (sessionId) {
-    // Existing session - validate and use the session ID (which should be a DO ID hex string)
+  if (routedDoId) {
     try {
-      // Validate that it's a valid DO ID (64 hex characters)
-      if (sessionId.length === 64 && /^[0-9a-f]+$/i.test(sessionId)) {
-        id = c.env.MCP_SESSION.idFromString(sessionId);
-        console.log(`[Worker] Using existing DO for session: ${sessionId}`);
+      id = c.env.MCP_SESSION.idFromString(routedDoId);
+      if (routedDoIdSource === 'header') {
+        console.log(`[Worker] Using existing DO for session: ${routedDoId}`);
       } else {
-        // Invalid format - create new DO
-        console.log(`[Worker] Invalid session ID format (${sessionId.length} chars), creating new DO`);
-        id = c.env.MCP_SESSION.newUniqueId();
+        console.log(
+          `[Worker] Derived Durable Object ID ${routedDoId} from ${routedDoIdSource ?? 'request body'} (${routedDoIdRawValue}). ` +
+          'Reusing existing session without header.'
+        );
       }
     } catch (error) {
-      // If idFromString fails, create a new DO
-      console.error(`[Worker] Failed to parse session ID: ${error}. Creating new DO.`);
+      console.error(
+        `[Worker] Failed to parse session identifier "${routedDoIdRawValue ?? routedDoId}": ${error}. Creating new DO.`
+      );
       id = c.env.MCP_SESSION.newUniqueId();
+      console.log(`[Worker] Created fallback DO with ID: ${id.toString()}`);
     }
   } else {
-    // New session - create a new DO with a unique ID
     id = c.env.MCP_SESSION.newUniqueId();
     console.log(`[Worker] Creating new DO with ID: ${id.toString()}`);
   }
 
-  // Get the Durable Object stub
   const stub = c.env.MCP_SESSION.get(id);
-
-  // Forward the request to the Durable Object
-  return stub.fetch(c.req.raw);
+  return stub.fetch(rawRequest);
 });
 
 // MCP GET endpoint - SSE streaming
@@ -209,5 +274,5 @@ app.delete('/mcp', async (c) => {
 export default app;
 
 // Export the Durable Object class
-export { MCPSession } from './session';
+export { MCPSession } from './session.js';
 
