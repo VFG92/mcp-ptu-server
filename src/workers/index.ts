@@ -80,9 +80,22 @@ app.post('/mcp', async (c) => {
   let id: DurableObjectId;
 
   if (sessionId) {
-    // Existing session - use the session ID (which is the DO ID hex string) to get the DO
-    id = c.env.MCP_SESSION.idFromString(sessionId);
-    console.log(`[Worker] Using existing DO for session: ${sessionId}`);
+    // Existing session - validate and use the session ID (which should be a DO ID hex string)
+    try {
+      // Validate that it's a valid DO ID (64 hex characters)
+      if (sessionId.length === 64 && /^[0-9a-f]+$/i.test(sessionId)) {
+        id = c.env.MCP_SESSION.idFromString(sessionId);
+        console.log(`[Worker] Using existing DO for session: ${sessionId}`);
+      } else {
+        // Invalid format - create new DO
+        console.log(`[Worker] Invalid session ID format (${sessionId.length} chars), creating new DO`);
+        id = c.env.MCP_SESSION.newUniqueId();
+      }
+    } catch (error) {
+      // If idFromString fails, create a new DO
+      console.error(`[Worker] Failed to parse session ID: ${error}. Creating new DO.`);
+      id = c.env.MCP_SESSION.newUniqueId();
+    }
   } else {
     // New session - create a new DO with a unique ID
     id = c.env.MCP_SESSION.newUniqueId();
@@ -111,8 +124,33 @@ app.get('/mcp', async (c) => {
     }, 400);
   }
 
+  // Validate session ID format
+  if (sessionId.length !== 64 || !/^[0-9a-f]+$/i.test(sessionId)) {
+    return c.json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: `Bad Request: Invalid session ID format (expected 64 hex chars, got ${sessionId.length})`,
+      },
+      id: null,
+    }, 400);
+  }
+
   // Get the Durable Object for this session
-  const id = c.env.MCP_SESSION.idFromString(sessionId);
+  let id: DurableObjectId;
+  try {
+    id = c.env.MCP_SESSION.idFromString(sessionId);
+  } catch (error) {
+    return c.json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: `Bad Request: Failed to parse session ID: ${error}`,
+      },
+      id: null,
+    }, 400);
+  }
+
   const stub = c.env.MCP_SESSION.get(id);
 
   // Forward the request to the Durable Object
@@ -134,8 +172,33 @@ app.delete('/mcp', async (c) => {
     }, 400);
   }
 
+  // Validate session ID format
+  if (sessionId.length !== 64 || !/^[0-9a-f]+$/i.test(sessionId)) {
+    return c.json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: `Bad Request: Invalid session ID format (expected 64 hex chars, got ${sessionId.length})`,
+      },
+      id: null,
+    }, 400);
+  }
+
   // Get the Durable Object for this session
-  const id = c.env.MCP_SESSION.idFromString(sessionId);
+  let id: DurableObjectId;
+  try {
+    id = c.env.MCP_SESSION.idFromString(sessionId);
+  } catch (error) {
+    return c.json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: `Bad Request: Failed to parse session ID: ${error}`,
+      },
+      id: null,
+    }, 400);
+  }
+
   const stub = c.env.MCP_SESSION.get(id);
 
   // Forward the request to the Durable Object
