@@ -71,110 +71,6 @@ If asked about server instructions, respond with "🎉 Server instructions are w
 const ToolInputSchema = ToolSchema.shape.inputSchema;
 type ToolInput = z.infer<typeof ToolInputSchema>;
 
-const ToolOutputSchema = ToolSchema.shape.outputSchema;
-type ToolOutput = z.infer<typeof ToolOutputSchema>;
-
-/* Input schemas for tools implemented in this server */
-const EchoSchema = z.object({
-  message: z.string().describe("Message to echo"),
-});
-
-const AddSchema = z.object({
-  a: z.number().describe("First number"),
-  b: z.number().describe("Second number"),
-});
-
-const LongRunningOperationSchema = z.object({
-  duration: z
-    .number()
-    .default(10)
-    .describe("Duration of the operation in seconds"),
-  steps: z
-    .number()
-    .default(5)
-    .describe("Number of steps in the operation"),
-});
-
-const PrintEnvSchema = z.object({});
-
-const SampleLLMSchema = z.object({
-  prompt: z.string().describe("The prompt to send to the LLM"),
-  maxTokens: z
-    .number()
-    .default(100)
-    .describe("Maximum number of tokens to generate"),
-});
-
-const GetTinyImageSchema = z.object({});
-
-const AnnotatedMessageSchema = z.object({
-  messageType: z
-    .enum(["error", "success", "debug"])
-    .describe("Type of message to demonstrate different annotation patterns"),
-  includeImage: z
-    .boolean()
-    .default(false)
-    .describe("Whether to include an example image"),
-});
-
-const GetResourceReferenceSchema = z.object({
-  resourceId: z
-    .number()
-    .min(1)
-    .max(100)
-    .describe("ID of the resource to reference (1-100)"),
-});
-
-const ElicitationSchema = z.object({});
-
-const GetResourceLinksSchema = z.object({
-  count: z
-    .number()
-    .min(1)
-    .max(10)
-    .default(3)
-    .describe("Number of resource links to return (1-10)"),
-});
-
-const ListRootsSchema = z.object({});
-
-const StructuredContentSchema = {
-  input: z.object({
-    location: z
-      .string()
-      .trim()
-      .min(1)
-      .describe("City name or zip code"),
-  }),
-
-  output: z.object({
-    temperature: z
-      .number()
-      .describe("Temperature in celsius"),
-    conditions: z
-      .string()
-      .describe("Weather conditions description"),
-    humidity: z
-      .number()
-      .describe("Humidity percentage"),
-  })
-};
-
-enum ToolName {
-  ECHO = "echo",
-  ADD = "add",
-  LONG_RUNNING_OPERATION = "longRunningOperation",
-  PRINT_ENV = "printEnv",
-  SAMPLE_LLM = "sampleLLM",
-  GET_TINY_IMAGE = "getTinyImage",
-  ANNOTATED_MESSAGE = "annotatedMessage",
-  GET_RESOURCE_REFERENCE = "getResourceReference",
-  ELICITATION = "startElicitation",
-  GET_RESOURCE_LINKS = "getResourceLinks",
-  STRUCTURED_CONTENT = "structuredContent",
-  LIST_ROOTS = "listRoots"
-}
-
 enum PromptName {
   SIMPLE = "simple_prompt",
   COMPLEX = "complex_prompt",
@@ -188,9 +84,12 @@ const EXAMPLE_COMPLETIONS = {
   resourceId: ["1", "2", "3", "4", "5"],
 };
 
+const EmptyArgsSchema = z.object({}).strict();
+
 export const createServer = (
   parallelReasoningSessions?: Map<string, ParallelReasoningSession>,
-  persistCallback?: () => Promise<void>
+  persistCallback?: () => Promise<void>,
+  getTransportSessionId?: () => string | null | undefined
 ) => {
   // Initialize parallel reasoning session store if not provided
   const sessionStore = parallelReasoningSessions || new Map<string, ParallelReasoningSession>();
@@ -223,6 +122,8 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
 - parallel_compute_status: Monitor progress
 - agent_debate: Facilitate agent debates
 - list_agent_personas: See available expert personas
+
+Legacy demo tools are intentionally disabled on this endpoint so only the parallel reasoning workflow is available to clients.
 `
     }
   );
@@ -300,21 +201,6 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
     };
 
     return await server.request(request, CreateMessageResultSchema);
-  };
-
-  const requestElicitation = async (
-    message: string,
-    requestedSchema: any
-  ) => {
-    const request = {
-      method: 'elicitation/create',
-      params: {
-        message,
-        requestedSchema
-      }
-    };
-
-    return await server.request(request, z.any());
   };
 
   const ALL_RESOURCES: Resource[] = Array.from({ length: 100 }, (_, i) => {
@@ -525,510 +411,114 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    // Only expose parallel reasoning tools - demo/test tools are disabled
-    const tools: Tool[] = [
-      // Demo tools disabled - uncomment if needed for testing
-      // {
-      //   name: ToolName.ECHO,
-      //   description: "Echoes back the input",
-      //   inputSchema: zodToJsonSchema(EchoSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.ADD,
-      //   description: "Adds two numbers",
-      //   inputSchema: zodToJsonSchema(AddSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.LONG_RUNNING_OPERATION,
-      //   description:
-      //     "Demonstrates a long running operation with progress updates",
-      //   inputSchema: zodToJsonSchema(LongRunningOperationSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.PRINT_ENV,
-      //   description:
-      //     "Prints all environment variables, helpful for debugging MCP server configuration",
-      //   inputSchema: zodToJsonSchema(PrintEnvSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.SAMPLE_LLM,
-      //   description: "Samples from an LLM using MCP's sampling feature",
-      //   inputSchema: zodToJsonSchema(SampleLLMSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.GET_TINY_IMAGE,
-      //   description: "Returns the MCP_TINY_IMAGE",
-      //   inputSchema: zodToJsonSchema(GetTinyImageSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.ANNOTATED_MESSAGE,
-      //   description:
-      //     "Demonstrates how annotations can be used to provide metadata about content",
-      //   inputSchema: zodToJsonSchema(AnnotatedMessageSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.GET_RESOURCE_REFERENCE,
-      //   description:
-      //     "Returns a resource reference that can be used by MCP clients",
-      //   inputSchema: zodToJsonSchema(GetResourceReferenceSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.GET_RESOURCE_LINKS,
-      //   description:
-      //     "Returns multiple resource links that reference different types of resources",
-      //   inputSchema: zodToJsonSchema(GetResourceLinksSchema) as ToolInput,
-      // },
-      // {
-      //   name: ToolName.STRUCTURED_CONTENT,
-      //   description:
-      //     "Returns structured content along with an output schema for client data validation",
-      //   inputSchema: zodToJsonSchema(StructuredContentSchema.input) as ToolInput,
-      //   outputSchema: zodToJsonSchema(StructuredContentSchema.output) as ToolOutput,
-      // },
-    ];
-    // Optional demo tools disabled
-    // if (clientCapabilities?.roots) tools.push ({
-    //     name: ToolName.LIST_ROOTS,
-    //     description:
-    //         "Lists the current MCP roots provided by the client. Demonstrates the roots protocol capability even though this server doesn't access files.",
-    //     inputSchema: zodToJsonSchema(ListRootsSchema) as ToolInput,
-    // });
-    // if (clientCapabilities?.elicitation) tools.push ({
-    //     name: ToolName.ELICITATION,
-    //     description: "Demonstrates the Elicitation feature by asking the user to provide information about their favorite color, number, and pets.",
-    //     inputSchema: zodToJsonSchema(ElicitationSchema) as ToolInput,
-    // });
-
-    // Parallel reasoning tools - the only tools exposed
-    tools.push(
+    const parallelReasoningTools: Tool[] = [
       {
         name: ParallelReasoningToolName.PARALLEL_REASONING_INIT,
-        description: "Initialize a multi-agent parallel reasoning session. Specify task and agent perspectives (e.g., strategy_consultant, financial_analyst, marketing_strategist). Returns agent prompts for parallel execution.",
+        description:
+          "Initialize a multi-agent parallel reasoning session. Specify task and agent perspectives (e.g., strategy_consultant, financial_analyst, marketing_strategist). Returns agent prompts for parallel execution.",
         inputSchema: zodToJsonSchema(ParallelReasoningInitSchema) as ToolInput,
       },
       {
         name: ParallelReasoningToolName.AGENT_REASONING_STEP,
-        description: "Submit an agent's reasoning step with confidence, key points, concerns, and recommendations. Updates agent progress and session status.",
+        description:
+          "Submit an agent's reasoning step with confidence, key points, concerns, and recommendations. Updates agent progress and session status.",
         inputSchema: zodToJsonSchema(AgentReasoningStepSchema) as ToolInput,
       },
       {
         name: ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION,
-        description: "Enable communication between agents. Agents can ask questions, challenge, support, or share information with each other.",
+        description:
+          "Enable communication between agents. Agents can ask questions, challenge, support, or share information with each other.",
         inputSchema: zodToJsonSchema(CrossAgentCommunicationSchema) as ToolInput,
       },
       {
         name: ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING,
-        description: "Synthesize all agent perspectives into a unified recommendation. Choose strategy: consensus, weighted, dialectic, best_of_n, or ensemble.",
+        description:
+          "Synthesize all agent perspectives into a unified recommendation. Choose strategy: consensus, weighted, dialectic, best_of_n, or ensemble.",
         inputSchema: zodToJsonSchema(SynthesizeParallelReasoningSchema) as ToolInput,
       },
       {
         name: ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS,
-        description: "Get real-time status of parallel reasoning session. Shows agent progress, messages, and estimated completion time.",
+        description:
+          "Get real-time status of parallel reasoning session. Shows agent progress, messages, and estimated completion time.",
         inputSchema: zodToJsonSchema(ParallelComputeStatusSchema) as ToolInput,
       },
       {
         name: ParallelReasoningToolName.AGENT_DEBATE,
-        description: "Initiate a structured debate between specific agents on a topic. Agents present arguments, challenge each other, and work toward resolution.",
+        description:
+          "Initiate a structured debate between specific agents on a topic. Agents present arguments, challenge each other, and work toward resolution.",
         inputSchema: zodToJsonSchema(AgentDebateSchema) as ToolInput,
       },
       {
         name: ParallelReasoningToolName.LIST_AGENT_PERSONAS,
-        description: "List all available agent personas with their roles, expertise, and thinking styles. Use to select appropriate agents for your task.",
-        inputSchema: zodToJsonSchema(z.object({})) as ToolInput,
-      }
-    );
+        description:
+          "List all available agent personas with their roles, expertise, and thinking styles. Use to select appropriate agents for your task.",
+        inputSchema: zodToJsonSchema(EmptyArgsSchema) as ToolInput,
+      },
+    ];
 
-    return { tools };
+    return { tools: parallelReasoningTools };
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request,extra) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
-    if (name === ToolName.ECHO) {
-      const validatedArgs = EchoSchema.parse(args);
-      return {
-        content: [{ type: "text", text: `Echo: ${validatedArgs.message}` }],
-      };
-    }
-
-    if (name === ToolName.ADD) {
-      const validatedArgs = AddSchema.parse(args);
-      const sum = validatedArgs.a + validatedArgs.b;
-      return {
-        content: [
-          {
-            type: "text",
-            text: `The sum of ${validatedArgs.a} and ${validatedArgs.b} is ${sum}.`,
-          },
-        ],
-      };
-    }
-
-    if (name === ToolName.LONG_RUNNING_OPERATION) {
-      const validatedArgs = LongRunningOperationSchema.parse(args);
-      const { duration, steps } = validatedArgs;
-      const stepDuration = duration / steps;
-      const progressToken = request.params._meta?.progressToken;
-
-      for (let i = 1; i < steps + 1; i++) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, stepDuration * 1000)
+    switch (name) {
+      case ParallelReasoningToolName.PARALLEL_REASONING_INIT: {
+        const validatedArgs = ParallelReasoningInitSchema.parse(args);
+        const result = handleParallelReasoningInit(
+          validatedArgs,
+          sessionStore,
+          getTransportSessionId
         );
-
-        if (progressToken !== undefined) {
-          await server.notification({
-            method: "notifications/progress",
-            params: {
-              progress: i,
-              total: steps,
-              progressToken,
-            },
-          },{relatedRequestId: extra.requestId});
-        }
+        if (persistCallback) await persistCallback();
+        return result;
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Long running operation completed. Duration: ${duration} seconds, Steps: ${steps}.`,
-          },
-        ],
-      };
-    }
-
-    if (name === ToolName.PRINT_ENV) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(process.env, null, 2),
-          },
-        ],
-      };
-    }
-
-    if (name === ToolName.SAMPLE_LLM) {
-      const validatedArgs = SampleLLMSchema.parse(args);
-      const { prompt, maxTokens } = validatedArgs;
-
-      const result = await requestSampling(
-        prompt,
-        ToolName.SAMPLE_LLM,
-        maxTokens
-      );
-      return {
-        content: [
-          { type: "text", text: `LLM sampling result: ${result.content.text}` },
-        ],
-      };
-    }
-
-    if (name === ToolName.GET_TINY_IMAGE) {
-      GetTinyImageSchema.parse(args);
-      return {
-        content: [
-          {
-            type: "text",
-            text: "This is a tiny image:",
-          },
-          {
-            type: "image",
-            data: MCP_TINY_IMAGE,
-            mimeType: "image/png",
-          },
-          {
-            type: "text",
-            text: "The image above is the MCP tiny image.",
-          },
-        ],
-      };
-    }
-
-    if (name === ToolName.ANNOTATED_MESSAGE) {
-      const { messageType, includeImage } = AnnotatedMessageSchema.parse(args);
-
-      const content = [];
-
-      // Main message with different priorities/audiences based on type
-      if (messageType === "error") {
-        content.push({
-          type: "text",
-          text: "Error: Operation failed",
-          annotations: {
-            priority: 1.0, // Errors are highest priority
-            audience: ["user", "assistant"], // Both need to know about errors
-          },
-        });
-      } else if (messageType === "success") {
-        content.push({
-          type: "text",
-          text: "Operation completed successfully",
-          annotations: {
-            priority: 0.7, // Success messages are important but not critical
-            audience: ["user"], // Success mainly for user consumption
-          },
-        });
-      } else if (messageType === "debug") {
-        content.push({
-          type: "text",
-          text: "Debug: Cache hit ratio 0.95, latency 150ms",
-          annotations: {
-            priority: 0.3, // Debug info is low priority
-            audience: ["assistant"], // Technical details for assistant
-          },
-        });
+      case ParallelReasoningToolName.AGENT_REASONING_STEP: {
+        const validatedArgs = AgentReasoningStepSchema.parse(args);
+        const result = handleAgentReasoningStep(validatedArgs, sessionStore);
+        if (persistCallback) await persistCallback();
+        return result;
       }
 
-      // Optional image with its own annotations
-      if (includeImage) {
-        content.push({
-          type: "image",
-          data: MCP_TINY_IMAGE,
-          mimeType: "image/png",
-          annotations: {
-            priority: 0.5,
-            audience: ["user"], // Images primarily for user visualization
-          },
-        });
+      case ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION: {
+        const validatedArgs = CrossAgentCommunicationSchema.parse(args);
+        const result = handleCrossAgentCommunication(validatedArgs, sessionStore);
+        if (persistCallback) await persistCallback();
+        return result;
       }
 
-      return { content };
-    }
-
-    if (name === ToolName.GET_RESOURCE_REFERENCE) {
-      const validatedArgs = GetResourceReferenceSchema.parse(args);
-      const resourceId = validatedArgs.resourceId;
-
-      const resourceIndex = resourceId - 1;
-      if (resourceIndex < 0 || resourceIndex >= ALL_RESOURCES.length) {
-        throw new Error(`Resource with ID ${resourceId} does not exist`);
+      case ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING: {
+        const validatedArgs = SynthesizeParallelReasoningSchema.parse(args);
+        const result = handleSynthesizeParallelReasoning(validatedArgs, sessionStore);
+        if (persistCallback) await persistCallback();
+        return result;
       }
 
-      const resource = ALL_RESOURCES[resourceIndex];
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Returning resource reference for Resource ${resourceId}:`,
-          },
-          {
-            type: "resource",
-            resource: resource,
-          },
-          {
-            type: "text",
-            text: `You can access this resource using the URI: ${resource.uri}`,
-          },
-        ],
-      };
-    }
-
-    if (name === ToolName.ELICITATION) {
-      ElicitationSchema.parse(args);
-
-      const elicitationResult = await requestElicitation(
-        'What are your favorite things?',
-        {
-          type: 'object',
-          properties: {
-            color: { type: 'string', description: 'Favorite color' },
-            number: { type: 'integer', description: 'Favorite number', minimum: 1, maximum: 100 },
-            pets: {
-              type: 'string',
-              enum: ['cats', 'dogs', 'birds', 'fish', 'reptiles'],
-              description: 'Favorite pets'
-            },
-          }
-        }
-      );
-
-      // Handle different response actions
-      const content = [];
-
-      if (elicitationResult.action === 'accept' && elicitationResult.content) {
-        content.push({
-          type: "text",
-          text: `✅ User provided their favorite things!`,
-        });
-
-        // Only access elicitationResult.content when action is accept
-        const { color, number, pets } = elicitationResult.content;
-        content.push({
-          type: "text",
-          text: `Their favorites are:\n- Color: ${color || 'not specified'}\n- Number: ${number || 'not specified'}\n- Pets: ${pets || 'not specified'}`,
-        });
-      } else if (elicitationResult.action === 'decline') {
-        content.push({
-          type: "text",
-          text: `❌ User declined to provide their favorite things.`,
-        });
-      } else if (elicitationResult.action === 'cancel') {
-        content.push({
-          type: "text",
-          text: `⚠️ User cancelled the elicitation dialog.`,
-        });
+      case ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS: {
+        const validatedArgs = ParallelComputeStatusSchema.parse(args);
+        return handleParallelComputeStatus(validatedArgs, sessionStore);
       }
 
-      // Include raw result for debugging
-      content.push({
-        type: "text",
-        text: `\nRaw result: ${JSON.stringify(elicitationResult, null, 2)}`,
-      });
-
-      return { content };
-    }
-
-    if (name === ToolName.GET_RESOURCE_LINKS) {
-      const { count } = GetResourceLinksSchema.parse(args);
-      const content = [];
-
-      // Add intro text
-      content.push({
-        type: "text",
-        text: `Here are ${count} resource links to resources available in this server (see full output in tool response if your client does not support resource_link yet):`,
-      });
-
-      // Return resource links to actual resources from ALL_RESOURCES
-      const actualCount = Math.min(count, ALL_RESOURCES.length);
-      for (let i = 0; i < actualCount; i++) {
-        const resource = ALL_RESOURCES[i];
-        content.push({
-          type: "resource_link",
-          uri: resource.uri,
-          name: resource.name,
-          description: `Resource ${i + 1}: ${resource.mimeType === "text/plain"
-            ? "plaintext resource"
-            : "binary blob resource"
-            }`,
-          mimeType: resource.mimeType,
-        });
+      case ParallelReasoningToolName.AGENT_DEBATE: {
+        const validatedArgs = AgentDebateSchema.parse(args);
+        const result = handleAgentDebate(validatedArgs, sessionStore);
+        if (persistCallback) await persistCallback();
+        return result;
       }
 
-      return { content };
-    }
-
-    if (name === ToolName.STRUCTURED_CONTENT) {
-      // The same response is returned for every input.
-      const validatedArgs = StructuredContentSchema.input.parse(args);
-
-      const weather = {
-        temperature: 22.5,
-        conditions: "Partly cloudy",
-        humidity: 65
+      case ParallelReasoningToolName.LIST_AGENT_PERSONAS: {
+        EmptyArgsSchema.parse(args ?? {});
+        return handleListAgentPersonas();
       }
 
-      const backwardCompatiblecontent = {
-        type: "text",
-        text: JSON.stringify(weather)
+      default: {
+        const allowedTools = Object.values(ParallelReasoningToolName).join(", ");
+        throw new Error(
+          `Unknown tool: ${name}. This server only exposes parallel reasoning tools: ${allowedTools}`
+        );
       }
-
-      return {
-        content: [backwardCompatiblecontent],
-        structuredContent: weather
-      };
     }
-
-    if (name === ToolName.LIST_ROOTS) {
-      ListRootsSchema.parse(args);
-
-      if (!clientSupportsRoots) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "The MCP client does not support the roots protocol.\n\n" +
-                "This means the server cannot access information about the client's workspace directories or file system roots."
-            }
-          ]
-        };
-      }
-
-      if (currentRoots.length === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "The client supports roots but no roots are currently configured.\n\n" +
-                "This could mean:\n" +
-                "1. The client hasn't provided any roots yet\n" +
-                "2. The client provided an empty roots list\n" +
-                "3. The roots configuration is still being loaded"
-            }
-          ]
-        };
-      }
-
-      const rootsList = currentRoots.map((root, index) => {
-        return `${index + 1}. ${root.name || 'Unnamed Root'}\n   URI: ${root.uri}`;
-      }).join('\n\n');
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Current MCP Roots (${currentRoots.length} total):\n\n${rootsList}\n\n` +
-              "Note: This server demonstrates the roots protocol capability but doesn't actually access files. " +
-              "The roots are provided by the MCP client and can be used by servers that need file system access."
-          }
-        ]
-      };
-    }
-
-    // Parallel Reasoning Tool Handlers
-    if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
-      const validatedArgs = ParallelReasoningInitSchema.parse(args);
-      const result = handleParallelReasoningInit(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      return result;
-    }
-
-    if (name === ParallelReasoningToolName.AGENT_REASONING_STEP) {
-      const validatedArgs = AgentReasoningStepSchema.parse(args);
-      const result = handleAgentReasoningStep(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      return result;
-    }
-
-    if (name === ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION) {
-      const validatedArgs = CrossAgentCommunicationSchema.parse(args);
-      const result = handleCrossAgentCommunication(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      return result;
-    }
-
-    if (name === ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING) {
-      const validatedArgs = SynthesizeParallelReasoningSchema.parse(args);
-      const result = handleSynthesizeParallelReasoning(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      return result;
-    }
-
-    if (name === ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS) {
-      const validatedArgs = ParallelComputeStatusSchema.parse(args);
-      // No state change, no persist needed
-      return handleParallelComputeStatus(validatedArgs, sessionStore);
-    }
-
-    if (name === ParallelReasoningToolName.AGENT_DEBATE) {
-      const validatedArgs = AgentDebateSchema.parse(args);
-      const result = handleAgentDebate(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      return result;
-    }
-
-    if (name === ParallelReasoningToolName.LIST_AGENT_PERSONAS) {
-      // No state change, no persist needed
-      return handleListAgentPersonas();
-    }
-
-    throw new Error(`Unknown tool: ${name}`);
   });
 
   server.setRequestHandler(CompleteRequestSchema, async (request) => {

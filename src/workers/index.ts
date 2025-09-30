@@ -80,20 +80,12 @@ app.post('/mcp', async (c) => {
   let id: DurableObjectId;
 
   if (sessionId) {
-    // Existing session - validate and use the session ID (which should be a DO ID hex string)
+    // Existing session - attempt to use the provided Durable Object ID
     try {
-      // Validate that it's a valid DO ID (64 hex characters)
-      if (sessionId.length === 64 && /^[0-9a-f]+$/i.test(sessionId)) {
-        id = c.env.MCP_SESSION.idFromString(sessionId);
-        console.log(`[Worker] Using existing DO for session: ${sessionId}`);
-      } else {
-        // Invalid format - create new DO
-        console.log(`[Worker] Invalid session ID format (${sessionId.length} chars), creating new DO`);
-        id = c.env.MCP_SESSION.newUniqueId();
-      }
+      id = c.env.MCP_SESSION.idFromString(sessionId);
+      console.log(`[Worker] Using existing DO for session: ${sessionId}`);
     } catch (error) {
-      // If idFromString fails, create a new DO
-      console.error(`[Worker] Failed to parse session ID: ${error}. Creating new DO.`);
+      console.error(`[Worker] Failed to parse session ID "${sessionId}": ${error}. Creating new DO.`);
       id = c.env.MCP_SESSION.newUniqueId();
     }
   } else {
@@ -119,18 +111,6 @@ app.get('/mcp', async (c) => {
       error: {
         code: -32000,
         message: 'Bad Request: No valid session ID provided',
-      },
-      id: null,
-    }, 400);
-  }
-
-  // Validate session ID format
-  if (sessionId.length !== 64 || !/^[0-9a-f]+$/i.test(sessionId)) {
-    return c.json({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: `Bad Request: Invalid session ID format (expected 64 hex chars, got ${sessionId.length})`,
       },
       id: null,
     }, 400);
@@ -167,18 +147,6 @@ app.delete('/mcp', async (c) => {
       error: {
         code: -32000,
         message: 'Bad Request: No valid session ID provided',
-      },
-      id: null,
-    }, 400);
-  }
-
-  // Validate session ID format
-  if (sessionId.length !== 64 || !/^[0-9a-f]+$/i.test(sessionId)) {
-    return c.json({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: `Bad Request: Invalid session ID format (expected 64 hex chars, got ${sessionId.length})`,
       },
       id: null,
     }, 400);
