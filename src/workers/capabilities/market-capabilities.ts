@@ -365,11 +365,26 @@ const competitorAnalysisCapability: CapabilityNode = {
   
   async execute(inputs: any, context: ExecutionContext): Promise<CapabilityResult> {
     const startTime = Date.now();
-    
+
+    // Get entity names from context (if provided)
+    const entityNames = context.whiteboard.get('__entity_names__') || {};
+    const industryContext = context.whiteboard.get('__industry_context__');
+
+    // Use actual competitor names if provided, otherwise use industry-specific defaults or generic names
+    const competitorNames = inputs.competitors ||
+      (industryContext?.typical_players?.slice(0, 3)) ||
+      ['Market Leader A', 'Challenger B', 'Niche Player C'];
+
+    // Map entity names if provided (e.g., {"competitor_1": "Tesla", "competitor_2": "BYD"})
+    const getCompetitorName = (index: number, defaultName: string): string => {
+      const key = `competitor_${index + 1}`;
+      return entityNames[key] || competitorNames[index] || defaultName;
+    };
+
     const output = {
       competitors: [
         {
-          name: 'Market Leader A',
+          name: getCompetitorName(0, 'Market Leader A'),
           market_position: 'leader' as const,
           strengths: ['Strong brand', 'Large customer base', 'Economies of scale'],
           weaknesses: ['Legacy systems', 'Slow innovation', 'High prices'],
@@ -377,12 +392,20 @@ const competitorAnalysisCapability: CapabilityNode = {
           threat_level: 'high' as const
         },
         {
-          name: 'Challenger B',
+          name: getCompetitorName(1, 'Challenger B'),
           market_position: 'challenger' as const,
           strengths: ['Innovative product', 'Agile', 'Strong tech'],
           weaknesses: ['Limited resources', 'Small brand', 'Narrow focus'],
           strategy: 'Disrupt with technology and lower prices',
           threat_level: 'medium' as const
+        },
+        {
+          name: getCompetitorName(2, 'Niche Player C'),
+          market_position: 'niche' as const,
+          strengths: ['Specialized expertise', 'Strong customer relationships'],
+          weaknesses: ['Limited scale', 'Resource constraints'],
+          strategy: 'Focus on specific segment with deep expertise',
+          threat_level: 'low' as const
         }
       ],
       competitive_intensity: 'high' as const,
@@ -398,7 +421,7 @@ const competitorAnalysisCapability: CapabilityNode = {
         'Data-driven insights',
         'Flexible pricing models'
       ],
-      explain: 'Highly competitive market with strong incumbents and aggressive challengers. Differentiation through customer experience and data capabilities offers best opportunity.'
+      explain: `Highly competitive market with strong incumbents (${getCompetitorName(0, 'Market Leader A')}) and aggressive challengers (${getCompetitorName(1, 'Challenger B')}). Differentiation through customer experience and data capabilities offers best opportunity.`
     };
     
     const evidence = {

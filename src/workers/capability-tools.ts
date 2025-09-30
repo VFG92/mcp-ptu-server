@@ -37,8 +37,19 @@ export const AnalyzeWithCapabilitiesSchema = z.object({
     max_cpu_ms: z.number().default(10000),
     max_subrequests: z.number().default(50)
   }).optional().describe('Optional budget constraints'),
-  tournament_mode: z.boolean().optional().default(false)
-    .describe('Enable tournament mode for best results (slower but higher quality)')
+  tournament_mode: z.boolean().optional().default(true)
+    .describe('Tournament mode for multi-agent quality (DEFAULT: enabled, set to false to disable)'),
+  industry_vertical: z.enum([
+    'consumer_saas', 'enterprise_saas', 'automotive', 'pharmaceutical', 'energy',
+    'financial_services', 'manufacturing', 'retail', 'healthcare', 'telecommunications',
+    'aerospace', 'agriculture', 'construction', 'education', 'media_entertainment',
+    'logistics', 'real_estate', 'professional_services', 'government', 'generic'
+  ]).optional().describe('Industry vertical (auto-detected if not provided)'),
+  geographic_region: z.enum([
+    'north_america', 'europe', 'asia_pacific', 'latin_america', 'middle_east', 'africa', 'global'
+  ]).optional().describe('Geographic region for regulatory context'),
+  entity_names: z.record(z.string()).optional()
+    .describe('Actual entity names to use (e.g., {"competitor_1": "Tesla", "competitor_2": "BYD"})')
 });
 
 export const GetCapabilityStatusSchema = z.object({
@@ -86,7 +97,7 @@ export async function handleAnalyzeWithCapabilities(
   args: z.infer<typeof AnalyzeWithCapabilitiesSchema>
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const orch = initializeCapabilitySystem();
-  
+
   const request: OrchestrationRequest = {
     session_id: args.session_id,
     task: args.task,
@@ -94,7 +105,10 @@ export async function handleAnalyzeWithCapabilities(
     policy: createDefaultPolicy(),
     adapter_id: args.adapter_id,
     required_artifacts: args.required_artifacts,
-    tournament_mode: args.tournament_mode
+    tournament_mode: args.tournament_mode,
+    industry_vertical: args.industry_vertical,
+    geographic_region: args.geographic_region,
+    entity_names: args.entity_names
   };
   
   try {
@@ -154,13 +168,45 @@ export async function handleAnalyzeWithCapabilities(
 export async function handleGetCapabilityStatus(
   args: z.infer<typeof GetCapabilityStatusSchema>
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  // TODO: Implement session status tracking
-  return {
-    content: [{
-      type: 'text',
-      text: `Session ${args.session_id} status: Not yet implemented`
-    }]
-  };
+  const orch = initializeCapabilitySystem();
+
+  try {
+    const status = orch.getSessionStatus(args.session_id);
+
+    let response = `# Session Status: ${status.session_id}\n\n`;
+    response += `## Overview\n`;
+    response += `- **Artifacts Generated**: ${status.artifacts_count}\n`;
+    response += `- **Capabilities Executed**: ${status.capabilities_executed}\n\n`;
+
+    response += `## Resource Consumption\n`;
+    response += `- **Tokens In**: ${status.total_cost.tokens_in.toLocaleString()}\n`;
+    response += `- **Tokens Out**: ${status.total_cost.tokens_out.toLocaleString()}\n`;
+    response += `- **CPU Time**: ${status.total_cost.cpu_ms.toLocaleString()}ms\n`;
+    response += `- **Subrequests**: ${status.total_cost.subrequests}\n\n`;
+
+    if (status.recent_executions.length > 0) {
+      response += `## Recent Executions\n`;
+      for (const exec of status.recent_executions) {
+        const timestamp = new Date(exec.timestamp).toISOString();
+        const statusIcon = exec.success ? '✅' : '❌';
+        response += `- ${statusIcon} **${exec.capability_id}** at ${timestamp}\n`;
+      }
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: response
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `❌ Error: ${error instanceof Error ? error.message : String(error)}`
+      }]
+    };
+  }
 }
 
 export async function handleExportSession(

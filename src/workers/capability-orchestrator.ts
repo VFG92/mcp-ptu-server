@@ -19,6 +19,7 @@ import { TournamentKernel, BudgetBandit } from './tournament-kernel.js';
 import { Whiteboard, Scratchpad, ArtifactMerger } from './whiteboard-memory.js';
 import { validateArtifact } from './output-schemas.js';
 import { getAdapter } from './capability-adapters.js';
+import { detectIndustry, getIndustryContext, type IndustryVertical, type GeographicRegion, type IndustryContext } from './industry-context.js';
 
 /**
  * Orchestration request
@@ -30,7 +31,10 @@ export interface OrchestrationRequest {
   policy: PolicyConfig;
   adapter_id?: string;            // Optional adapter (strategy, finance, etc.)
   required_artifacts?: string[];  // Required output types
-  tournament_mode?: boolean;      // Run tournament for best results
+  tournament_mode?: boolean;      // Run tournament for best results (DEFAULT: true, set to false to disable)
+  industry_vertical?: IndustryVertical;  // Industry context (auto-detected if not provided)
+  geographic_region?: GeographicRegion;  // Geographic region for regulatory context
+  entity_names?: Record<string, string>; // Actual entity names to use (e.g., competitors, products)
 }
 
 /**
@@ -88,6 +92,21 @@ export class CapabilityOrchestrator {
   private whiteboard: Whiteboard;
   private merger: ArtifactMerger;
 
+  // Session tracking for monitoring and export
+  private sessionCosts: Map<string, {
+    tokens_in: number;
+    tokens_out: number;
+    cpu_ms: number;
+    subrequests: number;
+  }> = new Map();
+
+  private sessionExecutions: Map<string, Array<{
+    capability_id: string;
+    timestamp: number;
+    success: boolean;
+    cost: any;
+  }>> = new Map();
+
   constructor(
     graph: CapabilityGraph,
     ledger: EvidenceLedger,
@@ -104,10 +123,57 @@ export class CapabilityOrchestrator {
   }
 
   /**
+   * Track cost for a session
+   */
+  private trackSessionCost(sessionId: string, cost: {
+    tokens_in?: number;
+    tokens_out?: number;
+    cpu_ms?: number;
+    subrequests?: number;
+  }): void {
+    if (!this.sessionCosts.has(sessionId)) {
+      this.sessionCosts.set(sessionId, {
+        tokens_in: 0,
+        tokens_out: 0,
+        cpu_ms: 0,
+        subrequests: 0
+      });
+    }
+
+    const current = this.sessionCosts.get(sessionId)!;
+    current.tokens_in += cost.tokens_in || 0;
+    current.tokens_out += cost.tokens_out || 0;
+    current.cpu_ms += cost.cpu_ms || 0;
+    current.subrequests += cost.subrequests || 0;
+  }
+
+  /**
+   * Track capability execution for a session
+   */
+  private trackCapabilityExecution(sessionId: string, execution: {
+    capability_id: string;
+    timestamp: number;
+    success: boolean;
+    cost: any;
+  }): void {
+    if (!this.sessionExecutions.has(sessionId)) {
+      this.sessionExecutions.set(sessionId, []);
+    }
+
+    this.sessionExecutions.get(sessionId)!.push(execution);
+  }
+
+  /**
    * Execute orchestrated capability analysis
    */
   async execute(request: OrchestrationRequest): Promise<OrchestrationResult> {
     const startTime = Date.now();
+
+    // Detect or use provided industry context
+    const industryVertical = request.industry_vertical || detectIndustry(request.task);
+    const industryContext = getIndustryContext(industryVertical, request.geographic_region);
+
+    console.log(`[Orchestrator] Detected industry: ${industryVertical}, region: ${industryContext.region}`);
 
     // Create execution context
     const context: ExecutionContext = {
@@ -124,6 +190,10 @@ export class CapabilityOrchestrator {
       policy: request.policy,
       trace: []
     };
+
+    // Store industry context in whiteboard for capabilities to access
+    context.whiteboard.set('__industry_context__', industryContext);
+    context.whiteboard.set('__entity_names__', request.entity_names || {});
 
     // Get adapter preferences if specified
     let preferredCategories: string[] | undefined;
@@ -147,7 +217,9 @@ export class CapabilityOrchestrator {
 
     // Step 2: Create execution plan from capability chain
     const capabilityInputs = new Map<string, any>();
-    // TODO: Extract inputs from context or request
+    // Add industry context to inputs
+    capabilityInputs.set('industry_context', industryContext);
+    capabilityInputs.set('entity_names', request.entity_names || {});
     const executionPlan = await this.scheduler.plan(
       plan.recommended_chain.capabilities,
       capabilityInputs,
@@ -164,6 +236,22 @@ export class CapabilityOrchestrator {
     const evidenceQualities = new Map();
 
     for (const [capId, result] of executionResult.results) {
+      // Track execution for session
+      this.trackCapabilityExecution(request.session_id, {
+        capability_id: capId,
+        timestamp: Date.now(),
+        success: true,
+        cost: result.cost_actual
+      });
+
+      // Track costs for session
+      this.trackSessionCost(request.session_id, {
+        tokens_in: result.cost_actual.expected_tokens_in,
+        tokens_out: result.cost_actual.expected_tokens_out,
+        cpu_ms: result.cost_actual.cpu_ms,
+        subrequests: result.cost_actual.subrequests
+      });
+
       // Add evidence to ledger
       for (const [field, evidenceArray] of Object.entries(result.evidence)) {
         this.ledger.addEvidence(
@@ -192,7 +280,7 @@ export class CapabilityOrchestrator {
       // Validate against schema
       const capability = this.graph.get(capId);
       let validationErrors: string[] | undefined;
-      
+
       if (capability) {
         const validation = capability.output_contract.schema.safeParse(result.output);
         if (!validation.success) {
@@ -219,8 +307,9 @@ export class CapabilityOrchestrator {
       });
     }
 
-    // Step 4: Tournament mode (if requested and multiple results)
-    if (request.tournament_mode && executionResult.results.size > 1) {
+    // Step 4: Tournament mode (enabled by default for multi-agent quality, can be disabled)
+    const enableTournament = request.tournament_mode !== false; // Default to true unless explicitly disabled
+    if (enableTournament && executionResult.results.size > 1) {
       const tournamentResult = await this.tournament.runTournament(
         Array.from(executionResult.results.values()),
         verifications
@@ -290,20 +379,137 @@ export class CapabilityOrchestrator {
 
   /**
    * Export session for audit trail
+   * Returns complete session data including full artifacts, evidence, and execution history
    */
   exportSession(sessionId: string): {
     session_id: string;
-    artifacts: any[];
+    artifacts: Array<{
+      id: string;
+      type: string;
+      status: string;
+      version: number;
+      created_by: string;
+      created_at: number;
+      updated_at: number;
+      data: any;
+      review_notes?: string;
+    }>;
     evidence: any[];
+    execution_summary: {
+      total_capabilities_executed: number;
+      total_cost: {
+        tokens_in: number;
+        tokens_out: number;
+        cpu_ms: number;
+        subrequests: number;
+      };
+      avg_confidence: number;
+      avg_evidence_quality: number;
+    };
     exported_at: number;
   } {
     const artifactIds = this.whiteboard.getAllIds();
-    
+
+    // Get full artifacts with metadata
+    const artifacts = artifactIds.map(id => {
+      const artifact = this.whiteboard.get(id);
+      if (!artifact) return null;
+
+      return {
+        id: artifact.metadata.id,
+        type: artifact.metadata.type,
+        status: artifact.metadata.status,
+        version: artifact.metadata.version,
+        created_by: artifact.metadata.created_by,
+        created_at: artifact.metadata.created_at,
+        updated_at: artifact.metadata.updated_at,
+        data: artifact.data,
+        review_notes: artifact.metadata.review_notes
+      };
+    }).filter(a => a !== null);
+
+    // Get evidence for all artifacts
+    const evidence = artifactIds.map(id => this.ledger.exportEvidence(id));
+
+    // Calculate execution summary
+    const totalConfidence = evidence.reduce((sum, e) => sum + (e.quality_score || 0), 0);
+    const avgConfidence = evidence.length > 0 ? totalConfidence / evidence.length : 0;
+
+    const totalEvidenceQuality = evidence.reduce((sum, e) => {
+      const verified = e.summary?.verified || 0;
+      const total = e.summary?.total_claims || 1;
+      return sum + (verified / total);
+    }, 0);
+    const avgEvidenceQuality = evidence.length > 0 ? totalEvidenceQuality / evidence.length : 0;
+
+    // Get tracked costs for this session
+    const sessionCost = this.sessionCosts.get(sessionId) || {
+      tokens_in: 0,
+      tokens_out: 0,
+      cpu_ms: 0,
+      subrequests: 0
+    };
+
+    // Get execution history for this session
+    const executions = this.sessionExecutions.get(sessionId) || [];
+
     return {
       session_id: sessionId,
-      artifacts: artifactIds.map(id => this.whiteboard.get(id)),
-      evidence: artifactIds.map(id => this.ledger.exportEvidence(id)),
+      artifacts,
+      evidence,
+      execution_summary: {
+        total_capabilities_executed: executions.length,
+        total_cost: sessionCost,
+        avg_confidence: avgConfidence,
+        avg_evidence_quality: avgEvidenceQuality
+      },
       exported_at: Date.now()
+    };
+  }
+
+  /**
+   * Get session status for monitoring
+   */
+  getSessionStatus(sessionId: string): {
+    session_id: string;
+    artifacts_count: number;
+    capabilities_executed: number;
+    total_cost: {
+      tokens_in: number;
+      tokens_out: number;
+      cpu_ms: number;
+      subrequests: number;
+    };
+    recent_executions: Array<{
+      capability_id: string;
+      timestamp: number;
+      success: boolean;
+    }>;
+  } {
+    const artifactIds = this.whiteboard.getAllIds();
+    const executions = this.sessionExecutions.get(sessionId) || [];
+    const sessionCost = this.sessionCosts.get(sessionId) || {
+      tokens_in: 0,
+      tokens_out: 0,
+      cpu_ms: 0,
+      subrequests: 0
+    };
+
+    // Get last 10 executions
+    const recentExecutions = executions
+      .slice(-10)
+      .map(e => ({
+        capability_id: e.capability_id,
+        timestamp: e.timestamp,
+        success: e.success
+      }));
+
+    return {
+      session_id: sessionId,
+      artifacts_count: artifactIds.length,
+      capabilities_executed: executions.length,
+      total_cost: sessionCost,
+      recent_executions: recentExecutions
     };
   }
 }

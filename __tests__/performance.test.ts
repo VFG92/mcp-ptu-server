@@ -287,7 +287,7 @@ describe('Performance Tests', () => {
 
       graph.register(cap);
 
-      const totalCost = graph.estimateTotalCost(['test_cap']);
+      const totalCost = graph.estimateCost(['test_cap']);
 
       expect(totalCost.expected_tokens_in).toBe(500);
       expect(totalCost.expected_tokens_out).toBe(1000);
