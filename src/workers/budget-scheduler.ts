@@ -112,6 +112,10 @@ export class BudgetScheduler {
       degraded_capabilities: []
     };
 
+    if (capabilityIds.length === 0) {
+      return plan;
+    }
+
     // Categorize capabilities by cost (cheap vs expensive)
     const capabilities = capabilityIds
       .map(id => this.graph.get(id))
@@ -153,7 +157,7 @@ export class BudgetScheduler {
     // Calculate coverage
     const totalRequested = capabilityIds.length;
     const totalPlanned = plan.waves.reduce((sum, w) => sum + w.capabilities.length, 0);
-    plan.coverage_score = totalPlanned / totalRequested;
+    plan.coverage_score = totalRequested === 0 ? 0 : totalPlanned / totalRequested;
 
     return plan;
   }
@@ -203,7 +207,7 @@ export class BudgetScheduler {
 
     // Calculate final coverage
     const totalCapabilities = plan.waves.reduce((sum, w) => sum + w.capabilities.length, 0);
-    result.coverage = result.results.size / totalCapabilities;
+    result.coverage = totalCapabilities === 0 ? 0 : result.results.size / totalCapabilities;
     result.success = result.failed.size === 0;
     result.partial = result.failed.size > 0 && result.results.size > 0;
 

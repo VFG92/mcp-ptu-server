@@ -15,12 +15,25 @@ import { InMemoryEventStore } from '@modelcontextprotocol/sdk/examples/shared/in
 import { createServer } from './everything-workers.js';
 import { ExpressRequestAdapter, ExpressResponseAdapter } from './express-adapter.js';
 import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
-import { Whiteboard } from './whiteboard-memory.js';
+import { Whiteboard, type Artifact } from './whiteboard-memory.js';
 import { EvidenceLedger } from './evidence-ledger.js';
 import { ParallelReasoningSessionManager } from './parallel-reasoning-mcp.js';
 
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;
+}
+
+function cloneValue<T>(value: T): T {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  const structuredCloneFn = (globalThis as any).structuredClone as (<U>(value: U) => U) | undefined;
+  if (structuredCloneFn) {
+    return structuredCloneFn(value);
+  }
+
+  return JSON.parse(JSON.stringify(value));
 }
 
 export class MCPSession extends DurableObject {
@@ -379,7 +392,8 @@ export class MCPSession extends DurableObject {
     // Serialize whiteboard artifacts
     const whiteboardData = this.whiteboard.getAllIds().map(id => ({
       id,
-      artifact: this.whiteboard.get(id)
+      artifact: cloneValue(this.whiteboard.get(id)),
+      history: cloneValue(this.whiteboard.getHistory(id))
     }));
 
     // Serialize evidence ledger
@@ -399,21 +413,15 @@ export class MCPSession extends DurableObject {
    * Load capability state from Durable Object storage
    */
   async loadCapabilityState(): Promise<void> {
-    const whiteboardData = await this.ctx.storage.get<Array<{ id: string; artifact: any }>>('capability_whiteboard');
+    const whiteboardData = await this.ctx.storage.get<Array<{ id: string; artifact: Artifact | null; history?: Artifact[] }>>('capability_whiteboard');
     const evidenceData = await this.ctx.storage.get<Array<any>>('capability_evidence');
     const historyData = await this.ctx.storage.get<Array<any>>('capability_execution_history');
 
     // Restore whiteboard using add() method
     if (whiteboardData) {
-      for (const { id, artifact } of whiteboardData) {
-        if (artifact && artifact.metadata && artifact.data) {
-          this.whiteboard.add(
-            id,
-            artifact.metadata.type,
-            artifact.data,
-            artifact.metadata.created_by,
-            artifact.metadata.status
-          );
+      for (const { id, artifact, history } of whiteboardData) {
+        if (artifact && artifact.metadata) {
+          this.whiteboard.restore(id, artifact, history);
         }
       }
     }

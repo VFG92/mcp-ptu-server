@@ -114,6 +114,21 @@ export class Whiteboard {
   }
 
   /**
+   * Restore an artifact snapshot (used when rehydrating from persistence)
+   */
+  restore(id: string, artifact: Artifact, history?: Artifact[]): void {
+    const artifactCopy = this.cloneValue(artifact);
+    this.artifacts.set(id, artifactCopy);
+
+    if (history && history.length > 0) {
+      const historyCopy = history.map(entry => this.cloneValue(entry));
+      this.versionHistory.set(id, historyCopy);
+    } else {
+      this.versionHistory.set(id, [artifactCopy]);
+    }
+  }
+
+  /**
    * Update artifact (creates new version)
    */
   update(
@@ -289,6 +304,19 @@ export class Whiteboard {
     }
 
     return changes;
+  }
+
+  private cloneValue<T>(value: T): T {
+    if (value === undefined || value === null) {
+      return value;
+    }
+
+    const structuredCloneFn = (globalThis as any).structuredClone as (<U>(value: U) => U) | undefined;
+    if (structuredCloneFn) {
+      return structuredCloneFn(value);
+    }
+
+    return JSON.parse(JSON.stringify(value));
   }
 }
 

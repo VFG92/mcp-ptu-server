@@ -170,6 +170,39 @@ describe('Session Persistence', () => {
     expect(history[2].metadata.version).toBe(3);
   });
 
+  it('should rehydrate artifacts with original metadata and history intact', () => {
+    const capId = 'rehydrate_capability';
+
+    whiteboard.add(capId, 'financial', { data: 'v1' }, capId, 'accepted');
+    whiteboard.update(capId, { data: 'v2' }, capId, 'Updated');
+    whiteboard.update(capId, { data: 'v3' }, capId, 'Updated');
+
+    const latestBefore = whiteboard.get(capId);
+    const historyBefore = whiteboard.getHistory(capId);
+
+    const snapshot = whiteboard.getAllIds().map(id => ({
+      id,
+      artifact: whiteboard.get(id)!,
+      history: whiteboard.getHistory(id)
+    }));
+
+    const restored = new Whiteboard();
+    for (const entry of snapshot) {
+      restored.restore(entry.id, entry.artifact, entry.history);
+    }
+
+    const restoredArtifact = restored.get(capId);
+    expect(restoredArtifact?.metadata.version).toBe(latestBefore?.metadata.version);
+    expect(restoredArtifact?.metadata.created_at).toBe(latestBefore?.metadata.created_at);
+    expect(restoredArtifact?.metadata.updated_at).toBe(latestBefore?.metadata.updated_at);
+
+    const restoredHistory = restored.getHistory(capId);
+    expect(restoredHistory).toHaveLength(historyBefore.length);
+    expect(restoredHistory.map(h => h.metadata.version)).toEqual(
+      historyBefore.map(h => h.metadata.version)
+    );
+  });
+
   it('should create new orchestrator when storage references change', async () => {
     const refs1 = { whiteboard: new Whiteboard(), ledger: new EvidenceLedger() };
     const refs2 = { whiteboard: new Whiteboard(), ledger: new EvidenceLedger() };
@@ -264,4 +297,3 @@ describe('Artifact Versioning Edge Cases', () => {
     expect(diff?.changes).toHaveLength(2); // value modified, extra added
   });
 });
-
