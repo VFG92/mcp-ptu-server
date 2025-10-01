@@ -34,8 +34,8 @@ describe('ParallelReasoningSessionManager structural validation', () => {
   });
 
   it('rejects duplicate plan IDs and preserves existing plan results', () => {
-    const planA = createPlan('plan_A', ['data_sources', 'analytical_models']);
-    const planB = createPlan('plan_A', ['risk_perspectives', 'time_horizons']);
+    const planA = createPlan('plan_A', ['data_sources', 'analytical_models', 'time_horizons']);
+    const planB = createPlan('plan_A', ['data_sources', 'analytical_models', 'risk_perspectives']);
 
     const first = manager.submitPlan(sessionId, planA);
     expect(first.accepted).toBe(true);
@@ -54,8 +54,8 @@ describe('ParallelReasoningSessionManager structural validation', () => {
   });
 
   it('validates plan IDs when storing cross-plan notes', () => {
-    const planA = createPlan('plan_A', ['data_sources', 'analytical_models']);
-    const planB = createPlan('plan_B', ['risk_perspectives', 'time_horizons']);
+    const planA = createPlan('plan_A', ['data_sources', 'analytical_models', 'time_horizons']);
+    const planB = createPlan('plan_B', ['data_sources', 'analytical_models', 'risk_perspectives']);
     expect(manager.submitPlan(sessionId, planA).accepted).toBe(true);
     expect(manager.submitPlan(sessionId, planB).accepted).toBe(true);
 
@@ -92,8 +92,8 @@ describe('ParallelReasoningSessionManager structural validation', () => {
   });
 
   it('validates plan IDs for peer critiques', () => {
-    const planA = createPlan('plan_A', ['data_sources', 'analytical_models']);
-    const planB = createPlan('plan_B', ['risk_perspectives', 'time_horizons']);
+    const planA = createPlan('plan_A', ['data_sources', 'analytical_models', 'time_horizons']);
+    const planB = createPlan('plan_B', ['data_sources', 'analytical_models', 'risk_perspectives']);
     manager.submitPlan(sessionId, planA);
     manager.submitPlan(sessionId, planB);
 
@@ -137,8 +137,18 @@ describe('ParallelReasoningSessionManager structural validation', () => {
     expect(session?.status).toBe('peer_review');
   });
 
+  it('rejects plans missing required diversity axes', () => {
+    const plan = createPlan('plan_missing_axes', ['risk_perspectives', 'time_horizons']);
+    const result = manager.submitPlan(sessionId, plan);
+
+    expect(result.accepted).toBe(false);
+    expect(result.reason).toContain('include required diversity axes');
+    expect(result.diversity_validation.required_axes_satisfied).toBe(false);
+    expect(result.diversity_validation.required_axes).toEqual(['data_sources', 'analytical_models']);
+  });
+
   it('validates plan IDs for mediation decisions', () => {
-    const planA = createPlan('plan_A', ['data_sources', 'analytical_models']);
+    const planA = createPlan('plan_A', ['data_sources', 'analytical_models', 'time_horizons']);
     manager.submitPlan(sessionId, planA);
 
     expect(() =>

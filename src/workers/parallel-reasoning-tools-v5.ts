@@ -172,6 +172,7 @@ export async function handleSubmitReasoningPlan(
     response += `**Diversity Validation**:\n`;
     response += `- Axes declared: ${result.diversity_validation.axes_declared.join(', ')}\n`;
     response += `- Min axes met (≥2): ${result.diversity_validation.min_axes_met ? '✅' : '❌'}\n`;
+    response += `- Required axes included (${result.diversity_validation.required_axes.join(', ') || 'none required'}): ${result.diversity_validation.required_axes_satisfied ? '✅' : '❌'}\n`;
     response += `- Unique to existing plans: ${result.diversity_validation.axes_unique_to_existing ? '✅' : '❌'}\n\n`;
     response += `---\n\n`;
     response += `## 🔧 How to Fix\n\n`;
@@ -179,6 +180,11 @@ export async function handleSubmitReasoningPlan(
     if (!result.diversity_validation.min_axes_met) {
       response += `Your plan declares only ${result.diversity_validation.axes_declared.length} axis/axes. **You must declare at least 2 diversity axes**.\n\n`;
       response += `Add another axis from: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views\n\n`;
+    }
+
+    if (!result.diversity_validation.required_axes_satisfied) {
+      response += `Your plan is missing one or more **required** diversity axes for this session: ${result.diversity_validation.required_axes.join(', ')}.\n\n`;
+      response += `Add the missing axes to your plan's \`diversity_axes\` declaration, then resubmit.\n\n`;
     }
 
     if (!result.diversity_validation.axes_unique_to_existing) {

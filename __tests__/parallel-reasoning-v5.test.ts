@@ -73,7 +73,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_A',
         description: 'Official statistics + Regression',
-        diversity_axes: ['data_sources', 'analytical_models'],
+        diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
         capability_chain: ['market_scan', 'tam_sam_som_build'],
         rationale: 'Baseline using official data',
         expected_outputs: ['market_map', 'tam_sam_som']
@@ -87,7 +87,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_B',
         description: 'Industry reports + Monte Carlo',
-        diversity_axes: ['time_horizons', 'risk_perspectives'], // 2 axes different from Plan A
+        diversity_axes: ['data_sources', 'analytical_models', 'risk_perspectives'], // Shares required axes, adds unique risk lens
         capability_chain: ['market_scan', 'monte_carlo_finance'],
         rationale: 'Probabilistic analysis',
         expected_outputs: ['market_map', 'monte_carlo_results']
@@ -101,7 +101,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_C',
         description: 'Academic research + Normative',
-        diversity_axes: ['quality_metrics', 'stakeholder_views'], // 2 axes different from Plan A and B
+        diversity_axes: ['data_sources', 'analytical_models', 'quality_metrics', 'stakeholder_views'], // Required axes plus two unique dimensions
         capability_chain: ['market_scan', 'regulatory_scan'],
         rationale: 'Long-term perspective',
         expected_outputs: ['market_map', 'regulatory_analysis']
@@ -189,7 +189,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_A',
         description: 'Plan A baseline',
-        diversity_axes: ['data_sources', 'analytical_models'],
+        diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
         capability_chain: ['market_scan'],
         rationale: 'Baseline analysis',
         expected_outputs: ['market_map']
@@ -201,7 +201,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_B',
         description: 'Plan B alternative',
-        diversity_axes: ['risk_perspectives', 'time_horizons'],
+        diversity_axes: ['data_sources', 'analytical_models', 'risk_perspectives'],
         capability_chain: ['market_scan'],
         rationale: 'Risk-focused analysis',
         expected_outputs: ['risk_summary']
@@ -266,7 +266,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_A',
         description: 'Plan A',
-        diversity_axes: ['data_sources', 'analytical_models'],
+        diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
         capability_chain: ['market_scan'],
         rationale: 'Test',
         expected_outputs: ['market_map']
@@ -330,7 +330,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_A',
         description: 'Plan A',
-        diversity_axes: ['data_sources', 'analytical_models'],
+        diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
         capability_chain: ['market_scan'],
         rationale: 'Test',
         expected_outputs: ['market_map']
@@ -342,7 +342,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_B',
         description: 'Plan B',
-        diversity_axes: ['data_sources', 'time_horizons'], // Different axes
+        diversity_axes: ['data_sources', 'analytical_models', 'quality_metrics'], // Shares required axes, adds unique quality focus
         capability_chain: ['market_scan'],
         rationale: 'Test',
         expected_outputs: ['market_map']
@@ -383,7 +383,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_B',
         description: 'Plan B',
-        diversity_axes: ['risk_perspectives', 'time_horizons'],
+        diversity_axes: ['data_sources', 'risk_perspectives', 'stakeholder_views'],
         capability_chain: ['market_scan'],
         rationale: 'Test',
         expected_outputs: ['market_map']

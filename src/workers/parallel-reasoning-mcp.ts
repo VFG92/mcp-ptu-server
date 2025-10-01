@@ -165,6 +165,8 @@ export class ParallelReasoningSessionManager {
       axes_declared: DiversityAxis[];
       axes_unique_to_existing: boolean;
       min_axes_met: boolean;
+      required_axes_satisfied: boolean;
+      required_axes: DiversityAxis[];
     };
   } {
     const session = this.sessions.get(session_id);
@@ -175,7 +177,9 @@ export class ParallelReasoningSessionManager {
         diversity_validation: {
           axes_declared: [],
           axes_unique_to_existing: false,
-          min_axes_met: false
+          min_axes_met: false,
+          required_axes_satisfied: false,
+          required_axes: []
         }
       };
     }
@@ -187,13 +191,18 @@ export class ParallelReasoningSessionManager {
         diversity_validation: {
           axes_declared: plan.diversity_axes,
           axes_unique_to_existing: true,
-          min_axes_met: plan.diversity_axes.length >= 2
+          min_axes_met: plan.diversity_axes.length >= 2,
+          required_axes_satisfied: session.required_diversity_axes.every(axis => plan.diversity_axes.includes(axis)),
+          required_axes: [...session.required_diversity_axes]
         }
       };
     }
 
     // Validate minimum axes
     const min_axes_met = plan.diversity_axes.length >= 2;
+    const required_axes_satisfied = session.required_diversity_axes.every(axis =>
+      plan.diversity_axes.includes(axis)
+    );
 
     // Check if axes differ from existing plans by at least two unique axes overall
     let axes_unique = true;
@@ -229,7 +238,23 @@ export class ParallelReasoningSessionManager {
         diversity_validation: {
           axes_declared: plan.diversity_axes,
           axes_unique_to_existing: axes_unique,
-          min_axes_met: false
+          min_axes_met: false,
+          required_axes_satisfied,
+          required_axes: [...session.required_diversity_axes]
+        }
+      };
+    }
+
+    if (!required_axes_satisfied) {
+      return {
+        accepted: false,
+        reason: `Plan must include required diversity axes: ${session.required_diversity_axes.join(', ')}`,
+        diversity_validation: {
+          axes_declared: plan.diversity_axes,
+          axes_unique_to_existing: axes_unique,
+          min_axes_met: true,
+          required_axes_satisfied: false,
+          required_axes: [...session.required_diversity_axes]
         }
       };
     }
@@ -241,7 +266,9 @@ export class ParallelReasoningSessionManager {
         diversity_validation: {
           axes_declared: plan.diversity_axes,
           axes_unique_to_existing: false,
-          min_axes_met: true
+          min_axes_met: true,
+          required_axes_satisfied: true,
+          required_axes: [...session.required_diversity_axes]
         }
       };
     }
@@ -260,7 +287,9 @@ export class ParallelReasoningSessionManager {
       diversity_validation: {
         axes_declared: plan.diversity_axes,
         axes_unique_to_existing: true,
-        min_axes_met: true
+        min_axes_met: true,
+        required_axes_satisfied: true,
+        required_axes: [...session.required_diversity_axes]
       }
     };
   }

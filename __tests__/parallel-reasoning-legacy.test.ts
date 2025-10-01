@@ -30,7 +30,7 @@ describe('parallel reasoning v5 tool handler validation', () => {
       plan: {
         plan_id: 'plan_A',
         description: 'Baseline plan',
-        diversity_axes: ['data_sources', 'analytical_models'],
+        diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
         capability_chain: ['market_scan'],
         rationale: 'Baseline analysis',
         expected_outputs: ['market_map']
@@ -42,7 +42,7 @@ describe('parallel reasoning v5 tool handler validation', () => {
       plan: {
         plan_id: 'plan_B',
         description: 'Risk-focused plan',
-        diversity_axes: ['risk_perspectives', 'time_horizons'],
+        diversity_axes: ['data_sources', 'analytical_models', 'risk_perspectives'],
         capability_chain: ['market_scan'],
         rationale: 'Risk lens',
         expected_outputs: ['risk_map']
@@ -174,6 +174,34 @@ describe('parallel reasoning v5 tool handler validation', () => {
     });
     expect(second.accepted).toBe(true);
     expect(second.diversity_validation.axes_unique_to_existing).toBe(true);
+  });
+
+  it('rejects plan submissions that omit required diversity axes', async () => {
+    const sessionWithRequirements = 'missing_required_axes_session';
+
+    await handleInitParallelReasoning({
+      session_id: sessionWithRequirements,
+      task_description: 'Ensure required axes enforcement',
+      required_diversity_axes: ['data_sources', 'analytical_models'],
+      min_plans: 2
+    }, manager);
+
+    const response = await handleSubmitReasoningPlan({
+      session_id: sessionWithRequirements,
+      plan: {
+        plan_id: 'plan_missing_axes',
+        description: 'Plan lacking mandated axes',
+        diversity_axes: ['risk_perspectives', 'time_horizons'],
+        capability_chain: ['market_scan'],
+        rationale: 'Deliberately missing required axes for validation',
+        expected_outputs: ['risk_summary']
+      }
+    }, manager);
+
+    const text = response.content[0].text;
+    expect(text).toContain('❌ **Plan Rejected**');
+    expect(text).toContain('Plan must include required diversity axes');
+    expect(text).toContain('Required axes included (data_sources, analytical_models): ❌');
   });
 
   it('rejects plan execution when session or plan is missing', async () => {
