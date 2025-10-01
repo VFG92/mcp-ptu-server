@@ -457,6 +457,137 @@ curl -X POST "$SERVER_URL" \
 
 ---
 
+## 🔌 Client Integration
+
+### MCP Client Configuration
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "ptu-server": {
+      "url": "https://mcp-server.vf-ghizzoni.workers.dev/mcp",
+      "transport": "sse"
+    }
+  }
+}
+```
+
+**Continue (VS Code)** (`.continue/config.json`):
+```json
+{
+  "mcpServers": [
+    {
+      "name": "ptu-server",
+      "url": "https://mcp-server.vf-ghizzoni.workers.dev/mcp",
+      "transport": "sse"
+    }
+  ]
+}
+```
+
+### Python Client Example
+
+```python
+import httpx
+import json
+
+class MCPPTUClient:
+    def __init__(self, server_url: str):
+        self.server_url = server_url
+        self.session_id = None
+        self.client = httpx.Client()
+
+    def initialize(self):
+        """Initialize MCP session and capture session ID"""
+        response = self.client.post(
+            self.server_url,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream"
+            },
+            json={
+                "jsonrpc": "2.0",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "python-client", "version": "1.0.0"}
+                },
+                "id": 1
+            }
+        )
+
+        # Extract session ID from headers
+        self.session_id = response.headers.get("mcp-session-id")
+
+        # Send initialized notification
+        self.client.post(
+            self.server_url,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                "mcp-session-id": self.session_id
+            },
+            json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
+        )
+
+        return self.session_id
+
+    def call_tool(self, tool_name: str, arguments: dict):
+        """Call MCP tool with session persistence"""
+        response = self.client.post(
+            self.server_url,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+                "mcp-session-id": self.session_id
+            },
+            json={
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": arguments},
+                "id": 2
+            }
+        )
+
+        # Parse SSE response
+        for line in response.text.split('\n'):
+            if line.startswith('data: '):
+                return json.loads(line[6:])
+        return None
+
+# Usage
+client = MCPPTUClient("https://mcp-server.vf-ghizzoni.workers.dev/mcp")
+client.initialize()
+
+client.call_tool("init_parallel_reasoning", {
+    "session_id": "my_analysis_001",
+    "task_description": "Analyze market opportunity",
+    "required_diversity_axes": ["data_sources", "analytical_models"],
+    "min_plans": 3
+})
+```
+
+### Best Practices
+
+✅ **DO**:
+- Initialize MCP session before any tool calls
+- Store `mcp-session-id` for entire workflow
+- Send session ID in header for all requests
+- Use descriptive session IDs (e.g., `fintech_analysis_2025_01`)
+- Ensure ≥2 axes differ between plans
+- Include 8-32 capabilities per plan
+
+❌ **DON'T**:
+- Skip MCP initialization
+- Forget to send `mcp-session-id` header
+- Reuse session IDs across different analyses
+- Submit plans with identical axes
+- Include <8 or >32 capabilities
+
+---
+
 ## 📚 Available Tools (12 tools)
 
 ### Capability-Driven Analysis (4 tools)
@@ -523,8 +654,6 @@ Export complete session for audit/compliance.
 ### Parallel Reasoning v5.0 (8 tools - NEW)
 
 **LLM-Centric Architecture**: MCP provides guardrails + memory, ChatGPT is sole deliberative agent
-
-📖 **Complete Tool Reference**: See [docs/parallel-reasoning-tools-reference.md](./docs/parallel-reasoning-tools-reference.md) for detailed examples, best practices, and error handling for all 8 tools.
 
 #### `init_parallel_reasoning`
 Initialize parallel reasoning session with diversity requirements.
