@@ -1,0 +1,12 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "mcp-proxy"
+main = "src/workers/proxy.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# Proxy worker - no Durable Objects needed
+# Just forwards requests with session_id translation
+
+[observability]
+enabled = true
+

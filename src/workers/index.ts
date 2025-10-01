@@ -184,6 +184,49 @@ app.post('/heartbeat', async (c) => {
   return stub.fetch(c.req.raw);
 });
 
+// Proxy endpoint - ChatGPT compatible (extracts session_id from body)
+app.post('/proxy', async (c) => {
+  console.log('[Proxy] Request received');
+
+  // Read request body
+  const body = await c.req.json();
+  console.log('[Proxy] Body:', JSON.stringify(body).substring(0, 200));
+
+  // Extract session_id from body if present
+  let sessionId: string | null = null;
+
+  if (body.params?.arguments?.session_id) {
+    sessionId = body.params.arguments.session_id;
+    console.log(`[Proxy] Found session_id in body.params.arguments.session_id: ${sessionId}`);
+  } else if (body.params?.session_id) {
+    sessionId = body.params.session_id;
+    console.log(`[Proxy] Found session_id in body.params.session_id: ${sessionId}`);
+  }
+
+  // Create new request with mcp-session-id header
+  const headers = new Headers(c.req.raw.headers);
+  headers.set('Content-Type', 'application/json');
+  headers.set('Accept', 'application/json, text/event-stream');
+
+  if (sessionId) {
+    headers.set('mcp-session-id', sessionId);
+    console.log(`[Proxy] Added mcp-session-id header: ${sessionId}`);
+  }
+
+  // Create new request to /mcp endpoint
+  const mcpUrl = new URL('/mcp', c.req.url);
+  const mcpRequest = new Request(mcpUrl.toString(), {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify(body),
+  });
+
+  console.log('[Proxy] Forwarding to /mcp endpoint');
+
+  // Forward to /mcp handler
+  return fetch(mcpRequest);
+});
+
 // MCP POST endpoint - initialization and requests
 app.post('/mcp', async (c) => {
   const rawRequest = c.req.raw;
