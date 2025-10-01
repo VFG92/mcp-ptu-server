@@ -2,20 +2,21 @@
 
 ## Common HTTP Errors and Solutions
 
-### 400 Bad Request: "Server not initialized"
+### 400 Bad Request: "Server not initialized" (legacy)
 
-**Causa**: Stai tentando di chiamare un tool MCP senza prima inizializzare il server.
+**Novità (v5.2.3)**: Il server ora esegue un'**auto-initialization** trasparente se la prima richiesta è un `tools/call`. Questo elimina l'errore 400 per la maggior parte dei client HTTP grezzi (es. `curl`).
 
-**Soluzione**: Prima di chiamare qualsiasi tool, devi sempre:
+**Quando può ancora comparire**:
 
-1. Inviare una richiesta `initialize` al server
-2. Attendere la risposta di successo
-3. Solo dopo puoi chiamare i tools
+- Se la richiesta iniziale non è un JSON-RPC valido
+- Se bypassi la Durable Object (es. test unitari diretti) e parli con il transport raw
 
-**Esempio corretto**:
+**Consigliato comunque**: eseguire esplicitamente lo `initialize`, soprattutto per client MCP completi, perché il server usa quella richiesta per negoziare le capacità del client.
+
+**Esempio (ancora valido e consigliato)**:
 
 ```bash
-# Step 1: Initialize
+# Initialize esplicito
 curl -X POST http://localhost:8787/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -25,31 +26,11 @@ curl -X POST http://localhost:8787/mcp \
     "id": 1,
     "method": "initialize",
     "params": {
-      "protocolVersion": "2024-11-05",
+      "protocolVersion": "2025-03-26",
       "capabilities": {},
       "clientInfo": {
         "name": "my-client",
         "version": "1.0.0"
-      }
-    }
-  }'
-
-# Step 2: Call tool (dopo l'inizializzazione)
-curl -X POST http://localhost:8787/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "mcp-session-id: my-session-id" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 2,
-    "method": "tools/call",
-    "params": {
-      "name": "init_parallel_reasoning",
-      "arguments": {
-        "session_id": "my-session-id",
-        "task_description": "My task",
-        "required_diversity_axes": ["data_sources", "analytical_models"],
-        "min_plans": 3
       }
     }
   }'

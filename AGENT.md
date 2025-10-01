@@ -198,8 +198,8 @@ State persists across requests using Durable Objects.
 ## 🐛 Common Issues
 
 ### HTTP 400 Bad Request: "Server not initialized"
-**Cause**: Tool called before MCP `initialize` method.
-**Fix**: Always call `initialize` first, then call tools. See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
+**Status**: Auto-mitigated in v5.2.3 (server performs implicit `initialize` if the first call is `tools/call`).
+**Best practice**: Still call `initialize` explicitly so the server can negotiate capabilities. See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
 
 ### HTTP 406 Not Acceptable: "Client must accept both application/json and text/event-stream"
 **Cause**: Missing or incorrect `Accept` header.

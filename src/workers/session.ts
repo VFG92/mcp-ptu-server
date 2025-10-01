@@ -43,6 +43,7 @@ export class MCPSession extends DurableObject {
   private sessionId: string | null = null;
   private readonly ctx: DurableObjectState;
   private readonly env: Env;
+  private transportInitialized = false;
 
   // Parallel reasoning state storage (legacy)
   private parallelReasoningSessions: Map<string, ParallelReasoningSession> = new Map();
@@ -167,6 +168,7 @@ export class MCPSession extends DurableObject {
           await this.cleanup();
         }
         this.stopHeartbeat();
+        this.transportInitialized = false;
       };
 
       // Connect the transport to the server
@@ -177,8 +179,16 @@ export class MCPSession extends DurableObject {
       await expressReq.parseBody();
       const expressRes = new ExpressResponseAdapter();
 
+      const requestMethod = this.getJsonRpcMethod(expressReq.body);
+      if (!this.transportInitialized && requestMethod !== 'initialize') {
+        await this.autoInitializeTransport(request.url);
+      }
+
       // Handle the request - pass the parsed body as third parameter
       await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
+      if (requestMethod === 'initialize') {
+        this.transportInitialized = true;
+      }
 
       // Start notification intervals after initialization
       startNotificationIntervals(this.sessionId ?? undefined);
@@ -216,13 +226,91 @@ export class MCPSession extends DurableObject {
     console.log(`[MCPSession] Request body parsed, method: ${expressReq.body?.method || 'unknown'}`);
     const expressRes = new ExpressResponseAdapter();
 
+    const requestMethod = this.getJsonRpcMethod(expressReq.body);
+    if (!this.transportInitialized && requestMethod !== 'initialize') {
+      await this.autoInitializeTransport(request.url);
+    }
+
     console.log(`[MCPSession] Calling transport.handleRequest`);
     await this.transport!.handleRequest(expressReq as any, expressRes as any, expressReq.body);
     console.log(`[MCPSession] transport.handleRequest completed`);
+    if (requestMethod === 'initialize') {
+      this.transportInitialized = true;
+    }
 
     const response = await expressRes.toResponse();
     console.log(`[MCPSession] Response created, status: ${response.status}`);
     return this.attachSessionHeader(response);
+  }
+
+  private getJsonRpcMethod(body: any): string | undefined {
+    if (!body) {
+      return undefined;
+    }
+
+    if (Array.isArray(body)) {
+      const first = body.find((item) => typeof item === 'object' && item && 'method' in item);
+      return typeof first?.method === 'string' ? first.method : undefined;
+    }
+
+    if (typeof body === 'object' && 'method' in body && typeof body.method === 'string') {
+      return body.method;
+    }
+
+    return undefined;
+  }
+
+  private async autoInitializeTransport(requestUrl: string): Promise<void> {
+    if (!this.transport || this.transportInitialized) {
+      return;
+    }
+
+    const protocolVersion = '2025-03-26';
+    const initPayload = {
+      jsonrpc: '2.0',
+      id: '__auto_init__',
+      method: 'initialize' as const,
+      params: {
+        protocolVersion,
+        capabilities: {
+          tools: {},
+          logging: {},
+          prompts: {},
+          resources: { subscribe: true },
+          sampling: {},
+          completions: {}
+        },
+        clientInfo: {
+          name: 'mcp-auto-initializer',
+          version: '1.0.0'
+        }
+      }
+    };
+
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/json');
+    headers.set('Accept', 'application/json, text/event-stream');
+    headers.set('mcp-protocol-version', protocolVersion);
+    if (this.sessionId) {
+      headers.set('mcp-session-id', this.sessionId);
+    }
+
+    try {
+      const initRequest = new Request(requestUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(initPayload)
+      });
+      const expressReq = new ExpressRequestAdapter(initRequest);
+      await expressReq.parseBody();
+      const expressRes = new ExpressResponseAdapter();
+      await this.transport.handleRequest(expressReq as any, expressRes as any, expressReq.body);
+      await expressRes.toResponse();
+      this.transportInitialized = true;
+      console.log(`[MCPSession] Auto-initialized transport for session ${this.sessionId}`);
+    } catch (error) {
+      console.error(`[MCPSession] Auto-initialization failed for session ${this.sessionId}:`, error);
+    }
   }
 
   private async handleGet(request: Request): Promise<Response> {
