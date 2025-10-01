@@ -66,6 +66,7 @@ export class MCPSession extends DurableObject {
     this.ctx = state;
     this.env = env;
     console.log(`[MCPSession] Constructor called for DO ID: ${state.id.toString()}`);
+    console.log(`[MCPSession] parallelReasoningV5Manager instance created: ${!!this.parallelReasoningV5Manager}`);
     // Load state from storage on initialization
     this.ctx.blockConcurrencyWhile(async () => {
       await this.loadParallelReasoningSessions();
@@ -74,6 +75,7 @@ export class MCPSession extends DurableObject {
       console.log(`[MCPSession] Loaded ${this.parallelReasoningSessions.size} legacy sessions from storage`);
       console.log(`[MCPSession] Loaded ${this.parallelReasoningV5Manager.getAllSessions().size} v5 sessions from storage`);
       console.log(`[MCPSession] Loaded ${this.whiteboard.getAllIds().length} artifacts from whiteboard`);
+      console.log(`[MCPSession] V5 Manager ready with ${this.parallelReasoningV5Manager.getAllSessions().size} sessions`);
     });
   }
 
@@ -124,6 +126,8 @@ export class MCPSession extends DurableObject {
       const parallelReasoningV5PersistCallback = async () => {
         await this.persistParallelReasoningV5Sessions();
       };
+      console.log(`[MCPSession] Creating server with parallelReasoningV5Manager: ${!!this.parallelReasoningV5Manager}`);
+      console.log(`[MCPSession] Manager has ${this.parallelReasoningV5Manager.getAllSessions().size} sessions before createServer`);
       const { server, cleanup, startNotificationIntervals } = createServer(
         this.parallelReasoningSessions,
         persistCallback,
@@ -134,6 +138,7 @@ export class MCPSession extends DurableObject {
         this.parallelReasoningV5Manager,
         parallelReasoningV5PersistCallback
       );
+      console.log(`[MCPSession] Server created successfully`);
       this.server = server;
       this.cleanup = cleanup;
 
@@ -440,8 +445,9 @@ export class MCPSession extends DurableObject {
   async persistParallelReasoningV5Sessions(): Promise<void> {
     const sessions = this.parallelReasoningV5Manager.serializeSessions();
     console.log(`[MCPSession] Persisting ${sessions.length} v5 sessions to storage`);
+    console.log(`[MCPSession] Session IDs being persisted: ${sessions.map(([id]) => id).join(', ')}`);
     await this.ctx.storage.put('parallel_reasoning_v5_sessions', sessions);
-    console.log(`[MCPSession] Successfully persisted v5 sessions`);
+    console.log(`[MCPSession] Successfully persisted v5 sessions to DO storage`);
   }
 
   /**
@@ -450,7 +456,12 @@ export class MCPSession extends DurableObject {
   async loadParallelReasoningV5Sessions(): Promise<void> {
     const sessions = await this.ctx.storage.get<Array<[string, any]>>('parallel_reasoning_v5_sessions');
     if (sessions) {
+      console.log(`[MCPSession] Loading ${sessions.length} v5 sessions from DO storage`);
+      console.log(`[MCPSession] Session IDs being loaded: ${sessions.map(([id]) => id).join(', ')}`);
       this.parallelReasoningV5Manager.loadSessions(sessions);
+      console.log(`[MCPSession] Successfully loaded v5 sessions into manager`);
+    } else {
+      console.log(`[MCPSession] No v5 sessions found in DO storage (first initialization)`);
     }
   }
 

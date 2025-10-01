@@ -327,6 +327,136 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
 
 ---
 
+## 🧪 Testing with curl
+
+### Example 1: Complete Parallel Reasoning Workflow
+
+```bash
+# Set server URL
+SERVER_URL="https://mcp-server.vf-ghizzoni.workers.dev/mcp"
+
+# Step 1: Initialize session
+curl -X POST "$SERVER_URL" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "init_parallel_reasoning",
+      "arguments": {
+        "session_id": "test_001",
+        "task_description": "Analyze market opportunity",
+        "required_diversity_axes": ["data_sources", "analytical_models"],
+        "min_plans": 3
+      }
+    },
+    "id": 1
+  }'
+
+# Extract session ID from response header
+SESSION_ID="<64-char-hex-from-response-header>"
+
+# Step 2: Submit Plan A
+curl -X POST "$SERVER_URL" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: $SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "submit_reasoning_plan",
+      "arguments": {
+        "session_id": "test_001",
+        "plan": {
+          "plan_id": "plan_A",
+          "description": "Data-driven analysis",
+          "diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
+          "capability_chain": [
+            "market_scan", "tam_sam_som_build", "competitor_analysis",
+            "customer_segmentation", "wtp_analysis", "gtm_playbook",
+            "dcf_modeler", "scenario_forecasting"
+          ],
+          "rationale": "Baseline using official statistics",
+          "expected_outputs": ["market_map", "tam_sam_som"]
+        }
+      }
+    },
+    "id": 2
+  }'
+
+# Step 3: Check status
+curl -X POST "$SERVER_URL" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: $SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "list_plan_status",
+      "arguments": {
+        "session_id": "test_001"
+      }
+    },
+    "id": 3
+  }'
+```
+
+### Example 2: Error Handling
+
+```bash
+# Attempt to submit plan without session header (will fail)
+curl -X POST "$SERVER_URL" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "submit_reasoning_plan",
+      "arguments": {
+        "session_id": "nonexistent_session",
+        "plan": { ... }
+      }
+    },
+    "id": 1
+  }'
+
+# Expected error: "Session not found"
+```
+
+### Example 3: Diversity Validation
+
+```bash
+# Submit plan with insufficient diversity (will be rejected)
+curl -X POST "$SERVER_URL" \
+  -H "Content-Type: application/json" \
+  -H "mcp-session-id: $SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "submit_reasoning_plan",
+      "arguments": {
+        "session_id": "test_001",
+        "plan": {
+          "plan_id": "plan_B",
+          "description": "Similar to Plan A",
+          "diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
+          "capability_chain": ["market_scan", "tam_sam_som_build"],
+          "rationale": "Too similar to Plan A",
+          "expected_outputs": ["market_map"]
+        }
+      }
+    },
+    "id": 4
+  }'
+
+# Expected error: "Plan diversity axes too similar to existing plans"
+```
+
+**Automated Test Script**: See `scripts/test-parallel-reasoning-persistence.sh` for a complete working example.
+
+---
+
 ## 📚 Available Tools (12 tools)
 
 ### Capability-Driven Analysis (4 tools)
@@ -393,6 +523,8 @@ Export complete session for audit/compliance.
 ### Parallel Reasoning v5.0 (8 tools - NEW)
 
 **LLM-Centric Architecture**: MCP provides guardrails + memory, ChatGPT is sole deliberative agent
+
+📖 **Complete Tool Reference**: See [docs/parallel-reasoning-tools-reference.md](./docs/parallel-reasoning-tools-reference.md) for detailed examples, best practices, and error handling for all 8 tools.
 
 #### `init_parallel_reasoning`
 Initialize parallel reasoning session with diversity requirements.
@@ -961,6 +1093,128 @@ Built with:
 - [Cloudflare Workers](https://workers.cloudflare.com/)
 - [TypeScript](https://www.typescriptlang.org/)
 - [Zod](https://zod.dev/)
+
+---
+
+## 🏗️ Parallel Reasoning Architecture (v5.0)
+
+### Session Persistence with Durable Objects
+
+The parallel reasoning system uses **Cloudflare Durable Objects** for stateful session management:
+
+```
+Client Request
+     ↓
+index.ts (Worker)
+  - Extracts session_id from header/body
+  - Routes to Durable Object by ID
+     ↓
+session.ts (Durable Object)
+  - Creates ParallelReasoningSessionManager instance
+  - Loads sessions from DO storage
+  - Passes manager to createServer()
+     ↓
+everything-workers.ts (MCP Server)
+  - Tool handlers receive manager instance
+  - All operations use same manager
+  - Persist callback saves to DO storage
+     ↓
+parallel-reasoning-mcp.ts (Session Manager)
+  - In-memory Map for fast access
+  - Serialization for DO persistence
+  - Validation logic (diversity, axes)
+```
+
+### Key Components
+
+#### ParallelReasoningSessionManager
+**Location**: `src/workers/parallel-reasoning-mcp.ts`
+
+**Responsibilities**:
+- ✅ Session lifecycle (init, get, finalize)
+- ✅ Plan validation (diversity ≥2 axes, required axes, uniqueness)
+- ✅ Result storage (plan_results, cross_plan_notes, peer_critiques)
+- ✅ Serialization for Durable Object persistence
+
+**Validation Rules**:
+- Minimum 2 diversity axes per plan
+- Required axes must be included in all plans
+- Symmetric difference ≥2 axes between any two plans
+- Plan IDs must be unique per session
+
+#### Durable Object Integration
+**Location**: `src/workers/session.ts`
+
+**Responsibilities**:
+- ✅ Persistent storage across HTTP requests
+- ✅ Session routing by ID (64-char hex string)
+- ✅ Load/save manager state to DO storage
+- ✅ Lifecycle management (constructor, fetch, persist)
+
+**Storage Keys**:
+- `parallel_reasoning_v5_sessions` - Serialized session data
+- `capability_whiteboard` - Capability artifacts
+- `capability_evidence` - Evidence ledger
+
+#### Tool Handlers
+**Location**: `src/workers/everything-workers.ts`
+
+**Responsibilities**:
+- ✅ Receive manager instance from createServer()
+- ✅ Validate manager is defined (fail fast if undefined)
+- ✅ Call manager methods for all operations
+- ✅ Trigger persist callback after mutations
+
+**Enhanced Logging** (v5.0.2):
+- Manager instance ID and session count
+- Session ID and plan ID for each operation
+- Persist callback execution confirmation
+
+### Session Persistence Flow
+
+```typescript
+// 1. First Request: init_parallel_reasoning
+POST /mcp
+Headers: (no mcp-session-id yet)
+Body: { method: "tools/call", params: { name: "init_parallel_reasoning", ... } }
+
+→ Worker creates new Durable Object
+→ DO constructor creates ParallelReasoningSessionManager
+→ DO loads sessions from storage (empty on first run)
+→ DO calls createServer(manager, persistCallback)
+→ Tool handler calls manager.initSession()
+→ Persist callback saves to DO storage
+→ Response includes session_id in header
+
+// 2. Subsequent Requests: submit_reasoning_plan
+POST /mcp
+Headers: mcp-session-id: <64-char-hex-id>
+Body: { method: "tools/call", params: { name: "submit_reasoning_plan", ... } }
+
+→ Worker routes to SAME Durable Object by ID
+→ DO already has manager with loaded sessions
+→ Tool handler calls manager.submitPlan()
+→ Persist callback saves updated state
+→ Session persists across requests ✓
+```
+
+### Troubleshooting
+
+**"Session not found" error**:
+1. ✅ Verify client sends `mcp-session-id` header on all requests after init
+2. ✅ Verify session ID is 64-char hex string (Durable Object ID format)
+3. ✅ Check logs for "Manager instance ID" and "Current sessions in manager"
+4. ✅ Ensure same session ID used for all operations in workflow
+
+**"0 axes declared" error**:
+1. ✅ This was a symptom of session persistence issue (fixed in v5.0.1)
+2. ✅ Verify session persists by checking logs for "Sessions after init"
+3. ✅ If still occurring, check diversity_axes array in request body
+
+**Manager undefined error**:
+1. ✅ This indicates Durable Object didn't pass manager to createServer()
+2. ✅ Check session.ts line 134 ensures manager is passed
+3. ✅ Verify latest code is deployed: `wrangler deploy`
 
 ---
 
