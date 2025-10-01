@@ -223,8 +223,8 @@ app.post('/proxy', async (c) => {
 
   console.log('[Proxy] Forwarding to /mcp endpoint');
 
-  // Forward to /mcp handler
-  return fetch(mcpRequest);
+  // Forward to /mcp handler using app.fetch for internal routing
+  return app.fetch(mcpRequest, c.env, c.executionCtx);
 });
 
 // MCP POST endpoint - initialization and requests
