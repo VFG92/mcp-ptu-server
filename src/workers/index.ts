@@ -43,20 +43,33 @@ const isNativeDurableObjectId = (value: string): boolean => {
 };
 
 /**
+ * Hash a custom session ID to a valid 64-character hex string
+ * Uses SHA-256 for deterministic mapping
+ */
+async function hashSessionId(sessionId: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(sessionId);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+/**
  * Get Durable Object ID from session ID
  * Supports both native DO IDs (64 hex chars) and custom named IDs
  */
-function getDurableObjectId(
+async function getDurableObjectId(
   namespace: DurableObjectNamespace,
   sessionId: string
-): DurableObjectId {
+): Promise<DurableObjectId> {
   if (isNativeDurableObjectId(sessionId)) {
     // Native DO ID - use idFromString
     return namespace.idFromString(sessionId);
   } else {
-    // Custom session ID - use idFromName (with type cast as it's not in @types)
-    // idFromName is a standard Cloudflare Workers API but not in all type definitions
-    return (namespace as any).idFromName(sessionId);
+    // Custom session ID - hash to 64-char hex string
+    const hashedId = await hashSessionId(sessionId);
+    return namespace.idFromString(hashedId);
   }
 };
 
@@ -159,7 +172,7 @@ app.post('/heartbeat', async (c) => {
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    id = getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
+    id = await getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
     console.log(`[Worker] Heartbeat for session: ${trimmedSessionId}`);
   } catch (error) {
     return c.json({
@@ -248,7 +261,7 @@ app.post('/mcp', async (c) => {
 
   if (routedDoId) {
     try {
-      id = getDurableObjectId(c.env.MCP_SESSION, routedDoId);
+      id = await getDurableObjectId(c.env.MCP_SESSION, routedDoId);
       const idString = id.toString();
       console.log(`[Worker] Routed to DO: ${idString} (from session: ${routedDoId}, source: ${routedDoIdSource})`);
     } catch (error) {
@@ -298,7 +311,7 @@ app.get('/mcp', async (c) => {
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    id = getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
+    id = await getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
   } catch (error) {
     return c.json({
       jsonrpc: '2.0',
@@ -347,7 +360,7 @@ app.delete('/mcp', async (c) => {
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    id = getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
+    id = await getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
   } catch (error) {
     return c.json({
       jsonrpc: '2.0',

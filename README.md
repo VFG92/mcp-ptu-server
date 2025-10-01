@@ -669,5 +669,37 @@ MIT License - See [LICENSE](./LICENSE) for details.
 
 ---
 
+## 📋 Changelog
+
+### v5.2.2 - Custom Session ID Support (2025-10-01)
+
+**Fixed**: Custom session IDs now work correctly with parallel reasoning tools.
+
+- **Problem**: Session IDs like `"session_001"` or `"sess-it-2025-10-01-a"` were rejected, causing "Session not found" errors
+- **Solution**: Implemented deterministic SHA-256 hashing to map custom session IDs to valid Durable Object IDs
+- **Impact**: ChatGPT and other LLM clients can now use human-readable session IDs for better tracking and debugging
+
+**Technical Details**:
+- Added `hashSessionId()` function that uses SHA-256 for deterministic mapping
+- Custom session IDs are hashed to 64-char hex strings compatible with `idFromString()`
+- Same session ID always routes to the same Durable Object (deterministic)
+- Updated all endpoints (POST /mcp, GET /mcp, DELETE /mcp, POST /heartbeat) to support custom IDs
+- Backward compatible: Native 64-char hex IDs continue to work as before
+- No configuration changes needed
+
+See [SESSION_ID_FIX.md](./SESSION_ID_FIX.md) for complete technical documentation.
+
+### v5.2.0 - Heartbeat Keep-Alive (2025-10-01)
+
+**Added**: Real keep-alive mechanism to prevent Durable Object eviction during long reasoning periods.
+
+- **Problem**: Cloudflare evicts Durable Objects after 30 seconds without HTTP requests
+- **Solution**: New `POST /heartbeat` endpoint + aggressive state persistence
+- **Impact**: Sessions survive long reasoning periods (30+ seconds between tool calls)
+
+See [HEARTBEAT.md](./HEARTBEAT.md) for implementation details.
+
+---
+
 **Built with ❤️ for enterprise business analysis**
 
