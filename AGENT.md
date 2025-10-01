@@ -81,6 +81,13 @@ npm test       # Run all 162 tests (all must pass)
 - ✅ Persist state after every mutating operation
 - ✅ Reload state on Durable Object startup
 
+**Custom Session IDs** (v5.2.2+):
+- ✅ Support for user-friendly session IDs (e.g., `"sess-it-2025-10-01-a"`)
+- ✅ Deterministic SHA-256 hashing ensures consistent routing
+- ✅ Native 64-char hex IDs still work (backward compatible)
+- ✅ Same session ID always routes to same Durable Object
+- ✅ See [SESSION_ID_FIX.md](./SESSION_ID_FIX.md) for technical details
+
 **Session Keep-Alive** (v5.2.1+):
 - ✅ Heartbeat endpoint (`POST /heartbeat`) keeps sessions alive
 - ✅ Cloudflare evicts Durable Objects after 30s of inactivity

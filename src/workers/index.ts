@@ -11,24 +11,54 @@ import { cors } from 'hono/cors';
 const DURABLE_OBJECT_ID_REGEX = /^[0-9a-f]{64}$/i;
 const SESSION_DELIMITER = '::';
 
-const extractDurableObjectId = (value: string | null | undefined): string | null => {
+/**
+ * Extract or validate session ID for Durable Object routing
+ *
+ * Supports two formats:
+ * 1. 64-character hex string (native Durable Object ID)
+ * 2. Any string (will be hashed to create deterministic DO ID)
+ *
+ * Returns the session ID if valid, null otherwise
+ */
+const extractSessionId = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
   }
 
-  if (DURABLE_OBJECT_ID_REGEX.test(value)) {
-    return value;
+  // Trim whitespace
+  value = value.trim();
+
+  if (!value) {
+    return null;
   }
 
-  const delimiterIndex = value.indexOf(SESSION_DELIMITER);
-  if (delimiterIndex > 0) {
-    const candidate = value.slice(0, delimiterIndex);
-    if (DURABLE_OBJECT_ID_REGEX.test(candidate)) {
-      return candidate;
-    }
-  }
+  // Accept any non-empty string as session ID
+  return value;
+};
 
-  return null;
+/**
+ * Check if a session ID is a native Durable Object ID (64 hex chars)
+ */
+const isNativeDurableObjectId = (value: string): boolean => {
+  return DURABLE_OBJECT_ID_REGEX.test(value);
+};
+
+/**
+ * Create a deterministic Durable Object ID from a custom session ID
+ * Uses SHA-256 hash to create a consistent 64-character hex string
+ */
+async function createDeterministicDoId(sessionId: string): Promise<string> {
+  // Use Web Crypto API to create SHA-256 hash
+  const encoder = new TextEncoder();
+  const data = encoder.encode(sessionId);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+  // Convert to hex string
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // SHA-256 produces 32 bytes = 64 hex chars (perfect for DO ID!)
+  return hashHex;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -112,30 +142,41 @@ app.post('/heartbeat', async (c) => {
     }, 400);
   }
 
-  // Validate session ID format
-  if (sessionId.length !== 64 || !/^[0-9a-f]+$/i.test(sessionId)) {
+  // Validate session ID is not empty
+  const trimmedSessionId = sessionId.trim();
+  if (!trimmedSessionId) {
     return c.json({
       jsonrpc: '2.0',
       error: {
         code: -32000,
-        message: `Bad Request: Invalid session ID format (expected 64 hex chars, got ${sessionId.length})`,
+        message: 'Bad Request: Session ID cannot be empty',
       },
       id: null,
     }, 400);
   }
 
-  console.log(`[Worker] POST /heartbeat - Session ID: ${sessionId}`);
+  console.log(`[Worker] POST /heartbeat - Session ID: ${trimmedSessionId}`);
 
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    id = c.env.MCP_SESSION.idFromString(sessionId);
+    // Support both native DO IDs and custom session IDs
+    if (isNativeDurableObjectId(trimmedSessionId)) {
+      // Native DO ID - use directly
+      id = c.env.MCP_SESSION.idFromString(trimmedSessionId);
+      console.log(`[Worker] Heartbeat using native DO ID: ${trimmedSessionId}`);
+    } else {
+      // Custom session ID - create deterministic hash
+      const deterministicId = await createDeterministicDoId(trimmedSessionId);
+      id = c.env.MCP_SESSION.idFromString(deterministicId);
+      console.log(`[Worker] Heartbeat using custom session ID: ${trimmedSessionId} -> ${deterministicId}`);
+    }
   } catch (error) {
     return c.json({
       jsonrpc: '2.0',
       error: {
         code: -32000,
-        message: `Bad Request: Failed to parse session ID: ${error}`,
+        message: `Bad Request: Failed to resolve session ID: ${error}`,
       },
       id: null,
     }, 400);
@@ -170,7 +211,7 @@ app.post('/mcp', async (c) => {
     if (routedDoId || typeof value !== 'string') {
       return;
     }
-    const extracted = extractDurableObjectId(value);
+    const extracted = extractSessionId(value);
     if (extracted) {
       routedDoId = extracted;
       routedDoIdSource = source;
@@ -199,7 +240,7 @@ app.post('/mcp', async (c) => {
   // PRIORITY 2: Fall back to header if no session_id in body
   if (!routedDoId) {
     console.log(`[Worker] No session_id found in request body, checking header...`);
-    routedDoId = extractDurableObjectId(headerSessionId ?? null);
+    routedDoId = extractSessionId(headerSessionId ?? null);
     if (routedDoId) {
       routedDoIdSource = 'header';
       routedDoIdRawValue = headerSessionId ?? null;
@@ -217,22 +258,24 @@ app.post('/mcp', async (c) => {
 
   if (routedDoId) {
     try {
-      id = c.env.MCP_SESSION.idFromString(routedDoId);
-      const idString = id.toString();
-      if (routedDoIdSource === 'header') {
-        console.log(`[Worker] Using existing DO for session: ${routedDoId}`);
-        console.log(`[Worker] DO ID after idFromString: ${idString}`);
+      // Check if this is a native Durable Object ID (64 hex chars) or a custom session ID
+      if (isNativeDurableObjectId(routedDoId)) {
+        // Native DO ID - use directly
+        id = c.env.MCP_SESSION.idFromString(routedDoId);
+        console.log(`[Worker] Using native DO ID: ${routedDoId}`);
       } else {
-        console.log(
-          `[Worker] Derived Durable Object ID ${routedDoId} from ${routedDoIdSource ?? 'request body'} (${routedDoIdRawValue}). ` +
-          'Reusing existing session without header.'
-        );
-        console.log(`[Worker] DO ID after idFromString: ${idString}`);
-        console.log(`[Worker] IDs match: ${idString === routedDoId}`);
+        // Custom session ID - create deterministic hash
+        const deterministicId = await createDeterministicDoId(routedDoId);
+        id = c.env.MCP_SESSION.idFromString(deterministicId);
+        console.log(`[Worker] Using custom session ID: ${routedDoId} -> ${deterministicId}`);
       }
+
+      const idString = id.toString();
+      console.log(`[Worker] DO ID resolved to: ${idString}`);
+      console.log(`[Worker] Source: ${routedDoIdSource}`);
     } catch (error) {
       console.error(
-        `[Worker] Failed to parse session identifier "${routedDoIdRawValue ?? routedDoId}": ${error}. Creating new DO.`
+        `[Worker] Failed to resolve session identifier "${routedDoIdRawValue ?? routedDoId}": ${error}. Creating new DO.`
       );
       id = c.env.MCP_SESSION.newUniqueId();
       console.log(`[Worker] Created fallback DO with ID: ${id.toString()}`);
@@ -261,13 +304,14 @@ app.get('/mcp', async (c) => {
     }, 400);
   }
 
-  // Validate session ID format
-  if (sessionId.length !== 64 || !/^[0-9a-f]+$/i.test(sessionId)) {
+  // Validate session ID is not empty
+  const trimmedSessionId = sessionId.trim();
+  if (!trimmedSessionId) {
     return c.json({
       jsonrpc: '2.0',
       error: {
         code: -32000,
-        message: `Bad Request: Invalid session ID format (expected 64 hex chars, got ${sessionId.length})`,
+        message: 'Bad Request: Session ID cannot be empty',
       },
       id: null,
     }, 400);
@@ -276,13 +320,19 @@ app.get('/mcp', async (c) => {
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    id = c.env.MCP_SESSION.idFromString(sessionId);
+    // Support both native DO IDs and custom session IDs
+    if (isNativeDurableObjectId(trimmedSessionId)) {
+      id = c.env.MCP_SESSION.idFromString(trimmedSessionId);
+    } else {
+      const deterministicId = await createDeterministicDoId(trimmedSessionId);
+      id = c.env.MCP_SESSION.idFromString(deterministicId);
+    }
   } catch (error) {
     return c.json({
       jsonrpc: '2.0',
       error: {
         code: -32000,
-        message: `Bad Request: Failed to parse session ID: ${error}`,
+        message: `Bad Request: Failed to resolve session ID: ${error}`,
       },
       id: null,
     }, 400);
@@ -309,13 +359,14 @@ app.delete('/mcp', async (c) => {
     }, 400);
   }
 
-  // Validate session ID format
-  if (sessionId.length !== 64 || !/^[0-9a-f]+$/i.test(sessionId)) {
+  // Validate session ID is not empty
+  const trimmedSessionId = sessionId.trim();
+  if (!trimmedSessionId) {
     return c.json({
       jsonrpc: '2.0',
       error: {
         code: -32000,
-        message: `Bad Request: Invalid session ID format (expected 64 hex chars, got ${sessionId.length})`,
+        message: 'Bad Request: Session ID cannot be empty',
       },
       id: null,
     }, 400);
@@ -324,13 +375,19 @@ app.delete('/mcp', async (c) => {
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    id = c.env.MCP_SESSION.idFromString(sessionId);
+    // Support both native DO IDs and custom session IDs
+    if (isNativeDurableObjectId(trimmedSessionId)) {
+      id = c.env.MCP_SESSION.idFromString(trimmedSessionId);
+    } else {
+      const deterministicId = await createDeterministicDoId(trimmedSessionId);
+      id = c.env.MCP_SESSION.idFromString(deterministicId);
+    }
   } catch (error) {
     return c.json({
       jsonrpc: '2.0',
       error: {
         code: -32000,
-        message: `Bad Request: Failed to parse session ID: ${error}`,
+        message: `Bad Request: Failed to resolve session ID: ${error}`,
       },
       id: null,
     }, 400);

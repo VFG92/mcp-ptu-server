@@ -607,6 +607,18 @@ Capability System
 
 ## 📊 Recent Updates
 
+### v5.2.2 (2025-01-15) - Custom Session ID Support
+
+✅ **New**: Support for user-friendly session IDs (e.g., `"sess-it-2025-10-01-a"`)
+✅ **Fix**: "Session not found" error when using custom session IDs
+✅ **Implementation**: Deterministic SHA-256 hashing for consistent routing
+✅ **Backward Compatible**: Native 64-char hex IDs still work
+✅ **Testing**: All 162 tests passing
+
+**Why this matters**: Users can now use meaningful session IDs instead of cryptic hex strings!
+
+See [SESSION_ID_FIX.md](./SESSION_ID_FIX.md) for technical details.
+
 ### v5.2.1 (2025-01-15) - Session Keep-Alive & Heartbeat
 
 ✅ **New**: `/heartbeat` endpoint prevents session eviction during long operations
