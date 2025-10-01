@@ -215,6 +215,32 @@ export async function handleExecutePlanStep(
   refs?: CapabilitySystemRefs,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const session = manager.getSession(args.session_id);
+
+  if (!session) {
+    const response = `# ❌ Validation Error\n\n` +
+      `Parallel reasoning session \`${args.session_id}\` not found. ` +
+      `Initialize a session with \`init_parallel_reasoning\` before executing plan steps.`;
+
+    return {
+      content: [{ type: 'text', text: response }]
+    };
+  }
+
+  if (!session.plans.has(args.plan_id)) {
+    const response = `# ❌ Validation Error\n\n` +
+      `Plan ID \`${args.plan_id}\` not found in session \`${args.session_id}\`. ` +
+      `Submit the plan first using \`submit_reasoning_plan\`.`;
+
+    return {
+      content: [{ type: 'text', text: response }]
+    };
+  }
+
+  if (!session.plan_results.has(args.plan_id)) {
+    session.plan_results.set(args.plan_id, []);
+  }
+
   // Execute capability using existing analyze_with_capabilities
   const result = await handleAnalyzeWithCapabilities({
     session_id: `${args.session_id}_${args.plan_id}`,

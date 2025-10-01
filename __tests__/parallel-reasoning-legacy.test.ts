@@ -5,7 +5,8 @@ import {
   handleSubmitReasoningPlan,
   handleSubmitCrossPlanNote,
   handleSubmitPeerCritique,
-  handleSubmitMediationDecision
+  handleSubmitMediationDecision,
+  handleExecutePlanStep
 } from '../src/workers/parallel-reasoning-tools-v5.js';
 import { ParallelReasoningSessionManager } from '../src/workers/parallel-reasoning-mcp.js';
 
@@ -173,5 +174,23 @@ describe('parallel reasoning v5 tool handler validation', () => {
     });
     expect(second.accepted).toBe(true);
     expect(second.diversity_validation.axes_unique_to_existing).toBe(true);
+  });
+
+  it('rejects plan execution when session or plan is missing', async () => {
+    const missingSession = await handleExecutePlanStep({
+      session_id: 'missing_session',
+      plan_id: 'plan_X',
+      task: 'Run nonexistent session step'
+    }, undefined, manager);
+
+    expect(missingSession.content[0].text).toContain('Parallel reasoning session `missing_session` not found');
+
+    const missingPlan = await handleExecutePlanStep({
+      session_id: sessionId,
+      plan_id: 'ghost_plan',
+      task: 'Run nonexistent plan step'
+    }, undefined, manager);
+
+    expect(missingPlan.content[0].text).toContain('Plan ID `ghost_plan` not found');
   });
 });
