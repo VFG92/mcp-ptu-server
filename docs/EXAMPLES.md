@@ -2,86 +2,17 @@
 
 Real-world use cases and patterns for MCP PTU Server.
 
+**Core Principle**: ChatGPT is the sole deliberative agent. MCP provides guardrails (diversity validation) and persistent memory. You orchestrate the analysis.
+
 ---
 
 ## Table of Contents
 
-1. [Single-Path Analysis](#single-path-analysis)
-2. [Parallel Reasoning Workflows](#parallel-reasoning-workflows)
-3. [Industry-Specific Scenarios](#industry-specific-scenarios)
-4. [Native Capabilities Integration](#native-capabilities-integration)
-5. [Budget Optimization](#budget-optimization)
-
----
-
-## Single-Path Analysis
-
-### Example 1: M&A Target Screening (Pharmaceutical)
-
-**Scenario**: Screen potential acquisition targets in cell & gene therapy space.
-
-```typescript
-{
-  "name": "analyze_with_capabilities",
-  "arguments": {
-    "session_id": "pharma_ma_screening_001",
-    "task": "Screen potential M&A targets in cell & gene therapy. Focus on: (1) Clinical pipeline strength, (2) Patent portfolio, (3) Manufacturing capabilities, (4) Regulatory track record, (5) Valuation multiples vs peers.",
-    "adapter_id": "strategy",
-    "context": {
-      "industry": "pharmaceutical",
-      "region": "global",
-      "deal_size": "$500M-$2B",
-      "strategic_rationale": "Build CAR-T platform"
-    },
-    "enable_native_capabilities": true,
-    "budget": {
-      "max_tokens_in": 20000,
-      "max_tokens_out": 20000
-    }
-  }
-}
-```
-
-**Expected Output**:
-- Ranked list of targets with evidence-backed scores
-- Patent landscape analysis
-- Clinical trial success rates
-- Manufacturing capacity assessment
-- Valuation benchmarks with confidence intervals
-
----
-
-### Example 2: Supply Chain Resilience (Automotive)
-
-**Scenario**: Assess supply chain risks for BEV battery production.
-
-```typescript
-{
-  "name": "analyze_with_capabilities",
-  "arguments": {
-    "session_id": "auto_supply_chain_001",
-    "task": "Assess supply chain resilience for BEV battery production. Analyze: (1) Critical material dependencies (lithium, cobalt, nickel), (2) Geographic concentration risks, (3) Alternative sourcing strategies, (4) Vertical integration opportunities, (5) Cost impact scenarios.",
-    "adapter_id": "comprehensive",
-    "context": {
-      "industry": "automotive",
-      "region": "europe",
-      "production_target": "500k units/year by 2027",
-      "current_suppliers": ["CATL", "LG Energy Solution", "Samsung SDI"]
-    },
-    "budget": {
-      "max_tokens_in": 25000,
-      "max_tokens_out": 25000
-    }
-  }
-}
-```
-
-**Expected Output**:
-- Risk matrix by material and geography
-- Scenario analysis (base, stress, crisis)
-- Alternative sourcing recommendations
-- Cost-benefit analysis of vertical integration
-- Timeline and investment requirements
+1. [Parallel Reasoning Workflows](#parallel-reasoning-workflows)
+2. [Diversity Patterns](#diversity-patterns)
+3. [Contamination Strategies](#contamination-strategies)
+4. [Peer Review Techniques](#peer-review-techniques)
+5. [Mediation Approaches](#mediation-approaches)
 
 ---
 

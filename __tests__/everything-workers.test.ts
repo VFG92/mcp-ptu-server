@@ -107,13 +107,20 @@ describe('everything workers server', () => {
     const instance = MockServer.instances[0];
     expect(instance).toBeDefined();
 
-    // Ensure list tools handler is registered and returns capability tools
+    // Ensure list tools handler is registered and returns parallel reasoning tools only (v5.1.0)
     const listToolsHandler = requestHandlers.find(handler => handler.schema.method === 'list_tools');
     expect(listToolsHandler).toBeDefined();
     const toolsResponse = await listToolsHandler!.handler({ params: {} });
     expect(Array.isArray(toolsResponse.tools)).toBe(true);
-    expect(toolsResponse.tools.some((tool: any) => tool.name === 'analyze_with_capabilities')).toBe(true);
+
+    // v5.1.0: Only parallel reasoning tools exposed (multi-path only)
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'init_parallel_reasoning')).toBe(true);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'submit_reasoning_plan')).toBe(true);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'execute_plan_step')).toBe(true);
+
+    // v5.1.0: Single-path tools no longer exposed
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'analyze_with_capabilities')).toBe(false);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'list_capabilities')).toBe(false);
 
     // Invoke call_tool handler to exercise branching logic
     const callToolHandler = requestHandlers.find(handler => handler.schema.method === 'call_tool');

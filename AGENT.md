@@ -1,58 +1,79 @@
 # 🤖 MCP PTU Server - Technical Documentation
 
-**Version 5.0.3** | For AI Agents & Developers
+**Version 5.1.0** | For AI Agents & Developers
 
 ---
 
 ## 📋 Quick Reference
 
-**Platform**: Cloudflare Workers + Durable Objects  
-**Language**: TypeScript (Strict Mode)  
-**Protocol**: Model Context Protocol (MCP) 2024-11-05  
-**Production URL**: `https://mcp-server.vf-ghizzoni.workers.dev/mcp`  
-**Tests**: 162/162 passing  
+**Platform**: Cloudflare Workers + Durable Objects
+**Language**: TypeScript (Strict Mode)
+**Protocol**: Model Context Protocol (MCP) 2024-11-05
+**Production URL**: `https://mcp-server.vf-ghizzoni.workers.dev/mcp`
+**Tests**: 162/162 passing
 **Build**: ✅ 0 TypeScript errors
+
+**Architecture**: LLM-Centric Parallel Reasoning
+- **ChatGPT**: Sole deliberative agent (generates plans, executes, reviews, mediates)
+- **MCP Server**: Guardrails only (validates diversity ≥2 axes, completeness)
+- **Capabilities**: 58 execution units (8-32 per plan, scale based on decision tree depth)
+- **Workflow**: End-to-end orchestration by ChatGPT with external constraints
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture: LLM-Centric Design
 
-### System Overview
+### Core Principle
+
+**ChatGPT is the sole deliberative agent.** MCP server provides only:
+1. **Guardrails**: Validates diversity (≥2 axes), completeness (evidence citations)
+2. **Persistent Memory**: Stores plans, results, notes, critiques across requests
+3. **Typed Contracts**: Defines required fields, no computation
+
+**ChatGPT orchestrates:**
+- Generates diverse reasoning plans internally
+- Executes capabilities through each plan's lens
+- Cross-contaminates insights between plans
+- Peer reviews from multiple perspectives
+- Mediates final decisions with evidence
+
+### System Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ MCP Client (ChatGPT)                                        │
+│ ChatGPT (Sole Deliberative Agent)                           │
+│ - Generates diverse reasoning plans                         │
+│ - Executes plans in parallel (internally)                   │
+│ - Cross-contaminates insights                               │
+│ - Peer reviews between plans                                │
+│ - Mediates final decisions                                  │
 └────────────────────┬────────────────────────────────────────┘
-                     │ HTTP/SSE
+                     │ MCP Tool Calls
 ┌────────────────────▼────────────────────────────────────────┐
 │ Cloudflare Worker (index.ts)                                │
-│ - Extracts session_id from body/header                      │
-│ - Routes to Durable Object by ID                            │
+│ - Routes by session_id to Durable Object                    │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
 │ Durable Object (session.ts)                                 │
 │ - One instance per session_id                               │
-│ - Manages MCP Server lifecycle                              │
 │ - Persists parallel reasoning state                         │
-│ - Loads/saves to DO storage                                 │
+│ - Serializes/deserializes nested Maps                       │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
 │ MCP Server (everything-workers.ts)                          │
-│ - 58 capabilities + 8 parallel reasoning tools              │
-│ - Evidence tracking, budget management                      │
-│ - Tournament mode, peer review                              │
+│ - Exposes 8 parallel reasoning tools                        │
+│ - Validates diversity (≥2 axes difference)                  │
+│ - Validates completeness (evidence IDs cited)               │
+│ - NO computation, NO evaluation, NO planning                │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
-│ Capability System                                            │
-│ - Graph: Capability registry                                │
-│ - Orchestrator: Execution engine                            │
-│ - Planner: Beam search optimization                         │
-│ - Whiteboard: Versioned artifact storage                    │
-│ - Evidence Ledger: Quality tracking                         │
-│ - Industry Adapters: Domain templates                       │
+│ Capability System (Internal, Not Exposed)                   │
+│ - 58 capabilities invoked via execute_plan_step             │
+│ - Evidence tracking, budget management                      │
+│ - Tournament mode, peer review                              │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -67,56 +88,233 @@
 - One instance per `session_id`
 - Manages MCP Server lifecycle
 - Persists state to DO storage
-- Handles serialization of nested Maps
+- **Critical**: Serializes nested Maps (`plans`, `plan_results`) to arrays before storage
 
 **everything-workers.ts** - MCP Server
-- Registers 58 capabilities + 8 parallel reasoning tools
-- Handles tool calls via `CallToolRequestSchema`
-- Manages capability execution and persistence
+- **Exposes**: 8 parallel reasoning tools (multi-path only)
+- **Internal**: 58 capabilities (invoked via `execute_plan_step`)
+- **Validates**: Diversity (≥2 axes), completeness (evidence IDs)
+- **Never**: Computes, evaluates, or plans
 
 **parallel-reasoning-mcp.ts** - Session Manager
 - Manages parallel reasoning sessions
 - Validates diversity (≥2 axes difference)
-- Serializes/deserializes nested Maps correctly
+- Stores plans, results, notes, critiques
+- **Fixed in v5.0.3**: Proper Map serialization for Durable Objects
+
+### Design Rationale
+
+**Why LLM-centric?**
+- Research shows quality improves when LLM explores multiple reasoning paths (Wang 2022, Yao 2023, Du 2023)
+- MCP's role is "standardized connector" between models and systems (OpenAI 2025, modelcontextprotocol.io 2024)
+- Function calling is the interface, but deliberation stays in the model (OpenAI 2025)
+
+**Why diversity validation?**
+- Prevents semantic drift (cosmetic variants don't improve quality)
+- Forces real exploration of different hypotheses
+- Server validates structure (≥2 axes), ChatGPT chooses substance
+
+**Why contamination?**
+- Multi-agent debate improves factuality (Du 2023)
+- Cross-plan notes enable structured interaction
+- Server stores for audit, ChatGPT decides what to share
+
+**Why evidence-based mediation?**
+- Self-consistency: marginalize over multiple coherent paths (Wang 2022)
+- Server validates evidence IDs exist, ChatGPT chooses synthesis
+- Audit trail for compliance and review
+
+---
+
+## 🌳 Decision Tree Coverage
+
+### Maximizing Coverage with Parallel Plans
+
+**Goal**: Each plan explores different branches of the decision tree, collectively covering all major decision points.
+
+#### Decision Tree Depth → Capability Scaling
+
+```
+Simple Decision Tree (3-5 major decisions)
+├─ Plan A: 8-12 capabilities
+├─ Plan B: 8-12 capabilities
+└─ Plan C: 8-12 capabilities
+Total: 24-36 capability executions
+
+Medium Decision Tree (6-10 major decisions)
+├─ Plan A: 12-20 capabilities
+├─ Plan B: 12-20 capabilities
+├─ Plan C: 12-20 capabilities
+└─ Plan D: 12-20 capabilities
+Total: 48-80 capability executions
+
+Complex Decision Tree (10+ major decisions)
+├─ Plan A: 20-32 capabilities
+├─ Plan B: 20-32 capabilities
+├─ Plan C: 20-32 capabilities
+├─ Plan D: 20-32 capabilities
+└─ Plan E: 20-32 capabilities
+Total: 100-160 capability executions
+```
+
+#### Coverage Strategy
+
+**1. Identify Decision Branches**
+```
+Example: Market Entry Strategy
+├─ Market Sizing
+│   ├─ TAM/SAM/SOM (Plan A: regression)
+│   ├─ Growth scenarios (Plan B: Monte Carlo)
+│   └─ Addressable segments (Plan C: qualitative)
+├─ Competitive Analysis
+│   ├─ Market share (Plan A: quantitative)
+│   ├─ Positioning (Plan B: perceptual map)
+│   └─ Barriers to entry (Plan C: Porter's 5 forces)
+├─ Go-to-Market
+│   ├─ Channel strategy (Plan A: cost analysis)
+│   ├─ Pricing (Plan B: elasticity model)
+│   └─ Customer acquisition (Plan C: journey mapping)
+└─ Financial Projections
+    ├─ Revenue forecast (Plan A: regression)
+    ├─ Risk-adjusted NPV (Plan B: Monte Carlo)
+    └─ Scenario analysis (Plan C: stress testing)
+```
+
+**2. Assign Capabilities to Plans**
+- Plan A covers quantitative branches (regression, cost analysis, revenue forecast)
+- Plan B covers probabilistic branches (Monte Carlo, elasticity, risk-adjusted NPV)
+- Plan C covers qualitative branches (segments, positioning, journey mapping)
+
+**3. Ensure No Gaps**
+- Every major decision has ≥1 plan covering it
+- Critical decisions have ≥2 plans covering them (for validation)
+- High-risk decisions have all plans covering them (for consensus)
+
+#### Coverage Validation
+
+**Server validates** (formal only):
+- ✅ Each plan has 8-32 capabilities declared
+- ✅ Plans differ on ≥2 diversity axes
+- ✅ Evidence IDs cited in mediation exist
+
+**ChatGPT ensures** (substantive):
+- ✅ All decision branches covered by at least one plan
+- ✅ Critical decisions covered by multiple plans
+- ✅ No redundant capability executions (unless intentional for validation)
+- ✅ Capability chains logically flow through decision tree
+
+---
+
+## 🔄 Workflow Orchestration
+
+### End-to-End Orchestration Pattern
+
+**Phase 1: Initialization**
+```
+ChatGPT → init_parallel_reasoning
+Server → Validates structure, creates session, returns session_id
+```
+
+**Phase 2: Plan Generation**
+```
+ChatGPT → Generates Plan A with diversity axes [X, Y, Z]
+ChatGPT → submit_reasoning_plan (Plan A)
+Server → Validates diversity (first plan, auto-accept)
+
+ChatGPT → Generates Plan B with diversity axes [X, Y, W]
+ChatGPT → submit_reasoning_plan (Plan B)
+Server → Validates diversity (differs from A on ≥2 axes? Yes → accept)
+
+ChatGPT → Generates Plan C with diversity axes [X, Q, R]
+ChatGPT → submit_reasoning_plan (Plan C)
+Server → Validates diversity (differs from A,B on ≥2 axes? Yes → accept)
+```
+
+**Phase 3: Execution (Parallel Internally)**
+```
+ChatGPT → Executes Plan A, step 1
+ChatGPT → execute_plan_step (Plan A, capability_1)
+Server → Invokes capability, records result, returns evidence_001
+
+ChatGPT → Executes Plan B, step 1
+ChatGPT → execute_plan_step (Plan B, capability_2)
+Server → Invokes capability, records result, returns evidence_002
+
+[Continue for all capabilities across all plans]
+```
+
+**Phase 4: Contamination**
+```
+ChatGPT → Discovers insight in Plan A relevant to Plan B
+ChatGPT → submit_cross_plan_note (from A to B, references evidence_001)
+Server → Stores note for audit trail
+
+[Repeat for all cross-plan insights]
+```
+
+**Phase 5: Peer Review**
+```
+ChatGPT → Plan A reviews Plan B
+ChatGPT → submit_peer_critique (reviewer: A, reviewed: B)
+Server → Stores critique
+
+[Repeat for all plan pairs]
+```
+
+**Phase 6: Mediation**
+```
+ChatGPT → Decision point: "Market sizing approach"
+ChatGPT → submit_mediation_decision (chosen: Plan A, evidence: [001, 042, 089])
+Server → Validates evidence IDs exist
+
+[Repeat for all decision points]
+```
+
+**Phase 7: Finalization**
+```
+ChatGPT → finalize_parallel_reasoning
+Server → Validates completeness (all plans executed, all decisions have evidence)
+Server → Returns decision map with audit trail
+```
+
+### Constraints (External, Enforced by Server)
+
+1. **Diversity Constraint**: Plans must differ on ≥2 axes
+   - Server rejects plans that violate this
+   - Prevents semantic drift
+
+2. **Completeness Constraint**: Decisions must cite evidence IDs
+   - Server validates evidence IDs exist
+   - Ensures traceability
+
+3. **Capability Range Constraint**: 8-32 capabilities per plan
+   - Server validates range
+   - Prevents under/over-specification
+
+4. **Session Persistence**: State stored in Durable Objects
+   - Server handles serialization/deserialization
+   - Enables multi-step workflows across requests
 
 ---
 
 ## 🔧 API Reference
 
-### Core Tools
-
-#### analyze_with_capabilities
-
-Execute business analysis with capability-driven architecture.
-
-```typescript
-{
-  session_id: string;              // Required: Unique session identifier
-  task: string;                    // Required: Analysis task description
-  adapter_id?: string;             // Optional: strategy|finance|commercial|risk|comprehensive
-  context?: {                      // Optional: Industry/region context
-    industry?: string;
-    region?: string;
-    competitors?: string[];
-    [key: string]: any;
-  };
-  budget?: {                       // Optional: Resource limits
-    max_tokens_in?: number;
-    max_tokens_out?: number;
-    max_cpu_ms?: number;
-    max_subrequests?: number;
-  };
-  enable_native_capabilities?: boolean;  // Optional: Enable Python/Web Search
-  tournament_mode?: boolean;       // Optional: Enable multi-criteria judging (default: true)
-  peer_review_mode?: boolean;      // Optional: Enable peer review (default: true)
-}
-```
-
 ### Parallel Reasoning Tools (v5.0)
+
+**Design Philosophy**: MCP provides guardrails and memory, ChatGPT provides intelligence.
+
+- **Server validates**: Structure (required fields), diversity (≥2 axes), completeness (evidence IDs)
+- **Server stores**: Plans, results, notes, critiques (persistent memory)
+- **Server never**: Computes, evaluates, scores, or plans
+- **ChatGPT generates**: Plans, insights, critiques, decisions
 
 #### 1. init_parallel_reasoning
 
-Initialize a parallel reasoning session.
+**Purpose**: Initialize session, declare diversity requirements.
+
+**Server role**: Creates session, stores requirements, returns session ID.
+
+**ChatGPT role**: Decides task, chooses diversity axes, sets min_plans.
 
 ```typescript
 {
@@ -127,11 +325,27 @@ Initialize a parallel reasoning session.
 }
 ```
 
-**Diversity Axes**: `data_sources`, `analytical_models`, `time_horizons`, `quality_metrics`, `risk_perspectives`, `stakeholder_views`
+**Diversity Axes**:
+- `data_sources`: Official statistics vs industry reports vs expert interviews
+- `analytical_models`: Regression vs Monte Carlo vs qualitative analysis
+- `time_horizons`: 1-year vs 3-year vs 10-year outlook
+- `quality_metrics`: Precision vs recall vs robustness vs speed
+- `risk_perspectives`: Optimistic vs base case vs stress scenarios
+- `stakeholder_views`: Customer vs investor vs regulator vs employee
 
 #### 2. submit_reasoning_plan
 
-Submit a reasoning plan (validated for diversity).
+**Purpose**: Submit a reasoning plan with diversity axes.
+
+**Server role**:
+- Validates plan differs by ≥2 axes from existing plans
+- Rejects if diversity insufficient (prevents semantic drift)
+- Stores plan if valid
+
+**ChatGPT role**:
+- Generates plan with real diversity (not cosmetic variants)
+- Chooses capability chain (8-32 capabilities, scale based on task)
+- Provides rationale for approach
 
 ```typescript
 {
@@ -145,6 +359,30 @@ Submit a reasoning plan (validated for diversity).
     expected_outputs: string[];          // Expected artifacts
   };
 }
+```
+
+**Example - Good Diversity**:
+```typescript
+// Plan A
+diversity_axes: ["data_sources", "analytical_models", "time_horizons"]
+// Official statistics + Regression + 3-year horizon
+
+// Plan B
+diversity_axes: ["data_sources", "analytical_models", "risk_perspectives"]
+// Industry reports + Monte Carlo + Stress scenarios
+
+// ✅ Differs on 2 axes: data_sources, analytical_models
+```
+
+**Example - Bad Diversity** (rejected):
+```typescript
+// Plan A
+diversity_axes: ["data_sources", "analytical_models", "time_horizons"]
+
+// Plan B
+diversity_axes: ["data_sources", "quality_metrics", "stakeholder_views"]
+
+// ❌ Differs on only 1 axis: data_sources (semantic drift risk)
 ```
 
 #### 3. execute_plan_step

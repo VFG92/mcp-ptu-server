@@ -460,33 +460,8 @@ Use these 8 tools for multi-path reasoning:
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools: Tool[] = [
-      // Capability-driven tools (v3.0 - Production Ready)
-      {
-        name: CapabilityToolName.ANALYZE_WITH_CAPABILITIES,
-        description:
-          "Analyze business problems using the capability-driven architecture. Provides evidence-backed analysis with verifiable reasoning, budget tracking, and confidence scores. Supports adapters: strategy, finance, commercial, risk, comprehensive.",
-        inputSchema: zodToJsonSchema(AnalyzeWithCapabilitiesSchema) as ToolInput,
-      },
-      {
-        name: CapabilityToolName.LIST_CAPABILITIES,
-        description:
-          "List all available capabilities in the system. Filter by category (market, financial, operational, risk, strategic, commercial) or tag.",
-        inputSchema: zodToJsonSchema(ListCapabilitiesSchema) as ToolInput,
-      },
-      {
-        name: CapabilityToolName.GET_CAPABILITY_STATUS,
-        description:
-          "Get status of a capability analysis session including progress, artifacts produced, and budget consumed.",
-        inputSchema: zodToJsonSchema(GetCapabilityStatusSchema) as ToolInput,
-      },
-      {
-        name: CapabilityToolName.EXPORT_SESSION,
-        description:
-          "Export complete session data including artifacts, evidence, confidence scores, and audit trail for compliance and review.",
-        inputSchema: zodToJsonSchema(ExportSessionSchema) as ToolInput,
-      },
-
       // Parallel Reasoning v5 Tools (LLM-Centric Architecture)
+      // Only multi-path tools are exposed to clients
       {
         name: ParallelReasoningV5ToolName.INIT_PARALLEL_REASONING,
         description:

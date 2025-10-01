@@ -7,6 +7,143 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [5.1.0] - 2025-10-01
+
+### Changed - Multi-Path Only Architecture
+
+**Breaking Change**: Single-path tools (`analyze_with_capabilities`, `list_capabilities`, `get_capability_status`, `export_session`) are no longer exposed to clients.
+
+**New Architecture**:
+- **Exposed to clients**: 8 parallel reasoning tools only (multi-path workflow)
+- **Internal use**: 58 capabilities invoked via `execute_plan_step`
+- **Design principle**: ChatGPT orchestrates end-to-end, MCP provides guardrails + memory
+
+### Added - Universal Prompt Templates
+
+**Template 1: Maximum Coverage** (complex analysis, 6-10 major decisions)
+- 3-4 plans with 12-20 capabilities each
+- Structured contamination and peer review
+- Evidence-based mediation
+
+**Template 2: Rapid Coverage** (time-constrained, 3-5 major decisions)
+- 3 plans with 8-12 capabilities each
+- Streamlined workflow
+- Quick decision synthesis
+
+**Template 3: Deep Coverage** (high-stakes, 10+ major decisions)
+- 5 plans with 20-32 capabilities each
+- Exhaustive decision tree coverage
+- Complete review matrix
+
+### Added - Decision Tree Coverage Guide
+
+**Capability Scaling**:
+- Simple tasks: 8-12 capabilities per plan
+- Medium tasks: 12-20 capabilities per plan
+- Complex tasks: 20-32 capabilities per plan
+
+**Coverage Strategy**:
+- Identify decision branches
+- Assign capabilities to plans
+- Ensure no gaps in coverage
+- Validate critical decisions covered by multiple plans
+
+### Added - Workflow Orchestration Documentation
+
+**7-Phase Pattern**:
+1. Initialization (declare diversity requirements)
+2. Plan Generation (real diversity, not cosmetic variants)
+3. Execution (parallel internally, cover decision tree)
+4. Contamination (structured cross-plan learning)
+5. Peer Review (challenge assumptions)
+6. Mediation (evidence-based synthesis)
+7. Finalization (complete audit trail)
+
+**External Constraints** (enforced by server):
+- Diversity: ≥2 axes difference
+- Completeness: Evidence IDs cited
+- Capability range: 8-32 per plan
+- Session persistence: Durable Objects
+
+### Documentation
+
+**README.md**: Rewritten with universal templates, adaptation guide, example applications
+**AGENT.md**: Added decision tree coverage, workflow orchestration, constraint enforcement
+**docs/EXAMPLES.md**: Updated with LLM-centric patterns
+
+### Migration Guide
+
+**From v5.0.x to v5.1.0**:
+
+**Breaking Change**: `analyze_with_capabilities` no longer exposed to clients.
+
+**Before (v5.0.x)**:
+```typescript
+// Direct single-path analysis
+{
+  "name": "analyze_with_capabilities",
+  "arguments": {
+    "session_id": "analysis_001",
+    "task": "Analyze market opportunity",
+    "adapter_id": "strategy"
+  }
+}
+```
+
+**After (v5.1.0)**:
+```typescript
+// Multi-path workflow
+// 1. Initialize
+{
+  "name": "init_parallel_reasoning",
+  "arguments": {
+    "session_id": "analysis_001",
+    "task_description": "Analyze market opportunity",
+    "required_diversity_axes": ["data_sources", "analytical_models"],
+    "min_plans": 3
+  }
+}
+
+// 2. Submit plans (3x)
+{
+  "name": "submit_reasoning_plan",
+  "arguments": {
+    "session_id": "analysis_001",
+    "plan": {
+      "plan_id": "plan_A",
+      "diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
+      "capability_chain": ["market_sizing_tam_sam_som", ...],
+      ...
+    }
+  }
+}
+
+// 3. Execute plans
+{
+  "name": "execute_plan_step",
+  "arguments": {
+    "session_id": "analysis_001",
+    "plan_id": "plan_A",
+    "task": "Perform market sizing",
+    "adapter_id": "strategy"
+  }
+}
+
+// 4-7. Contaminate, review, mediate, finalize
+```
+
+**Why this change?**
+- Research shows multi-path reasoning improves quality (Wang 2022, Yao 2023, Du 2023)
+- Single-path analysis is a special case of multi-path (1 plan)
+- Enforces best practices: diversity, contamination, peer review, mediation
+
+**Backward Compatibility**:
+- Internal functions still exist (`handleAnalyzeWithCapabilities`)
+- Used by `execute_plan_step` to invoke capabilities
+- No breaking changes to capability system
+
+---
+
 ## [5.0.3] - 2025-10-01
 
 ### Fixed
