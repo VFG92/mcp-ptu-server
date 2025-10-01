@@ -1,12 +1,12 @@
 # 🧠 MCP PTU Server - Capability-Driven Business Analysis
 
-**Version 5.0.0** | **LLM-Centric Parallel Reasoning, Evidence-Backed, Industry-Aware, Production-Ready**
+**Version 5.0.2** | **LLM-Centric Parallel Reasoning, Evidence-Backed, Industry-Aware, Production-Ready**
 
 A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server featuring a **capability-driven architecture** for enterprise business analysis with **58 advanced capabilities** across 8 business domains, plus **8 parallel reasoning tools** for multi-path analysis with diversity enforcement and contamination.
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-5.0.0-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Version](https://img.shields.io/badge/Version-5.0.2-green)](https://github.com/VFG92/mcp-ptu-server)
 [![Capabilities](https://img.shields.io/badge/Capabilities-58-brightgreen)](./AGENT.md#-46-advanced-capabilities-v40)
 
 ---
@@ -30,6 +30,16 @@ An MCP server that enables **ChatGPT Developer Mode** to perform **evidence-back
 ---
 
 ## ✨ Key Features
+
+### 🆕 Version 5.0.2 - Constraints Update & Wrangler Update (2025-10-01)
+
+**Constraints Update**:
+- ✅ `min_plans`: Updated from 2-8 to **3-32** (default 3)
+- ✅ `capability_chain`: Added validation **8-32 capabilities** per workflow
+- ✅ All tests passing (161/161), build successful
+
+**Dependencies**:
+- ✅ Wrangler: Updated to **4.40.3** (no breaking changes)
 
 ### 🆕 Version 5.0 - Parallel Reasoning (LLM-Centric Architecture)
 

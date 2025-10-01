@@ -126,6 +126,18 @@ Durable Objects (Persistent State)
 - **ChatGPT**: Sole deliberative agent. Generates plans, diversifies approaches, contaminates perspectives, mediates final result.
 - **Parallel Reasoning**: Happens **inside ChatGPT**, not in server. ChatGPT simulates multiple reasoning paths internally.
 
+#### v5.0.2 - Constraints Update & Wrangler Update (2025-10-01)
+
+**Constraints Update**:
+- ✅ `min_plans`: Updated from 2-8 to **3-32** (default 3)
+- ✅ `capability_chain`: Added validation **8-32 capabilities** per workflow
+- ✅ Updated all tests and documentation
+
+**Dependencies**:
+- ✅ Wrangler: Updated from 4.40.2 to **4.40.3**
+- ✅ All tests passing (161/161)
+- ✅ Build successful, no breaking changes
+
 #### v5.0.1 Bug Fix - Session Persistence (2025-10-01)
 
 **Issue**: Critical session persistence failure in parallel reasoning workflow
