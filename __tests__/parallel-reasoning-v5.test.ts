@@ -12,23 +12,46 @@
  * - Persistence between steps
  */
 
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, beforeAll, jest } from '@jest/globals';
 import { ParallelReasoningSessionManager } from '../src/workers/parallel-reasoning-mcp.js';
-import {
-  handleInitParallelReasoning,
-  handleSubmitReasoningPlan,
-  handleSubmitCrossPlanNote,
-  handleSubmitPeerCritique,
-  handleSubmitMediationDecision,
-  handleListPlanStatus,
-  handleFinalizeParallelReasoning
-} from '../src/workers/parallel-reasoning-tools-v5.js';
 
+type HandleAnalyzeWithCapabilities = typeof import('../src/workers/capability-tools.js')['handleAnalyzeWithCapabilities'];
+
+const analyzeWithCapabilitiesMock = jest.fn() as jest.MockedFunction<HandleAnalyzeWithCapabilities>;
+
+jest.unstable_mockModule('../src/workers/capability-tools.js', () => ({
+  handleAnalyzeWithCapabilities: analyzeWithCapabilitiesMock
+}));
+
+type ParallelReasoningToolsModule = typeof import('../src/workers/parallel-reasoning-tools-v5.js');
+
+let handleInitParallelReasoning: ParallelReasoningToolsModule['handleInitParallelReasoning'];
+let handleSubmitReasoningPlan: ParallelReasoningToolsModule['handleSubmitReasoningPlan'];
+let handleExecutePlanStep: ParallelReasoningToolsModule['handleExecutePlanStep'];
+let handleSubmitCrossPlanNote: ParallelReasoningToolsModule['handleSubmitCrossPlanNote'];
+let handleSubmitPeerCritique: ParallelReasoningToolsModule['handleSubmitPeerCritique'];
+let handleSubmitMediationDecision: ParallelReasoningToolsModule['handleSubmitMediationDecision'];
+let handleListPlanStatus: ParallelReasoningToolsModule['handleListPlanStatus'];
+let handleFinalizeParallelReasoning: ParallelReasoningToolsModule['handleFinalizeParallelReasoning'];
+
+beforeAll(async () => {
+  ({
+    handleInitParallelReasoning,
+    handleSubmitReasoningPlan,
+    handleExecutePlanStep,
+    handleSubmitCrossPlanNote,
+    handleSubmitPeerCritique,
+    handleSubmitMediationDecision,
+    handleListPlanStatus,
+    handleFinalizeParallelReasoning
+  } = await import('../src/workers/parallel-reasoning-tools-v5.js'));
+});
 describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
   let manager: ParallelReasoningSessionManager;
   const sessionId = 'test_session_001';
 
   beforeEach(() => {
+    analyzeWithCapabilitiesMock.mockReset();
     manager = new ParallelReasoningSessionManager();
   });
 
@@ -149,6 +172,83 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
     }, manager);
 
     expect(finalize.content[0].text).toContain('Session Finalized');
+  });
+
+  it('records plan execution results on the injected manager and allows finalization', async () => {
+    const executionSessionId = 'test_session_plan_results';
+
+    await handleInitParallelReasoning({
+      session_id: executionSessionId,
+      task_description: 'Validate plan execution result persistence',
+      required_diversity_axes: ['data_sources', 'analytical_models'],
+      min_plans: 2
+    }, manager);
+
+    await handleSubmitReasoningPlan({
+      session_id: executionSessionId,
+      plan: {
+        plan_id: 'plan_A',
+        description: 'Plan A baseline',
+        diversity_axes: ['data_sources', 'analytical_models'],
+        capability_chain: ['market_scan'],
+        rationale: 'Baseline analysis',
+        expected_outputs: ['market_map']
+      }
+    }, manager);
+
+    await handleSubmitReasoningPlan({
+      session_id: executionSessionId,
+      plan: {
+        plan_id: 'plan_B',
+        description: 'Plan B alternative',
+        diversity_axes: ['risk_perspectives', 'time_horizons'],
+        capability_chain: ['market_scan'],
+        rationale: 'Risk-focused analysis',
+        expected_outputs: ['risk_summary']
+      }
+    }, manager);
+
+    analyzeWithCapabilitiesMock
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Mock result for plan A' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Mock result for plan B' }] });
+
+    try {
+      const planAExecution = await handleExecutePlanStep({
+        session_id: executionSessionId,
+        plan_id: 'plan_A',
+        task: 'Execute plan A capability chain'
+      }, undefined, manager);
+
+      expect(planAExecution.content[0].text).toContain('Plan Step Executed: plan_A');
+
+      const planBExecution = await handleExecutePlanStep({
+        session_id: executionSessionId,
+        plan_id: 'plan_B',
+        task: 'Execute plan B capability chain'
+      }, undefined, manager);
+
+      expect(planBExecution.content[0].text).toContain('Plan Step Executed: plan_B');
+
+      expect(analyzeWithCapabilitiesMock).toHaveBeenCalledTimes(2);
+      expect(analyzeWithCapabilitiesMock.mock.calls[0][0]).toMatchObject({
+        session_id: `${executionSessionId}_plan_A`,
+        task: 'Execute plan A capability chain',
+        tournament_mode: true,
+        peer_review_mode: true
+      });
+
+      const session = manager.getSession(executionSessionId);
+      expect(session?.plan_results.get('plan_A')?.[0]?.content[0].text).toContain('Mock result for plan A');
+      expect(session?.plan_results.get('plan_B')?.[0]?.content[0].text).toContain('Mock result for plan B');
+
+      const finalize = await handleFinalizeParallelReasoning({
+        session_id: executionSessionId
+      }, manager);
+
+      expect(finalize.content[0].text).toContain('Session Complete');
+    } finally {
+      analyzeWithCapabilitiesMock.mockReset();
+    }
   });
 
   it('should reject plan with insufficient diversity', async () => {
@@ -318,4 +418,3 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
     expect(session?.cross_plan_notes.length).toBe(2);
   });
 });
-

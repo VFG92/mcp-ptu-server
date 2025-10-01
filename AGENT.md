@@ -145,7 +145,8 @@ Durable Objects (Persistent State)
 
 ✅ **`execute_plan_step`** - Execute capability for specific plan
   - ChatGPT invokes capability for a plan
-  - Server records result, associates with plan
+  - Server records result on the injected `ParallelReasoningSessionManager`
+    (supports Durable Object instances instead of falling back to globals)
   - Enables parallel execution (ChatGPT manages multiple plans internally)
 
 ✅ **`submit_cross_plan_note`** - Contamination between plans
@@ -2053,6 +2054,7 @@ npm test
 - ✅ Export includes all versions and complete data
 - ✅ Separate histories for different artifacts
 - ✅ Diff calculation between versions
+- ✅ Parallel reasoning plan executions record results on injected managers (see `__tests__/parallel-reasoning-v5.test.ts`)
 
 ---
 

@@ -202,17 +202,20 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
 // Plan C: Academic research + Normative analysis (different axes)
 ```
 
-**Step 3: Execute Plans in Parallel** (ChatGPT manages internally)
+**Step 3: Execute Plan Steps (results persist on the session manager you provide)**
 ```typescript
 {
   "name": "execute_plan_step",
   "arguments": {
     "session_id": "fintech_parallel_001",
     "plan_id": "plan_A",
-    "capability_id": "market_scan",
-    "inputs": { "industry_vertical": "financial_services", "geographic_region": "europe" }
+    "task": "Run market_scan for plan A",
+    "adapter_id": "strategy"
   }
 }
+
+// Response includes "# Plan Step Executed: plan_A" followed by capability output.
+// Result is recorded via the injected ParallelReasoningSessionManager (supports Durable Objects).
 ```
 
 **Step 4: Contamination** (Plans exchange insights)

@@ -225,8 +225,8 @@ export async function handleExecutePlanStep(
     peer_review_mode: true
   }, refs);
 
-  // Record result for plan
-  globalParallelReasoningManager.recordPlanResult(args.session_id, args.plan_id, result);
+  // Record result for plan using the provided session manager instance
+  manager.recordPlanResult(args.session_id, args.plan_id, result);
 
   // Prepend plan context to response
   const planContext = `# Plan Step Executed: ${args.plan_id}\n\n`;
@@ -458,4 +458,3 @@ ${i + 1}. **${d.decision_point}**
     content: [{ type: 'text', text: response }]
   };
 }
-
