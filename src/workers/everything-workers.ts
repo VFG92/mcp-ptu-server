@@ -528,6 +528,7 @@ Use these 8 tools for multi-path reasoning:
       // Parallel Reasoning v5 Tool Handlers (LLM-Centric Architecture)
       if (name === ParallelReasoningV5ToolName.INIT_PARALLEL_REASONING) {
         console.log(`[CallTool] Handling init_parallel_reasoning (v5)`);
+        console.log(`[CallTool] Raw args:`, JSON.stringify(args));
         console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
         console.log(`[CallTool] Manager instance ID: ${parallelReasoningV5Manager ? Object.prototype.toString.call(parallelReasoningV5Manager) : 'N/A'}`);
         console.log(`[CallTool] Current sessions in manager: ${parallelReasoningV5Manager ? parallelReasoningV5Manager.getAllSessions().size : 0}`);
@@ -542,7 +543,21 @@ Use these 8 tools for multi-path reasoning:
             }]
           };
         }
-        const validatedArgs = InitParallelReasoningSchema.parse(args);
+
+        let validatedArgs;
+        try {
+          validatedArgs = InitParallelReasoningSchema.parse(args);
+          console.log(`[CallTool] Validation successful. Validated args:`, JSON.stringify(validatedArgs));
+        } catch (error) {
+          console.error(`[CallTool] Validation error:`, error);
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ **Validation Error**\n\n${error instanceof Error ? error.message : String(error)}\n\n**Raw args received**: ${JSON.stringify(args, null, 2)}`
+            }]
+          };
+        }
+
         console.log(`[CallTool] Calling handleInitParallelReasoning with session_id: ${validatedArgs.session_id}`);
         const result = await handleInitParallelReasoning(validatedArgs, parallelReasoningV5Manager);
         console.log(`[CallTool] handleInitParallelReasoning completed. Sessions after init: ${parallelReasoningV5Manager.getAllSessions().size}`);
