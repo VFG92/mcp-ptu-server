@@ -63,12 +63,19 @@ async function getDurableObjectId(
   namespace: DurableObjectNamespace,
   sessionId: string
 ): Promise<DurableObjectId> {
-  if (isNativeDurableObjectId(sessionId)) {
+  console.log(`[getDurableObjectId] Input session ID: ${sessionId}`);
+  const isNative = isNativeDurableObjectId(sessionId);
+  console.log(`[getDurableObjectId] Is native DO ID: ${isNative}`);
+
+  if (isNative) {
     // Native DO ID - use idFromString
+    console.log(`[getDurableObjectId] Using native DO ID directly`);
     return namespace.idFromString(sessionId);
   } else {
     // Custom session ID - hash to 64-char hex string
+    console.log(`[getDurableObjectId] Hashing custom session ID with SHA-256`);
     const hashedId = await hashSessionId(sessionId);
+    console.log(`[getDurableObjectId] Hashed ID: ${hashedId}`);
     return namespace.idFromString(hashedId);
   }
 };
