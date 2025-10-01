@@ -420,4 +420,96 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
     const session = manager.getSession(sessionId);
     expect(session?.cross_plan_notes.length).toBe(2);
   });
+
+  it('should correctly serialize and deserialize sessions with nested Maps', async () => {
+    // Initialize session
+    await handleInitParallelReasoning({
+      session_id: sessionId,
+      task_description: 'Test serialization',
+      required_diversity_axes: ['data_sources', 'analytical_models'],
+      min_plans: 2
+    }, manager);
+
+    // Submit plans
+    await handleSubmitReasoningPlan({
+      session_id: sessionId,
+      plan: {
+        plan_id: 'plan_A',
+        description: 'Plan A',
+        diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
+        capability_chain: TEST_CAP_CHAIN,
+        rationale: 'Test plan A',
+        expected_outputs: ['output_a']
+      }
+    }, manager);
+
+    await handleSubmitReasoningPlan({
+      session_id: sessionId,
+      plan: {
+        plan_id: 'plan_B',
+        description: 'Plan B',
+        diversity_axes: ['data_sources', 'analytical_models', 'risk_perspectives'],
+        capability_chain: TEST_CAP_CHAIN,
+        rationale: 'Test plan B',
+        expected_outputs: ['output_b']
+      }
+    }, manager);
+
+    // Verify session has plans
+    const sessionBefore = manager.getSession(sessionId);
+    expect(sessionBefore).toBeDefined();
+    expect(sessionBefore?.plans.size).toBe(2);
+    expect(sessionBefore?.plans.get('plan_A')).toBeDefined();
+    expect(sessionBefore?.plans.get('plan_B')).toBeDefined();
+
+    // Serialize sessions
+    const serialized = manager.serializeSessions();
+    expect(serialized.length).toBe(1);
+    expect(serialized[0][0]).toBe(sessionId);
+
+    // Create new manager and load serialized sessions
+    const newManager = new ParallelReasoningSessionManager();
+    newManager.loadSessions(serialized);
+
+    // Verify session was correctly deserialized
+    const sessionAfter = newManager.getSession(sessionId);
+    expect(sessionAfter).toBeDefined();
+    expect(sessionAfter?.session_id).toBe(sessionId);
+    expect(sessionAfter?.task_description).toBe('Test serialization');
+
+    // CRITICAL: Verify Maps were correctly restored
+    expect(sessionAfter?.plans).toBeInstanceOf(Map);
+    expect(sessionAfter?.plan_results).toBeInstanceOf(Map);
+    expect(sessionAfter?.plans.size).toBe(2);
+
+    // Verify plan data is intact
+    const planA = sessionAfter?.plans.get('plan_A');
+    expect(planA).toBeDefined();
+    expect(planA?.plan_id).toBe('plan_A');
+    expect(planA?.description).toBe('Plan A');
+    expect(planA?.diversity_axes).toEqual(['data_sources', 'analytical_models', 'time_horizons']);
+
+    const planB = sessionAfter?.plans.get('plan_B');
+    expect(planB).toBeDefined();
+    expect(planB?.plan_id).toBe('plan_B');
+    expect(planB?.description).toBe('Plan B');
+
+    // Verify we can submit more plans to the restored session
+    const planC = await handleSubmitReasoningPlan({
+      session_id: sessionId,
+      plan: {
+        plan_id: 'plan_C',
+        description: 'Plan C',
+        diversity_axes: ['data_sources', 'analytical_models', 'stakeholder_views'],
+        capability_chain: TEST_CAP_CHAIN,
+        rationale: 'Test plan C after restore',
+        expected_outputs: ['output_c']
+      }
+    }, newManager);
+
+    expect(planC.content[0].text).toContain('Plan Accepted');
+
+    const finalSession = newManager.getSession(sessionId);
+    expect(finalSession?.plans.size).toBe(3);
+  });
 });

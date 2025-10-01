@@ -501,16 +501,43 @@ export class ParallelReasoningSessionManager {
 
   /**
    * Serialize sessions for Durable Object storage
+   * Converts nested Maps to arrays for JSON serialization
    */
-  serializeSessions(): Array<[string, ParallelReasoningSession]> {
-    return Array.from(this.sessions.entries());
+  serializeSessions(): Array<[string, any]> {
+    const serialized: Array<[string, any]> = [];
+
+    for (const [sessionId, session] of this.sessions.entries()) {
+      // Convert nested Maps to arrays for JSON serialization
+      const serializedSession = {
+        ...session,
+        plans: Array.from(session.plans.entries()),
+        plan_results: Array.from(session.plan_results.entries())
+      };
+      serialized.push([sessionId, serializedSession]);
+    }
+
+    return serialized;
   }
 
   /**
    * Deserialize sessions from Durable Object storage
+   * Converts arrays back to Maps
    */
-  loadSessions(sessions: Array<[string, ParallelReasoningSession]>): void {
-    this.sessions = new Map(sessions);
+  loadSessions(sessions: Array<[string, any]>): void {
+    this.sessions.clear();
+
+    for (const [sessionId, serializedSession] of sessions) {
+      // Convert arrays back to Maps
+      const session: ParallelReasoningSession = {
+        ...serializedSession,
+        plans: new Map(serializedSession.plans || []),
+        plan_results: new Map(serializedSession.plan_results || [])
+      };
+      this.sessions.set(sessionId, session);
+    }
+
+    console.log(`[ParallelReasoningSessionManager] Loaded ${this.sessions.size} sessions from storage`);
+    console.log(`[ParallelReasoningSessionManager] Session IDs: ${Array.from(this.sessions.keys()).join(', ')}`);
   }
 
   /**

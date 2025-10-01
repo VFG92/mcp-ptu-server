@@ -1,8 +1,8 @@
 {
   "name": "@modelcontextprotocol/servers",
   "private": true,
-  "version": "0.6.2",
-  "description": "Model Context Protocol servers",
+  "version": "5.0.3",
+  "description": "Model Context Protocol servers - MCP PTU Server with Parallel Reasoning",
   "license": "MIT",
   "author": "Anthropic, PBC (https://anthropic.com)",
   "homepage": "https://modelcontextprotocol.io",
