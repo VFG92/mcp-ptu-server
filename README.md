@@ -21,6 +21,8 @@ An MCP server that enables **ChatGPT** to orchestrate multi-path business analys
 2. Add MCP Server: `https://mcp-server.vf-ghizzoni.workers.dev/proxy`
 3. Start using the prompt templates below!
 
+**📖 Quick Start**: See [CHATGPT_GUIDE.md](./CHATGPT_GUIDE.md) for a step-by-step guide with examples.
+
 **Why `/proxy`?** ChatGPT's `api_tool.call_tool` doesn't support custom headers. The `/proxy` endpoint automatically extracts `session_id` from the request body and adds it as the `mcp-session-id` header.
 
 **Alternative: Direct Endpoint (Advanced)**
