@@ -83,9 +83,9 @@ else
 fi
 echo ""
 
-# Test 3: Tool call without initialization (auto-initialize)
+# Test 3: Tool call without initialization (should get 400)
 echo "=========================================="
-echo "TEST 3: Tool call without init (expect auto-init)"
+echo "TEST 3: Tool call without init (expect 400)"
 echo "=========================================="
 NEW_SESSION_ID="test-no-init-$(date +%s)"
 RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "$SERVER_URL" \
@@ -110,11 +110,11 @@ RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "$SERVER_URL" \
 HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
 BODY=$(echo "$RESPONSE" | sed '/HTTP_CODE:/d')
 
-if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -qi "Parallel Reasoning Session Initialized"; then
-  echo -e "${GREEN}✅ PASS${NC}: Server auto-initialized session and processed tool call"
-  echo "Response excerpt: $(echo "$BODY" | grep -o 'Parallel Reasoning Session Initialized[^}]*' | head -1)"
+if [ "$HTTP_CODE" = "400" ]; then
+  echo -e "${GREEN}✅ PASS${NC}: Got expected 400 Bad Request"
+  echo "Response: $BODY"
 else
-  echo -e "${RED}❌ FAIL${NC}: Expected auto-initialized 200 response, got $HTTP_CODE"
+  echo -e "${RED}❌ FAIL${NC}: Expected 400, got $HTTP_CODE"
   echo "Response: $BODY"
 fi
 echo ""

@@ -1,12 +1,51 @@
 # 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.3.0** | For AI Agents Working on This Repository
+**Version 5.4.0** | For AI Agents Working on This Repository
 
 This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
 
 ---
 
-## 🔧 Recent Fixes (v5.3.0)
+## 🔧 Recent Fixes
+
+### v5.4.0 - Session Persistence Fix (2025-02-01)
+
+**Problem**: Cloudflare Durable Objects are evicted after 70-140 seconds of inactivity. ChatGPT can "think" for 3+ minutes between tool calls, causing session loss and "Session not found" errors.
+
+**Root Cause Analysis**:
+1. ❌ **Initial Hypothesis (WRONG)**: Alarms prevent eviction
+   - Tested alarm API with 20-second intervals
+   - **Cloudflare docs confirm**: "Alarms do NOT prevent eviction"
+   - Alarms only execute code at scheduled times, don't keep DO alive
+
+2. ✅ **Correct Solution**: State persistence + restoration
+   - State was being persisted after each tool call ✅
+   - **BUT**: State was NOT being restored when DO woke up after eviction ❌
+
+**Fix**:
+- Added `loadParallelReasoningV5Sessions()` call in `session.ts` line 123
+- Added `loadCapabilityState()` call in `session.ts` line 124
+- These are called when `!this.transport` (DO initialization/re-initialization)
+- State is now restored from DO Storage when DO wakes up after eviction
+
+**Testing**:
+- Created `test-session-timeout.sh` with 180-second (3 minute) delay
+- ✅ Test passes: Session survives eviction and restores state correctly
+- ChatGPT can now think for 3+ minutes without losing session
+
+**Files Changed**:
+- `src/workers/session.ts` (lines 116-128, 478-487)
+- `test-session-timeout.sh` (new test script)
+
+**Key Learnings**:
+- Cloudflare DO eviction timeout: 70-140 seconds (not 30s as initially thought)
+- Alarms are for scheduled tasks, NOT for keeping DOs alive
+- Only solution: Persist state + restore on wake-up
+- DO Storage API is strongly consistent and perfect for this use case
+
+---
+
+### v5.3.0 - Validation Guardrails (2025-01-31)
 
 ### Bug Fix: Finalization Ignores `min_plans`
 

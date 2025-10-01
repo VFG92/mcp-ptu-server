@@ -1,11 +1,12 @@
 # 🧠 MCP PTU Server
 
-**Version 5.3.0** | LLM-Centric Parallel Reasoning with Validation Guardrails
+**Version 5.4.0** | LLM-Centric Parallel Reasoning with Session Persistence
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-5.3.0-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Version](https://img.shields.io/badge/Version-5.4.0-green)](https://github.com/VFG92/mcp-ptu-server)
 [![Tests](https://img.shields.io/badge/Tests-167%2F167-brightgreen)]()
+[![Session Persistence](https://img.shields.io/badge/Session%20Persistence-3%2B%20minutes-blue)]()
 
 An MCP server that enables **ChatGPT** to orchestrate multi-path business analysis. **You (ChatGPT) are the sole deliberative agent** — the server provides only guardrails (diversity validation) and persistent memory. You generate diverse reasoning plans, cross-contaminate insights, peer review, and mediate final decisions.
 
@@ -614,13 +615,30 @@ Capability System
   - Industry adapters, Native integration
 ```
 
+### Session Persistence (v5.4.0)
+
+**Problem**: Cloudflare Durable Objects are evicted after 70-140 seconds of inactivity. ChatGPT can "think" for 3+ minutes between tool calls, causing session loss.
+
+**Solution**:
+- ✅ **State persisted to DO Storage** after every tool call
+- ✅ **State restored from storage** when DO wakes up after eviction
+- ✅ **Tested with 180-second delays** (3 minutes) - sessions survive!
+
+**Key Implementation**:
+- `persistParallelReasoningV5Sessions()`: Called after each tool execution
+- `loadParallelReasoningV5Sessions()`: Called when DO initializes (including after eviction)
+- Uses Cloudflare's strongly consistent DO Storage API
+
+**Note**: Alarms do NOT prevent eviction (per Cloudflare docs). Only storage persistence works.
+
 ### Key Technologies
 
 - **Platform**: Cloudflare Workers + Durable Objects
 - **Language**: TypeScript (strict mode)
 - **Protocol**: Model Context Protocol (MCP) 2024-11-05
-- **Testing**: Jest (162 tests, 100% passing)
+- **Testing**: Jest (167 tests, 100% passing)
 - **Deployment**: Wrangler 4.40.2
+- **Session Persistence**: Survives 3+ minute idle periods
 
 ---
 

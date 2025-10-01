@@ -113,11 +113,17 @@ export class MCPSession extends DurableObject {
     console.log(`[MCPSession] POST request. Session header: ${sessionIdHeader}, DO ID: ${this.ctx.id.toString()}, Has transport: ${!!this.transport}`);
     console.log(`[MCPSession] Current sessionStore has ${this.parallelReasoningSessions.size} sessions: ${Array.from(this.parallelReasoningSessions.keys()).join(', ') || 'none'}`);
 
-    // If we don't have a transport yet, this is initialization
+    // If we don't have a transport yet, this is initialization (or re-initialization after eviction)
     if (!this.transport) {
       // Generate a session ID based on the DO ID
       this.sessionId = this.ctx.id.toString();
-      console.log(`[MCPSession] Initializing new session: ${this.sessionId}`);
+      console.log(`[MCPSession] Initializing session: ${this.sessionId}`);
+
+      // CRITICAL: Load persisted state from storage (in case of eviction/restart)
+      console.log(`[MCPSession] Loading persisted state from DO storage...`);
+      await this.loadParallelReasoningV5Sessions();
+      await this.loadCapabilityState();
+      console.log(`[MCPSession] State loaded. V5 sessions: ${this.parallelReasoningV5Manager.getAllSessions().size}`);
 
       // Create the MCP server with parallel reasoning session store and persist callback
       const persistCallback = async () => {
@@ -470,18 +476,14 @@ export class MCPSession extends DurableObject {
   }
 
   private startHeartbeat() {
-    // Send heartbeat every 30 seconds to keep SSE connection alive
-    this.heartbeatInterval = setInterval(() => {
-      // Heartbeat logic would go here if needed
-      // For now, the transport handles keep-alive
-    }, 30000) as unknown as number;
+    // Note: Alarms do NOT prevent eviction (per Cloudflare docs)
+    // DOs are evicted after 70-140s of inactivity regardless of alarms
+    // State persistence on every tool call is the correct approach
+    console.log(`[MCPSession] Heartbeat placeholder (state persisted on each tool call)`);
   }
 
   private stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
+    console.log(`[MCPSession] Stopping heartbeat`);
   }
 
   /**
