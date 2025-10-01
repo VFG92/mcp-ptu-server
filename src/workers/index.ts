@@ -9,7 +9,6 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
 const DURABLE_OBJECT_ID_REGEX = /^[0-9a-f]{64}$/i;
-const SESSION_DELIMITER = '::';
 
 /**
  * Extract or validate session ID for Durable Object routing
@@ -44,21 +43,21 @@ const isNativeDurableObjectId = (value: string): boolean => {
 };
 
 /**
- * Create a deterministic Durable Object ID from a custom session ID
- * Uses SHA-256 hash to create a consistent 64-character hex string
+ * Get Durable Object ID from session ID
+ * Supports both native DO IDs (64 hex chars) and custom named IDs
  */
-async function createDeterministicDoId(sessionId: string): Promise<string> {
-  // Use Web Crypto API to create SHA-256 hash
-  const encoder = new TextEncoder();
-  const data = encoder.encode(sessionId);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-
-  // Convert to hex string
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-  // SHA-256 produces 32 bytes = 64 hex chars (perfect for DO ID!)
-  return hashHex;
+function getDurableObjectId(
+  namespace: DurableObjectNamespace,
+  sessionId: string
+): DurableObjectId {
+  if (isNativeDurableObjectId(sessionId)) {
+    // Native DO ID - use idFromString
+    return namespace.idFromString(sessionId);
+  } else {
+    // Custom session ID - use idFromName (with type cast as it's not in @types)
+    // idFromName is a standard Cloudflare Workers API but not in all type definitions
+    return (namespace as any).idFromName(sessionId);
+  }
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -160,17 +159,8 @@ app.post('/heartbeat', async (c) => {
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    // Support both native DO IDs and custom session IDs
-    if (isNativeDurableObjectId(trimmedSessionId)) {
-      // Native DO ID - use directly
-      id = c.env.MCP_SESSION.idFromString(trimmedSessionId);
-      console.log(`[Worker] Heartbeat using native DO ID: ${trimmedSessionId}`);
-    } else {
-      // Custom session ID - create deterministic hash
-      const deterministicId = await createDeterministicDoId(trimmedSessionId);
-      id = c.env.MCP_SESSION.idFromString(deterministicId);
-      console.log(`[Worker] Heartbeat using custom session ID: ${trimmedSessionId} -> ${deterministicId}`);
-    }
+    id = getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
+    console.log(`[Worker] Heartbeat for session: ${trimmedSessionId}`);
   } catch (error) {
     return c.json({
       jsonrpc: '2.0',
@@ -258,21 +248,9 @@ app.post('/mcp', async (c) => {
 
   if (routedDoId) {
     try {
-      // Check if this is a native Durable Object ID (64 hex chars) or a custom session ID
-      if (isNativeDurableObjectId(routedDoId)) {
-        // Native DO ID - use directly
-        id = c.env.MCP_SESSION.idFromString(routedDoId);
-        console.log(`[Worker] Using native DO ID: ${routedDoId}`);
-      } else {
-        // Custom session ID - create deterministic hash
-        const deterministicId = await createDeterministicDoId(routedDoId);
-        id = c.env.MCP_SESSION.idFromString(deterministicId);
-        console.log(`[Worker] Using custom session ID: ${routedDoId} -> ${deterministicId}`);
-      }
-
+      id = getDurableObjectId(c.env.MCP_SESSION, routedDoId);
       const idString = id.toString();
-      console.log(`[Worker] DO ID resolved to: ${idString}`);
-      console.log(`[Worker] Source: ${routedDoIdSource}`);
+      console.log(`[Worker] Routed to DO: ${idString} (from session: ${routedDoId}, source: ${routedDoIdSource})`);
     } catch (error) {
       console.error(
         `[Worker] Failed to resolve session identifier "${routedDoIdRawValue ?? routedDoId}": ${error}. Creating new DO.`
@@ -320,13 +298,7 @@ app.get('/mcp', async (c) => {
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    // Support both native DO IDs and custom session IDs
-    if (isNativeDurableObjectId(trimmedSessionId)) {
-      id = c.env.MCP_SESSION.idFromString(trimmedSessionId);
-    } else {
-      const deterministicId = await createDeterministicDoId(trimmedSessionId);
-      id = c.env.MCP_SESSION.idFromString(deterministicId);
-    }
+    id = getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
   } catch (error) {
     return c.json({
       jsonrpc: '2.0',
@@ -375,13 +347,7 @@ app.delete('/mcp', async (c) => {
   // Get the Durable Object for this session
   let id: DurableObjectId;
   try {
-    // Support both native DO IDs and custom session IDs
-    if (isNativeDurableObjectId(trimmedSessionId)) {
-      id = c.env.MCP_SESSION.idFromString(trimmedSessionId);
-    } else {
-      const deterministicId = await createDeterministicDoId(trimmedSessionId);
-      id = c.env.MCP_SESSION.idFromString(deterministicId);
-    }
+    id = getDurableObjectId(c.env.MCP_SESSION, trimmedSessionId);
   } catch (error) {
     return c.json({
       jsonrpc: '2.0',
