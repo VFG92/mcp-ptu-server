@@ -1,12 +1,12 @@
 # 🧠 MCP PTU Server - Capability-Driven Business Analysis
 
-**Version 4.2.0** | **Evidence-Backed, Industry-Aware, LLM-Native, Persistent, Peer-Reviewed, Production-Ready**
+**Version 5.0.0** | **LLM-Centric Parallel Reasoning, Evidence-Backed, Industry-Aware, Production-Ready**
 
-A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server featuring a **capability-driven architecture** for enterprise business analysis with **58 advanced capabilities** across 8 business domains, including **11 capabilities with explicit LLM native integration** (Python execution, web search).
+A next-generation [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server featuring a **capability-driven architecture** for enterprise business analysis with **58 advanced capabilities** across 8 business domains, plus **8 parallel reasoning tools** for multi-path analysis with diversity enforcement and contamination.
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-4.2.0-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Version](https://img.shields.io/badge/Version-5.0.0-green)](https://github.com/VFG92/mcp-ptu-server)
 [![Capabilities](https://img.shields.io/badge/Capabilities-58-brightgreen)](./AGENT.md#-46-advanced-capabilities-v40)
 
 ---
@@ -30,6 +30,19 @@ An MCP server that enables **ChatGPT Developer Mode** to perform **evidence-back
 ---
 
 ## ✨ Key Features
+
+### 🆕 Version 5.0 - Parallel Reasoning (LLM-Centric Architecture)
+
+#### Multi-Path Reasoning with Diversity Enforcement
+- ✅ **8 New MCP Tools** - Complete parallel reasoning workflow: init, submit_plan, execute_step, cross_note, peer_critique, mediation, list_status, finalize
+- ✅ **Diversity Validation** - Server enforces ≥2 axes difference between plans (prevents deriva semantica)
+- ✅ **Contamination** - Cross-plan notes enable interaction between reasoning paths
+- ✅ **LLM-Centric Design** - ChatGPT is sole deliberative agent, MCP provides guardrails + memory
+- ✅ **Evidence-Based Mediation** - Final decisions must cite evidence IDs from plans
+- ✅ **6 Diversity Axes** - data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views
+- ✅ **Quality Boost** - Based on Self-Consistency (Wang 2022), Tree-of-Thoughts (Yao 2023), Multi-Agent Debate (Du 2023)
+
+**Architecture Principle**: MCP = Guardrails + Persistent Memory | ChatGPT = Planning + Reasoning + Mediation
 
 ### 🆕 Version 4.2 Enhancements
 
@@ -152,9 +165,122 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
 }
 ```
 
+#### Example 4: Parallel Reasoning (v5.0 - Multi-Path Analysis)
+
+**Step 1: Initialize Session**
+```typescript
+{
+  "name": "init_parallel_reasoning",
+  "arguments": {
+    "session_id": "fintech_parallel_001",
+    "task_description": "Analyze European fintech market for B2B SaaS opportunities",
+    "required_diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
+    "min_plans": 3
+  }
+}
+```
+
+**Step 2: Submit Diverse Plans** (ChatGPT generates 3 plans internally)
+```typescript
+// Plan A: Official statistics + Regression
+{
+  "name": "submit_reasoning_plan",
+  "arguments": {
+    "session_id": "fintech_parallel_001",
+    "plan": {
+      "plan_id": "plan_A",
+      "description": "Data-driven baseline using official market statistics",
+      "diversity_axes": ["data_sources", "analytical_models"],
+      "capability_chain": ["market_scan", "tam_sam_som_build", "competitor_analysis"],
+      "rationale": "Provides reliable baseline using official statistics and proven regression techniques",
+      "expected_outputs": ["market_map", "tam_sam_som"]
+    }
+  }
+}
+
+// Plan B: Industry reports + Monte Carlo (different axes)
+// Plan C: Academic research + Normative analysis (different axes)
+```
+
+**Step 3: Execute Plans in Parallel** (ChatGPT manages internally)
+```typescript
+{
+  "name": "execute_plan_step",
+  "arguments": {
+    "session_id": "fintech_parallel_001",
+    "plan_id": "plan_A",
+    "capability_id": "market_scan",
+    "inputs": { "industry_vertical": "financial_services", "geographic_region": "europe" }
+  }
+}
+```
+
+**Step 4: Contamination** (Plans exchange insights)
+```typescript
+{
+  "name": "submit_cross_plan_note",
+  "arguments": {
+    "session_id": "fintech_parallel_001",
+    "from_plan_id": "plan_A",
+    "to_plan_id": "plan_B",
+    "note": "Found market size €50B using official statistics. Consider this baseline in your Monte Carlo simulation.",
+    "references": ["evidence_001", "evidence_002"]
+  }
+}
+```
+
+**Step 5: Peer Review** (ChatGPT generates critiques)
+```typescript
+{
+  "name": "submit_peer_critique",
+  "arguments": {
+    "session_id": "fintech_parallel_001",
+    "reviewer_plan_id": "plan_B",
+    "reviewed_plan_id": "plan_A",
+    "critique": {
+      "claims_challenged": ["Assumes linear growth, but market shows high volatility"],
+      "falsification_tests": ["Test with 2008 crisis data"],
+      "residual_risks": ["Regulatory changes not considered"],
+      "agreement_score": 0.65
+    }
+  }
+}
+```
+
+**Step 6: Mediation** (ChatGPT chooses best approach for each decision)
+```typescript
+{
+  "name": "submit_mediation_decision",
+  "arguments": {
+    "session_id": "fintech_parallel_001",
+    "decision": {
+      "decision_point": "Market size estimation",
+      "chosen_from_plan": "plan_B",
+      "rationale": "Monte Carlo provides confidence intervals, more robust than point estimate",
+      "evidence_ids": ["evidence_005", "evidence_006"],
+      "confidence": 0.82
+    }
+  }
+}
+```
+
+**Step 7: Finalize**
+```typescript
+{
+  "name": "finalize_parallel_reasoning",
+  "arguments": {
+    "session_id": "fintech_parallel_001"
+  }
+}
+```
+
+**Result**: ChatGPT presents mediated answer with decision map showing which plan contributed each insight, with evidence citations and consensus score.
+
 ---
 
-## 📚 Available Tools (4 tools)
+## 📚 Available Tools (12 tools)
+
+### Capability-Driven Analysis (4 tools)
 
 ### `analyze_with_capabilities`
 Main analysis tool with evidence tracking, industry adaptation, and budget awareness.
@@ -212,6 +338,98 @@ Export complete session for audit/compliance.
 **Returns**: Complete session data with artifacts, evidence, confidence scores, audit trail
 
 **Status**: ✅ Production Ready
+
+---
+
+### Parallel Reasoning v5.0 (8 tools - NEW)
+
+**LLM-Centric Architecture**: MCP provides guardrails + memory, ChatGPT is sole deliberative agent
+
+#### `init_parallel_reasoning`
+Initialize parallel reasoning session with diversity requirements.
+
+**Arguments**: `session_id`, `task_description`, `required_diversity_axes`, `min_plans`
+
+**Returns**: Actionable prompt with diversity axes reference
+
+**Status**: ✅ Production Ready | v5.0
+
+---
+
+#### `submit_reasoning_plan`
+Submit reasoning plan with diversity validation (≥2 axes differ from existing plans).
+
+**Arguments**: `session_id`, `plan` (with `diversity_axes`, `capability_chain`, `rationale`)
+
+**Returns**: Acceptance/rejection with diversity validation feedback
+
+**Status**: ✅ Production Ready | v5.0
+
+---
+
+#### `execute_plan_step`
+Execute capability for specific plan (enables parallel execution).
+
+**Arguments**: `session_id`, `plan_id`, `capability_id`, `inputs`
+
+**Returns**: Capability result associated with plan
+
+**Status**: ✅ Production Ready | v5.0
+
+---
+
+#### `submit_cross_plan_note`
+Submit note from one plan to another (contamination).
+
+**Arguments**: `session_id`, `from_plan_id`, `to_plan_id`, `note`, `references`
+
+**Returns**: Confirmation of note storage
+
+**Status**: ✅ Production Ready | v5.0
+
+---
+
+#### `submit_peer_critique`
+Submit peer critique (ChatGPT-generated).
+
+**Arguments**: `session_id`, `reviewer_plan_id`, `reviewed_plan_id`, `critique`
+
+**Returns**: Confirmation of critique storage
+
+**Status**: ✅ Production Ready | v5.0
+
+---
+
+#### `submit_mediation_decision`
+Submit mediation decision with evidence citations.
+
+**Arguments**: `session_id`, `decision` (with `chosen_from_plan`, `evidence_ids`)
+
+**Returns**: Confirmation of decision storage
+
+**Status**: ✅ Production Ready | v5.0
+
+---
+
+#### `list_plan_status`
+List pending frames (passive status listing).
+
+**Arguments**: `session_id`
+
+**Returns**: Pending frames (plan executions, peer reviews, decisions)
+
+**Status**: ✅ Production Ready | v5.0
+
+---
+
+#### `finalize_parallel_reasoning`
+Finalize session with completeness validation.
+
+**Arguments**: `session_id`
+
+**Returns**: Decision map with mediated result
+
+**Status**: ✅ Production Ready | v5.0
 
 ---
 

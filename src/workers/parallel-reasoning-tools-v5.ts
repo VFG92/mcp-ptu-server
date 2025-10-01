@@ -1,0 +1,461 @@
+/**
+ * MCP Tool Handlers for Parallel Reasoning v5.0
+ * 
+ * LLM-CENTRIC ARCHITECTURE:
+ * - MCP = Guardrails + Persistent Memory (NO intelligence)
+ * - ChatGPT = Unico agente deliberativo (planning, reasoning, mediation)
+ * - Parallel reasoning happens INSIDE ChatGPT, not in server
+ * 
+ * WORKFLOW:
+ * 1. ChatGPT: init_parallel_reasoning → declares diversity axes
+ * 2. ChatGPT: submit_reasoning_plan (Plan A, B, C...) → server validates diversity
+ * 3. ChatGPT: execute_plan_step → invokes capabilities, server persists
+ * 4. ChatGPT: submit_cross_plan_note → contamination between plans
+ * 5. ChatGPT: submit_peer_critique → peer review (ChatGPT writes, server stores)
+ * 6. ChatGPT: finalize_parallel_reasoning → synthesis with decision map
+ * 
+ * References:
+ * - Wang et al., Self-Consistency, 2022
+ * - Yao et al., Tree of Thoughts, 2023
+ * - Du et al., Improving Factuality via Debate, 2023
+ */
+
+import { z } from 'zod';
+import {
+  globalParallelReasoningManager,
+  ParallelReasoningSessionManager,
+  DiversityAxisSchema,
+  ReasoningPlanSchema,
+  CrossPlanNoteSchema,
+  PeerCritiqueSchema,
+  MediationDecisionSchema
+} from './parallel-reasoning-mcp.js';
+import { handleAnalyzeWithCapabilities, type CapabilitySystemRefs } from './capability-tools.js';
+
+/**
+ * Tool 1: Initialize Parallel Reasoning Session
+ */
+export const InitParallelReasoningSchema = z.object({
+  session_id: z.string().describe('Unique session identifier'),
+  task_description: z.string().describe('Task to analyze with parallel reasoning'),
+  required_diversity_axes: z.array(DiversityAxisSchema).min(2).describe('Axes that must differ between plans (min 2)'),
+  min_plans: z.number().int().min(2).max(8).default(3).describe('Minimum number of parallel plans (2-8, default 3)')
+});
+
+export async function handleInitParallelReasoning(
+  args: z.infer<typeof InitParallelReasoningSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const session = manager.initSession(args);
+
+  const response = `# ✅ Parallel Reasoning Session Initialized
+
+**Session ID**: \`${session.session_id}\`
+**Task**: ${session.task_description}
+**Required Diversity Axes**: ${session.required_diversity_axes.join(', ')}
+**Minimum Plans**: ${session.min_plans}
+
+---
+
+## 🎯 YOUR NEXT ACTION
+
+You must now generate ${session.min_plans} **distinct reasoning plans** that approach this task from different angles.
+
+**Use this tool**: \`submit_reasoning_plan\`
+
+**For each plan, you MUST**:
+1. Choose at least 2 diversity axes from the list below
+2. Ensure at least 2 axes differ from other plans (server will validate)
+3. Specify a capability chain (sequence of capabilities to invoke)
+4. Provide rationale explaining why this plan adds unique value
+
+---
+
+## 📊 Diversity Axes (Choose ≥2 per plan)
+
+- **data_sources**: Use different data sources
+  - Example: Plan A uses official statistics, Plan B uses industry reports, Plan C uses academic research
+
+- **analytical_models**: Use different analytical approaches
+  - Example: Plan A uses regression analysis, Plan B uses Monte Carlo simulation, Plan C uses normative/regulatory analysis
+
+- **time_horizons**: Analyze different time frames
+  - Example: Plan A focuses on short-term (1-2 years), Plan B on medium-term (3-5 years), Plan C on long-term (5-10 years)
+
+- **quality_metrics**: Optimize for different quality criteria
+  - Example: Plan A optimizes for precision, Plan B for recall/coverage, Plan C for robustness
+
+- **risk_perspectives**: View through different risk lenses
+  - Example: Plan A focuses on market risks, Plan B on regulatory risks, Plan C on operational risks
+
+- **stakeholder_views**: Adopt different stakeholder perspectives
+  - Example: Plan A takes customer perspective, Plan B takes investor perspective, Plan C takes regulator perspective
+
+---
+
+## 💡 Example: Valid Plan Submission
+
+\`\`\`json
+{
+  "session_id": "${session.session_id}",
+  "plan": {
+    "plan_id": "plan_A",
+    "description": "Market-driven analysis using official statistics and regression models",
+    "diversity_axes": ["data_sources", "analytical_models"],
+    "capability_chain": ["market_scan", "tam_sam_som_build", "competitor_analysis"],
+    "rationale": "This plan provides a data-driven baseline using official market statistics and proven regression techniques for TAM/SAM/SOM estimation.",
+    "expected_outputs": ["market_map", "tam_sam_som", "competitive_landscape"]
+  }
+}
+\`\`\`
+
+---
+
+## ⚠️ Validation Rules
+
+The server will **reject** plans that:
+- Declare fewer than 2 diversity axes
+- Have fewer than 2 axes different from existing plans
+- This ensures **real diversification**, not cosmetic variants
+
+---
+
+**Status**: ${session.status}
+**Action Required**: Submit ${session.min_plans} plans now using \`submit_reasoning_plan\``;
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+
+/**
+ * Tool 2: Submit Reasoning Plan
+ */
+export const SubmitReasoningPlanSchema = z.object({
+  session_id: z.string(),
+  plan: ReasoningPlanSchema
+});
+
+export async function handleSubmitReasoningPlan(
+  args: z.infer<typeof SubmitReasoningPlanSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const result = manager.submitPlan(args.session_id, args.plan);
+
+  let response = `# Plan Submission: ${args.plan.plan_id}\n\n`;
+
+  if (result.accepted) {
+    response += `✅ **Plan Accepted**\n\n`;
+    response += `**Diversity Axes**: ${args.plan.diversity_axes.join(', ')}\n`;
+    response += `**Capability Chain**: ${args.plan.capability_chain.join(' → ')}\n`;
+    response += `**Rationale**: ${args.plan.rationale}\n\n`;
+
+    const session = manager.getSession(args.session_id);
+    if (session) {
+      response += `**Plans Submitted**: ${session.plans.size}/${session.min_plans}\n\n`;
+
+      if (session.plans.size >= session.min_plans) {
+        response += `---\n\n`;
+        response += `## ✅ Minimum Plans Met - Ready to Execute\n\n`;
+        response += `You have submitted ${session.plans.size} plans. You can now:\n\n`;
+        response += `1. **Execute each plan** using \`execute_plan_step\` for each capability in the chain\n`;
+        response += `2. **Exchange notes** between plans using \`submit_cross_plan_note\` (contamination)\n`;
+        response += `3. **Monitor progress** using \`list_plan_status\`\n\n`;
+        response += `**Recommended**: Start executing all plans in parallel, then use cross-plan notes to enable contamination.\n`;
+      } else {
+        response += `**Action Required**: Submit ${session.min_plans - session.plans.size} more plan(s) to reach minimum.\n`;
+      }
+    }
+  } else {
+    response += `❌ **Plan Rejected**\n\n`;
+    response += `**Reason**: ${result.reason}\n\n`;
+    response += `**Diversity Validation**:\n`;
+    response += `- Axes declared: ${result.diversity_validation.axes_declared.join(', ')}\n`;
+    response += `- Min axes met (≥2): ${result.diversity_validation.min_axes_met ? '✅' : '❌'}\n`;
+    response += `- Unique to existing plans: ${result.diversity_validation.axes_unique_to_existing ? '✅' : '❌'}\n\n`;
+    response += `---\n\n`;
+    response += `## 🔧 How to Fix\n\n`;
+
+    if (!result.diversity_validation.min_axes_met) {
+      response += `Your plan declares only ${result.diversity_validation.axes_declared.length} axis/axes. **You must declare at least 2 diversity axes**.\n\n`;
+      response += `Add another axis from: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views\n\n`;
+    }
+
+    if (!result.diversity_validation.axes_unique_to_existing) {
+      response += `Your plan's diversity axes are too similar to existing plans. **At least 2 axes must differ from other plans**.\n\n`;
+      response += `Try choosing different axes or changing your approach significantly.\n\n`;
+    }
+
+    response += `**Action Required**: Revise and resubmit this plan with proper diversification.\n`;
+  }
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+
+/**
+ * Tool 3: Execute Plan Step
+ */
+export const ExecutePlanStepSchema = z.object({
+  session_id: z.string(),
+  plan_id: z.string(),
+  task: z.string().describe('Task for capability execution'),
+  adapter_id: z.enum(['strategy', 'finance', 'commercial', 'risk', 'comprehensive']).optional(),
+  budget: z.object({
+    max_tokens_in: z.number().int().positive(),
+    max_tokens_out: z.number().int().positive(),
+    max_cpu_ms: z.number().int().positive(),
+    max_subrequests: z.number().int().positive()
+  }).optional()
+});
+
+export async function handleExecutePlanStep(
+  args: z.infer<typeof ExecutePlanStepSchema>,
+  refs?: CapabilitySystemRefs,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  // Execute capability using existing analyze_with_capabilities
+  const result = await handleAnalyzeWithCapabilities({
+    session_id: `${args.session_id}_${args.plan_id}`,
+    task: args.task,
+    adapter_id: args.adapter_id,
+    budget: args.budget,
+    tournament_mode: true,
+    peer_review_mode: true
+  }, refs);
+
+  // Record result for plan
+  globalParallelReasoningManager.recordPlanResult(args.session_id, args.plan_id, result);
+
+  // Prepend plan context to response
+  const planContext = `# Plan Step Executed: ${args.plan_id}\n\n`;
+  const originalText = result.content[0].text;
+  
+  return {
+    content: [{ type: 'text', text: planContext + originalText }]
+  };
+}
+
+/**
+ * Tool 4: Submit Cross-Plan Note (Contamination)
+ */
+export const SubmitCrossPlanNoteSchema = z.object({
+  session_id: z.string(),
+  note: CrossPlanNoteSchema
+});
+
+export async function handleSubmitCrossPlanNote(
+  args: z.infer<typeof SubmitCrossPlanNoteSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  manager.submitCrossPlanNote(args.session_id, args.note);
+
+  const response = `# Cross-Plan Note Recorded
+
+**From**: ${args.note.from_plan_id}
+**To**: ${args.note.to_plan_id}
+**Note**: ${args.note.note}
+**References**: ${args.note.references.join(', ')}
+
+This note enables contamination between reasoning paths.
+Plan ${args.note.to_plan_id} can now consider insights from Plan ${args.note.from_plan_id}.`;
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+
+/**
+ * Tool 5: Submit Peer Critique
+ */
+export const SubmitPeerCritiqueSchema = z.object({
+  session_id: z.string(),
+  critique: PeerCritiqueSchema
+});
+
+export async function handleSubmitPeerCritique(
+  args: z.infer<typeof SubmitPeerCritiqueSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  manager.submitPeerCritique(args.session_id, args.critique);
+
+  const response = `# Peer Critique Recorded
+
+**Reviewer**: ${args.critique.reviewer_plan_id}
+**Reviewed**: ${args.critique.reviewed_plan_id}
+**Agreement Score**: ${(args.critique.agreement_score * 100).toFixed(1)}%
+
+## Claims Challenged
+
+${args.critique.claims_challenged.map((c, i) => `
+${i + 1}. **Claim**: ${c.claim}
+   - **Evidence**: ${c.evidence_ids.join(', ')}
+   - **Challenge**: ${c.challenge}
+   ${c.falsification_test ? `- **Falsification Test**: ${c.falsification_test}` : ''}
+`).join('\n')}
+
+## Residual Risks
+
+${args.critique.residual_risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+
+Critique stored for consensus analysis.`;
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+
+/**
+ * Tool 6: Submit Mediation Decision
+ */
+export const SubmitMediationDecisionSchema = z.object({
+  session_id: z.string(),
+  decision: MediationDecisionSchema
+});
+
+export async function handleSubmitMediationDecision(
+  args: z.infer<typeof SubmitMediationDecisionSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  manager.submitMediationDecision(args.session_id, args.decision);
+
+  const response = `# Mediation Decision Recorded
+
+**Decision Point**: ${args.decision.decision_point}
+**Chosen From**: ${args.decision.chosen_from_plan}
+**Confidence**: ${(args.decision.confidence * 100).toFixed(1)}%
+
+**Rationale**: ${args.decision.rationale}
+
+**Evidence References**: ${args.decision.evidence_ids.join(', ')}
+
+Decision stored. Continue submitting decisions for all key points.`;
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+
+/**
+ * Tool 7: List Plan Status (Passive)
+ */
+export const ListPlanStatusSchema = z.object({
+  session_id: z.string()
+});
+
+export async function handleListPlanStatus(
+  args: z.infer<typeof ListPlanStatusSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const status = manager.getSessionStatus(args.session_id);
+
+  if (!status.session) {
+    return {
+      content: [{ type: 'text', text: 'Session not found.' }]
+    };
+  }
+
+  const session = status.session;
+
+  let response = `# Parallel Reasoning Session Status
+
+**Session ID**: ${session.session_id}
+**Status**: ${session.status}
+**Plans**: ${session.plans.size}/${session.min_plans}
+
+## Plans
+
+${Array.from(session.plans.values()).map(plan => `
+### ${plan.plan_id}
+- **Diversity Axes**: ${plan.diversity_axes.join(', ')}
+- **Capability Chain**: ${plan.capability_chain.join(' → ')}
+- **Results**: ${session.plan_results.get(plan.plan_id)?.length || 0} steps completed
+`).join('\n')}
+
+## Cross-Plan Notes
+
+${session.cross_plan_notes.length} notes exchanged
+
+## Peer Critiques
+
+${session.peer_critiques.length} critiques submitted
+
+## Mediation Decisions
+
+${session.mediation_decisions.length} decisions recorded
+
+## Pending Frames
+
+${status.pending_frames.length > 0 ? status.pending_frames.map(f => `- ${f}`).join('\n') : 'None - all frames complete'}
+
+---
+
+**Created**: ${new Date(session.created_at).toISOString()}
+**Updated**: ${new Date(session.updated_at).toISOString()}`;
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+
+/**
+ * Tool 8: Finalize Parallel Reasoning
+ */
+export const FinalizeParallelReasoningSchema = z.object({
+  session_id: z.string()
+});
+
+export async function handleFinalizeParallelReasoning(
+  args: z.infer<typeof FinalizeParallelReasoningSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const result = manager.finalizeSession(args.session_id);
+  const session = manager.getSession(args.session_id);
+
+  if (!session) {
+    return {
+      content: [{ type: 'text', text: 'Session not found.' }]
+    };
+  }
+
+  let response = `# Parallel Reasoning Session Finalized\n\n`;
+
+  if (result.finalized) {
+    response += `✅ **Session Complete**\n\n`;
+    response += `## Summary\n\n`;
+    response += `- **Plans Executed**: ${session.plans.size}\n`;
+    response += `- **Cross-Plan Notes**: ${session.cross_plan_notes.length}\n`;
+    response += `- **Peer Critiques**: ${session.peer_critiques.length}\n`;
+    response += `- **Mediation Decisions**: ${session.mediation_decisions.length}\n\n`;
+    
+    response += `## Decision Map\n\n`;
+    response += session.mediation_decisions.map((d, i) => `
+${i + 1}. **${d.decision_point}**
+   - Chosen from: ${d.chosen_from_plan}
+   - Confidence: ${(d.confidence * 100).toFixed(1)}%
+   - Rationale: ${d.rationale}
+   - Evidence: ${d.evidence_ids.join(', ')}
+`).join('\n');
+  } else {
+    response += `❌ **Session Incomplete**\n\n`;
+    response += `## Completeness Check\n\n`;
+    response += `- All plans executed: ${result.completeness_check.all_plans_executed ? '✅' : '❌'}\n`;
+    response += `- All decisions have evidence: ${result.completeness_check.all_decisions_have_evidence ? '✅' : '❌'}\n\n`;
+    
+    if (result.completeness_check.missing_plans.length > 0) {
+      response += `### Missing Plan Executions\n\n`;
+      response += result.completeness_check.missing_plans.map(p => `- ${p}`).join('\n') + '\n\n';
+    }
+    
+    if (result.completeness_check.decisions_without_evidence.length > 0) {
+      response += `### Decisions Without Evidence\n\n`;
+      response += result.completeness_check.decisions_without_evidence.map(d => `- ${d}`).join('\n') + '\n\n';
+    }
+  }
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+

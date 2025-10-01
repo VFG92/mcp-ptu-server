@@ -17,6 +17,7 @@ import { ExpressRequestAdapter, ExpressResponseAdapter } from './express-adapter
 import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
 import { Whiteboard } from './whiteboard-memory.js';
 import { EvidenceLedger } from './evidence-ledger.js';
+import { ParallelReasoningSessionManager } from './parallel-reasoning-mcp.js';
 
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;
@@ -31,8 +32,11 @@ export class MCPSession extends DurableObject {
   private readonly ctx: DurableObjectState;
   private readonly env: Env;
 
-  // Parallel reasoning state storage
+  // Parallel reasoning state storage (legacy)
   private parallelReasoningSessions: Map<string, ParallelReasoningSession> = new Map();
+
+  // Parallel reasoning v5 state storage (NEW)
+  private parallelReasoningV5Manager: ParallelReasoningSessionManager = new ParallelReasoningSessionManager();
 
   // Capability system state storage
   private whiteboard: Whiteboard = new Whiteboard();
@@ -53,8 +57,10 @@ export class MCPSession extends DurableObject {
     // Load state from storage on initialization
     this.ctx.blockConcurrencyWhile(async () => {
       await this.loadParallelReasoningSessions();
+      await this.loadParallelReasoningV5Sessions();
       await this.loadCapabilityState();
-      console.log(`[MCPSession] Loaded ${this.parallelReasoningSessions.size} sessions from storage`);
+      console.log(`[MCPSession] Loaded ${this.parallelReasoningSessions.size} legacy sessions from storage`);
+      console.log(`[MCPSession] Loaded ${this.parallelReasoningV5Manager.getAllSessions().size} v5 sessions from storage`);
       console.log(`[MCPSession] Loaded ${this.whiteboard.getAllIds().length} artifacts from whiteboard`);
     });
   }
@@ -103,13 +109,18 @@ export class MCPSession extends DurableObject {
       const capabilityPersistCallback = async () => {
         await this.persistCapabilityState();
       };
+      const parallelReasoningV5PersistCallback = async () => {
+        await this.persistParallelReasoningV5Sessions();
+      };
       const { server, cleanup, startNotificationIntervals } = createServer(
         this.parallelReasoningSessions,
         persistCallback,
         getTransportSessionId,
         this.whiteboard,
         this.evidenceLedger,
-        capabilityPersistCallback
+        capabilityPersistCallback,
+        this.parallelReasoningV5Manager,
+        parallelReasoningV5PersistCallback
       );
       this.server = server;
       this.cleanup = cleanup;
@@ -413,6 +424,26 @@ export class MCPSession extends DurableObject {
     // Restore execution history
     if (historyData) {
       this.capabilityExecutionHistory = historyData;
+    }
+  }
+
+  /**
+   * Persist parallel reasoning v5 sessions to Durable Object storage
+   */
+  async persistParallelReasoningV5Sessions(): Promise<void> {
+    const sessions = this.parallelReasoningV5Manager.serializeSessions();
+    console.log(`[MCPSession] Persisting ${sessions.length} v5 sessions to storage`);
+    await this.ctx.storage.put('parallel_reasoning_v5_sessions', sessions);
+    console.log(`[MCPSession] Successfully persisted v5 sessions`);
+  }
+
+  /**
+   * Load parallel reasoning v5 sessions from Durable Object storage
+   */
+  async loadParallelReasoningV5Sessions(): Promise<void> {
+    const sessions = await this.ctx.storage.get<Array<[string, any]>>('parallel_reasoning_v5_sessions');
+    if (sessions) {
+      this.parallelReasoningV5Manager.loadSessions(sessions);
     }
   }
 

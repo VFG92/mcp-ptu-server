@@ -21,7 +21,27 @@ import {
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-// Import parallel reasoning tools
+// Import parallel reasoning tools v5 (LLM-centric architecture)
+import {
+  InitParallelReasoningSchema,
+  SubmitReasoningPlanSchema,
+  ExecutePlanStepSchema,
+  SubmitCrossPlanNoteSchema,
+  SubmitPeerCritiqueSchema,
+  SubmitMediationDecisionSchema,
+  ListPlanStatusSchema,
+  FinalizeParallelReasoningSchema,
+  handleInitParallelReasoning,
+  handleSubmitReasoningPlan,
+  handleExecutePlanStep,
+  handleSubmitCrossPlanNote,
+  handleSubmitPeerCritique,
+  handleSubmitMediationDecision,
+  handleListPlanStatus,
+  handleFinalizeParallelReasoning
+} from './parallel-reasoning-tools-v5.js';
+
+// Legacy parallel reasoning tools (deprecated, kept for backward compatibility)
 import {
   ParallelReasoningToolName,
   ParallelReasoningInitSchema,
@@ -31,7 +51,7 @@ import {
   ParallelComputeStatusSchema,
   AgentDebateSchema,
   ValidateSessionSpecSchema,
-  handleParallelReasoningInit,
+  handleParallelReasoningInit as handleParallelReasoningInitLegacy,
   handleAgentReasoningStep,
   handleCrossAgentCommunication,
   handleSynthesizeParallelReasoning,
@@ -92,6 +112,18 @@ enum PromptName {
   RESOURCE = "resource_prompt",
 }
 
+// Parallel Reasoning v5 Tool Names (LLM-centric architecture)
+enum ParallelReasoningV5ToolName {
+  INIT_PARALLEL_REASONING = 'init_parallel_reasoning',
+  SUBMIT_REASONING_PLAN = 'submit_reasoning_plan',
+  EXECUTE_PLAN_STEP = 'execute_plan_step',
+  SUBMIT_CROSS_PLAN_NOTE = 'submit_cross_plan_note',
+  SUBMIT_PEER_CRITIQUE = 'submit_peer_critique',
+  SUBMIT_MEDIATION_DECISION = 'submit_mediation_decision',
+  LIST_PLAN_STATUS = 'list_plan_status',
+  FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning'
+}
+
 // Example completion values
 const EXAMPLE_COMPLETIONS = {
   style: ["casual", "formal", "technical", "friendly"],
@@ -102,6 +134,7 @@ const EXAMPLE_COMPLETIONS = {
 // Import capability system types (moved to top with other imports)
 import { Whiteboard } from './whiteboard-memory.js';
 import { EvidenceLedger } from './evidence-ledger.js';
+import { ParallelReasoningSessionManager } from './parallel-reasoning-mcp.js';
 
 export const createServer = (
   parallelReasoningSessions?: Map<string, ParallelReasoningSession>,
@@ -109,7 +142,9 @@ export const createServer = (
   getTransportSessionId?: () => string | null | undefined,
   capabilityWhiteboard?: Whiteboard,
   capabilityLedger?: EvidenceLedger,
-  capabilityPersistCallback?: () => Promise<void>
+  capabilityPersistCallback?: () => Promise<void>,
+  parallelReasoningV5Manager?: ParallelReasoningSessionManager,
+  parallelReasoningV5PersistCallback?: () => Promise<void>
 ) => {
   // Initialize parallel reasoning session store if not provided
   const sessionStore = parallelReasoningSessions || new Map<string, ParallelReasoningSession>();
@@ -443,6 +478,56 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
         inputSchema: zodToJsonSchema(ExportSessionSchema) as ToolInput,
       },
 
+      // Parallel Reasoning v5 Tools (LLM-Centric Architecture)
+      {
+        name: ParallelReasoningV5ToolName.INIT_PARALLEL_REASONING,
+        description:
+          "Initialize a parallel reasoning session where ChatGPT generates multiple diverse reasoning plans. MCP provides guardrails (diversity validation) and persistent memory. ChatGPT is the sole deliberative agent.",
+        inputSchema: zodToJsonSchema(InitParallelReasoningSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.SUBMIT_REASONING_PLAN,
+        description:
+          "Submit a reasoning plan with diversity axes. Server validates that plans differ on at least 2 axes (real diversification, not cosmetic variants). ChatGPT generates plans, server validates structure.",
+        inputSchema: zodToJsonSchema(SubmitReasoningPlanSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.EXECUTE_PLAN_STEP,
+        description:
+          "Execute a capability for a specific plan. Server records result and associates with plan. Enables ChatGPT to execute multiple plans in parallel (internally).",
+        inputSchema: zodToJsonSchema(ExecutePlanStepSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.SUBMIT_CROSS_PLAN_NOTE,
+        description:
+          "Submit a note from one plan to another (contamination). ChatGPT uses this to enable interaction between reasoning paths. Server stores notes for audit trail.",
+        inputSchema: zodToJsonSchema(SubmitCrossPlanNoteSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE,
+        description:
+          "Submit peer critique where one plan reviews another. ChatGPT generates critiques (claims challenged, falsification tests, residual risks). Server stores for consensus analysis.",
+        inputSchema: zodToJsonSchema(SubmitPeerCritiqueSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.SUBMIT_MEDIATION_DECISION,
+        description:
+          "Submit mediation decision for a decision point. ChatGPT chooses which plan's approach to use and provides rationale with evidence IDs. Server validates completeness (formal only).",
+        inputSchema: zodToJsonSchema(SubmitMediationDecisionSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.LIST_PLAN_STATUS,
+        description:
+          "List pending frames for session (passive). Shows what needs completion (plan executions, peer reviews, decisions). Helps ChatGPT see what to do next.",
+        inputSchema: zodToJsonSchema(ListPlanStatusSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING,
+        description:
+          "Finalize parallel reasoning session. Validates completeness (all plans executed, all decisions have evidence). Returns decision map showing mediated result.",
+        inputSchema: zodToJsonSchema(FinalizeParallelReasoningSchema) as ToolInput,
+      },
+
       // Legacy parallel reasoning tools are still handled by CallToolRequestSchema
       // but not exposed in the tool list to discourage their use.
       // They remain functional for backward compatibility if called directly.
@@ -457,11 +542,75 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
     console.log(`[CallTool] Arguments: ${JSON.stringify(args).substring(0, 200)}`);
 
     try {
-      // Parallel Reasoning Tool Handlers
+      // Parallel Reasoning v5 Tool Handlers (LLM-Centric Architecture)
+      if (name === ParallelReasoningV5ToolName.INIT_PARALLEL_REASONING) {
+        console.log(`[CallTool] Handling init_parallel_reasoning (v5)`);
+        const validatedArgs = InitParallelReasoningSchema.parse(args);
+        const result = await handleInitParallelReasoning(validatedArgs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.SUBMIT_REASONING_PLAN) {
+        console.log(`[CallTool] Handling submit_reasoning_plan (v5)`);
+        const validatedArgs = SubmitReasoningPlanSchema.parse(args);
+        const result = await handleSubmitReasoningPlan(validatedArgs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.EXECUTE_PLAN_STEP) {
+        console.log(`[CallTool] Handling execute_plan_step (v5)`);
+        const validatedArgs = ExecutePlanStepSchema.parse(args);
+        const result = await handleExecutePlanStep(validatedArgs, capabilitySystemRefs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.SUBMIT_CROSS_PLAN_NOTE) {
+        console.log(`[CallTool] Handling submit_cross_plan_note (v5)`);
+        const validatedArgs = SubmitCrossPlanNoteSchema.parse(args);
+        const result = await handleSubmitCrossPlanNote(validatedArgs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE) {
+        console.log(`[CallTool] Handling submit_peer_critique (v5)`);
+        const validatedArgs = SubmitPeerCritiqueSchema.parse(args);
+        const result = await handleSubmitPeerCritique(validatedArgs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.SUBMIT_MEDIATION_DECISION) {
+        console.log(`[CallTool] Handling submit_mediation_decision (v5)`);
+        const validatedArgs = SubmitMediationDecisionSchema.parse(args);
+        const result = await handleSubmitMediationDecision(validatedArgs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.LIST_PLAN_STATUS) {
+        console.log(`[CallTool] Handling list_plan_status (v5)`);
+        const validatedArgs = ListPlanStatusSchema.parse(args);
+        const result = await handleListPlanStatus(validatedArgs, parallelReasoningV5Manager);
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING) {
+        console.log(`[CallTool] Handling finalize_parallel_reasoning (v5)`);
+        const validatedArgs = FinalizeParallelReasoningSchema.parse(args);
+        const result = await handleFinalizeParallelReasoning(validatedArgs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+        return result;
+      }
+
+      // Legacy Parallel Reasoning Tool Handlers (Deprecated)
       if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
-      console.log(`[CallTool] Handling parallel_reasoning_init`);
+      console.log(`[CallTool] Handling parallel_reasoning_init (legacy)`);
       const validatedArgs = ParallelReasoningInitSchema.parse(args);
-      const result = handleParallelReasoningInit(
+      const result = handleParallelReasoningInitLegacy(
         validatedArgs,
         sessionStore,
         getTransportSessionId

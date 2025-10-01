@@ -1,13 +1,13 @@
 # 🤖 MCP PTU Server - Complete Technical Documentation
 
-**Version 4.2.0** | **Capability-Driven, Industry-Aware, LLM-Native, Persistent, Peer-Reviewed** | **For AI Agents & Developers**
+**Version 5.0.0** | **LLM-Centric Parallel Reasoning, Capability-Driven, Industry-Aware, Persistent** | **For AI Agents & Developers**
 
 ---
 
 ## 📋 Quick Reference
 
-**Project**: MCP PTU Server - Capability-Driven Business Analysis
-**Version**: 4.2.0 (Peer Review Release)
+**Project**: MCP PTU Server - Capability-Driven Business Analysis with Parallel Reasoning
+**Version**: 5.0.0 (Parallel Reasoning Release - LLM-Centric Architecture)
 **Platform**: Cloudflare Workers + Durable Objects
 **Language**: TypeScript (Strict Mode)
 **Protocol**: Model Context Protocol (MCP) 2024-11-05
@@ -16,10 +16,11 @@
 **Key Stats**:
 - 58 Advanced Capabilities across 8 business domains
 - 20+ Industry Adapters with specialized templates
-- Native LLM integration: 11 capabilities with explicit Python/Web Search integration (85% of priority list)
+- **NEW**: 8 Parallel Reasoning Tools (v5.0 - LLM-Centric Architecture)
+- Native LLM integration: 11 capabilities with explicit Python/Web Search integration
 - Tournament mode enabled by default
 - TypeScript compilation: ✅ 0 errors
-- Latest deployment: d4b9fdeb-dabd-4b3f-af42-2be0b63bbad7 (2025-09-30)
+- Latest deployment: TBD (2025-10-01)
 
 ---
 
@@ -115,6 +116,163 @@ Durable Objects (Persistent State)
 ✅ Performance tests - Cloudflare Workers constraints validated
 ✅ README.md - Complete v4.0 documentation with examples
 ✅ AGENT.md - This file, consolidated technical documentation
+
+### v5.0 Parallel Reasoning (NEW - LLM-Centric Architecture)
+
+#### Core Principle: MCP = Guardrails + Memory, ChatGPT = Deliberative Agent
+
+**Architectural Shift**:
+- **MCP Server**: Provides typed frames (contracts) and persistent memory. **NO intelligence, NO planning, NO decision-making**.
+- **ChatGPT**: Sole deliberative agent. Generates plans, diversifies approaches, contaminates perspectives, mediates final result.
+- **Parallel Reasoning**: Happens **inside ChatGPT**, not in server. ChatGPT simulates multiple reasoning paths internally.
+
+**References**:
+- Wang et al., "Self-Consistency Improves Chain of Thought Reasoning in Language Models", 2022
+- Yao et al., "Tree of Thoughts: Deliberate Problem Solving with Large Language Models", 2023
+- Du et al., "Improving Factuality and Reasoning in Language Models through Multiagent Debate", 2023
+
+#### 8 New MCP Tools (v5.0)
+
+✅ **`init_parallel_reasoning`** - Initialize session with diversity axes requirements
+  - ChatGPT declares task and required diversity axes
+  - Server creates session frame, returns actionable prompt
+  - Example: "Submit 3 plans with ≥2 axes each, ≥2 axes different between plans"
+
+✅ **`submit_reasoning_plan`** - Submit plan with diversity validation
+  - ChatGPT generates plan with diversity axes, capability chain, rationale
+  - Server validates: ≥2 axes declared, ≥2 axes differ from existing plans
+  - Rejects plans with insufficient diversification (prevents deriva semantica)
+
+✅ **`execute_plan_step`** - Execute capability for specific plan
+  - ChatGPT invokes capability for a plan
+  - Server records result, associates with plan
+  - Enables parallel execution (ChatGPT manages multiple plans internally)
+
+✅ **`submit_cross_plan_note`** - Contamination between plans
+  - ChatGPT sends note from one plan to another
+  - Example: "Plan A found regulatory risk X, consider in your analysis"
+  - Server stores for audit trail, no processing
+
+✅ **`submit_peer_critique`** - Peer review (ChatGPT-generated)
+  - ChatGPT generates critique: claims_challenged, falsification_tests, residual_risks
+  - Server stores critique, no evaluation
+  - Enables consensus analysis
+
+✅ **`submit_mediation_decision`** - Final mediation
+  - ChatGPT chooses which plan's approach for each decision point
+  - Must cite evidence_ids from plans
+  - Server validates completeness (formal only), no quality judgment
+
+✅ **`list_plan_status`** - Passive status listing
+  - Lists pending frames: plan_execution:plan_B, peer_review:4_remaining
+  - Helps ChatGPT see what needs completion
+  - No recommendations, pure listing
+
+✅ **`finalize_parallel_reasoning`** - Completeness validation
+  - Validates: all plans executed, all decisions have evidence
+  - Returns decision map showing mediated result
+  - Server checks structure, not quality
+
+#### Diversity Axes System
+
+**6 Available Axes** (ChatGPT chooses ≥2 per plan):
+1. **data_sources**: Official stats vs industry reports vs academic research
+2. **analytical_models**: Regression vs Monte Carlo vs normative analysis
+3. **time_horizons**: Short-term vs medium-term vs long-term
+4. **quality_metrics**: Precision vs recall vs robustness
+5. **risk_perspectives**: Market vs regulatory vs operational
+6. **stakeholder_views**: Customer vs investor vs regulator
+
+**Validation Rules** (enforced by server):
+- Each plan must declare ≥2 axes
+- Plans must differ on ≥2 axes (prevents cosmetic variants)
+- Server validates structure, ChatGPT ensures substance
+
+**Example Valid Plans**:
+```
+Plan A: data_sources=official_stats, analytical_models=regression
+Plan B: data_sources=industry_reports, analytical_models=monte_carlo
+Plan C: data_sources=academic_research, analytical_models=normative_analysis
+```
+
+**Example Invalid Plan** (rejected by server):
+```
+Plan D: data_sources=official_stats, analytical_models=regression
+Reason: Too similar to Plan A (only 0 axes differ, need ≥2)
+```
+
+#### Workflow: Complete Parallel Reasoning Session
+
+```
+1. ChatGPT: init_parallel_reasoning
+   → Server: Returns session frame with diversity requirements
+
+2. ChatGPT: Generates 3 diverse plans internally
+   → submit_reasoning_plan (Plan A: official_stats + regression)
+   → submit_reasoning_plan (Plan B: industry_reports + monte_carlo)
+   → submit_reasoning_plan (Plan C: academic_research + normative)
+   → Server: Validates diversity, accepts/rejects each
+
+3. ChatGPT: Executes all plans in parallel (internally)
+   → execute_plan_step (Plan A, step 1: market_scan)
+   → execute_plan_step (Plan B, step 1: competitor_analysis)
+   → execute_plan_step (Plan C, step 1: regulatory_scan)
+   → Server: Records results, associates with plans
+
+4. ChatGPT: Contamination between plans
+   → submit_cross_plan_note (A→B: "Found market size €50B, consider in your TAM")
+   → submit_cross_plan_note (C→A: "Regulatory risk X affects market structure")
+   → Server: Stores notes for audit
+
+5. ChatGPT: Generates peer critiques
+   → submit_peer_critique (A reviews B: "Assumes linear growth, but volatility high")
+   → submit_peer_critique (B reviews C: "Regulatory focus misses market dynamics")
+   → submit_peer_critique (C reviews A: "Official stats lag 2 years, outdated")
+   → Server: Stores critiques for consensus
+
+6. ChatGPT: Mediates final result
+   → submit_mediation_decision ("Market size: use Plan B, evidence: [id1, id2]")
+   → submit_mediation_decision ("Growth rate: use Plan A, evidence: [id3, id4]")
+   → submit_mediation_decision ("Risk assessment: use Plan C, evidence: [id5, id6]")
+   → Server: Validates evidence citations
+
+7. ChatGPT: finalize_parallel_reasoning
+   → Server: Validates completeness, returns decision map
+
+8. ChatGPT: Presents final answer
+   "Based on 3 parallel reasoning paths with peer review:
+    - Market size: €50B (Plan B, Monte Carlo simulation)
+    - Growth rate: 12% CAGR (Plan A, regression analysis)
+    - Key risk: Regulatory uncertainty (Plan C, normative analysis)
+    - Consensus score: 0.82 (high robustness)"
+```
+
+#### Benefits: Agent Collaboration to Boost Answer Quality
+
+**Diversification** (prevents deriva semantica):
+- Real diversity enforced by structural validation
+- ≥2 axes must differ between plans
+- Cosmetic variants rejected
+
+**Contamination** (cross-pollination of ideas):
+- Plans exchange notes during execution
+- Each plan can incorporate insights from others
+- Structured via submit_cross_plan_note
+
+**Peer Review** (critical evaluation):
+- Each plan critiques others
+- Claims challenged, falsification tests proposed
+- Consensus/conflict measured
+
+**Mediation** (evidence-based synthesis):
+- ChatGPT chooses best approach for each decision point
+- Must cite evidence from plans
+- Decision map shows rationale
+
+**Quality Improvement** (empirical):
+- Self-consistency: Multiple paths → more robust answers (Wang 2022)
+- Tree-of-Thoughts: Branching → better exploration (Yao 2023)
+- Multi-agent debate: Critique → fewer errors (Du 2023)
 
 ---
 
@@ -1122,6 +1280,295 @@ Export complete session with full artifact data for audit/compliance.
 - Complete audit trail with execution history
 - Industry context metadata
 - Evidence ledger export
+
+---
+
+## 🧠 Parallel Reasoning v5.0 Tools (NEW)
+
+**8 LLM-centric tools for multi-path reasoning with diversity enforcement and contamination**
+
+### `init_parallel_reasoning`
+
+Initialize a parallel reasoning session where ChatGPT generates multiple diverse reasoning plans.
+
+**Status**: ✅ Production Ready | v5.0 | LLM-Centric Architecture
+
+**Input**:
+```typescript
+{
+  session_id: string;
+  task_description: string;
+  required_diversity_axes: DiversityAxis[];  // Choose from 6 axes
+  min_plans: number;                         // Minimum 2, recommended 3
+}
+```
+
+**Output**: Actionable prompt with diversity axes reference and next steps.
+
+**Example**:
+```json
+{
+  "session_id": "market_analysis_parallel_001",
+  "task_description": "Analyze European fintech market for B2B SaaS opportunities",
+  "required_diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
+  "min_plans": 3
+}
+```
+
+---
+
+### `submit_reasoning_plan`
+
+Submit a reasoning plan with diversity axes. Server validates structural diversity (≥2 axes differ from existing plans).
+
+**Status**: ✅ Production Ready | v5.0 | Diversity Validation
+
+**Input**:
+```typescript
+{
+  session_id: string;
+  plan: {
+    plan_id: string;
+    description: string;
+    diversity_axes: DiversityAxis[];  // Must declare ≥2
+    capability_chain: string[];       // Capabilities to execute
+    rationale: string;                // Why this plan adds value
+    expected_outputs: string[];       // Expected artifact types
+  };
+}
+```
+
+**Output**: Acceptance/rejection with diversity validation feedback.
+
+**Example**:
+```json
+{
+  "session_id": "market_analysis_parallel_001",
+  "plan": {
+    "plan_id": "plan_A",
+    "description": "Market-driven analysis using official statistics",
+    "diversity_axes": ["data_sources", "analytical_models"],
+    "capability_chain": ["market_scan", "tam_sam_som_build", "competitor_analysis"],
+    "rationale": "Provides data-driven baseline using official market statistics",
+    "expected_outputs": ["market_map", "tam_sam_som", "competitive_landscape"]
+  }
+}
+```
+
+---
+
+### `execute_plan_step`
+
+Execute a capability for a specific plan. Enables parallel execution (ChatGPT manages multiple plans internally).
+
+**Status**: ✅ Production Ready | v5.0 | Plan-Specific Execution
+
+**Input**:
+```typescript
+{
+  session_id: string;
+  plan_id: string;
+  capability_id: string;
+  inputs?: Record<string, any>;  // Optional capability inputs
+}
+```
+
+**Output**: Capability result associated with plan.
+
+**Example**:
+```json
+{
+  "session_id": "market_analysis_parallel_001",
+  "plan_id": "plan_A",
+  "capability_id": "market_scan",
+  "inputs": {
+    "industry_vertical": "financial_services",
+    "geographic_region": "europe"
+  }
+}
+```
+
+---
+
+### `submit_cross_plan_note`
+
+Submit a note from one plan to another (contamination). Enables interaction between reasoning paths.
+
+**Status**: ✅ Production Ready | v5.0 | Contamination
+
+**Input**:
+```typescript
+{
+  session_id: string;
+  from_plan_id: string;
+  to_plan_id: string;
+  note: string;
+  references: string[];  // Evidence IDs referenced
+}
+```
+
+**Output**: Confirmation of note storage.
+
+**Example**:
+```json
+{
+  "session_id": "market_analysis_parallel_001",
+  "from_plan_id": "plan_A",
+  "to_plan_id": "plan_B",
+  "note": "Found market size €50B using official statistics. Consider this baseline in your Monte Carlo simulation.",
+  "references": ["evidence_001", "evidence_002"]
+}
+```
+
+---
+
+### `submit_peer_critique`
+
+Submit peer critique where one plan reviews another. ChatGPT generates critiques, server stores for consensus analysis.
+
+**Status**: ✅ Production Ready | v5.0 | Peer Review
+
+**Input**:
+```typescript
+{
+  session_id: string;
+  reviewer_plan_id: string;
+  reviewed_plan_id: string;
+  critique: {
+    claims_challenged: string[];
+    falsification_tests: string[];
+    residual_risks: string[];
+    agreement_score: number;  // 0-1
+  };
+}
+```
+
+**Output**: Confirmation of critique storage.
+
+**Example**:
+```json
+{
+  "session_id": "market_analysis_parallel_001",
+  "reviewer_plan_id": "plan_B",
+  "reviewed_plan_id": "plan_A",
+  "critique": {
+    "claims_challenged": ["Assumes linear growth, but market shows high volatility"],
+    "falsification_tests": ["Test with 2008 crisis data", "Compare with adjacent markets"],
+    "residual_risks": ["Regulatory changes not considered", "Currency fluctuations ignored"],
+    "agreement_score": 0.65
+  }
+}
+```
+
+---
+
+### `submit_mediation_decision`
+
+Submit mediation decision for a decision point. ChatGPT chooses which plan's approach to use with evidence citations.
+
+**Status**: ✅ Production Ready | v5.0 | Mediation
+
+**Input**:
+```typescript
+{
+  session_id: string;
+  decision: {
+    decision_point: string;
+    chosen_from_plan: string;
+    rationale: string;
+    evidence_ids: string[];  // Must cite evidence
+    confidence: number;      // 0-1
+  };
+}
+```
+
+**Output**: Confirmation of decision storage.
+
+**Example**:
+```json
+{
+  "session_id": "market_analysis_parallel_001",
+  "decision": {
+    "decision_point": "Market size estimation",
+    "chosen_from_plan": "plan_B",
+    "rationale": "Monte Carlo simulation provides confidence intervals, more robust than point estimate",
+    "evidence_ids": ["evidence_005", "evidence_006", "evidence_007"],
+    "confidence": 0.82
+  }
+}
+```
+
+---
+
+### `list_plan_status`
+
+List pending frames for session (passive). Shows what needs completion.
+
+**Status**: ✅ Production Ready | v5.0 | Status Listing
+
+**Input**:
+```typescript
+{
+  session_id: string;
+}
+```
+
+**Output**: Pending frames listing (plan executions, peer reviews, decisions).
+
+**Example**:
+```json
+{
+  "session_id": "market_analysis_parallel_001"
+}
+```
+
+**Response**:
+```
+Pending Frames:
+- plan_execution: plan_B (2 steps remaining)
+- peer_review: 4 critiques remaining
+- mediation_decision: 3 decision points pending
+```
+
+---
+
+### `finalize_parallel_reasoning`
+
+Finalize parallel reasoning session. Validates completeness and returns decision map.
+
+**Status**: ✅ Production Ready | v5.0 | Completeness Validation
+
+**Input**:
+```typescript
+{
+  session_id: string;
+}
+```
+
+**Output**: Decision map with completeness validation.
+
+**Example**:
+```json
+{
+  "session_id": "market_analysis_parallel_001"
+}
+```
+
+**Response**:
+```
+✅ Session Finalized
+
+Completeness Check:
+- All plans executed: ✅
+- All decisions have evidence: ✅
+
+Decision Map:
+1. Market size: Plan B (Monte Carlo) - Evidence: [id5, id6, id7]
+2. Growth rate: Plan A (Regression) - Evidence: [id3, id4]
+3. Risk assessment: Plan C (Normative) - Evidence: [id8, id9]
+
+Consensus Score: 0.82 (high robustness)
+```
 
 ---
 
