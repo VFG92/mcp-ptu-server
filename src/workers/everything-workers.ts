@@ -662,7 +662,7 @@ Use these 8 tools for multi-path reasoning:
           };
         }
         const validatedArgs = SubmitMediationDecisionSchema.parse(args);
-        const result = await handleSubmitMediationDecision(validatedArgs, parallelReasoningV5Manager);
+        const result = await handleSubmitMediationDecision(validatedArgs, parallelReasoningV5Manager, capabilityLedger);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
         return result;
       }

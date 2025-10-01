@@ -398,13 +398,26 @@ export const SubmitMediationDecisionSchema = z.object({
 
 export async function handleSubmitMediationDecision(
   args: z.infer<typeof SubmitMediationDecisionSchema>,
-  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager,
+  evidenceLedger?: any // EvidenceLedger type from evidence-ledger.ts
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   try {
-    manager.submitMediationDecision(args.session_id, args.decision);
+    // Create evidence validator if ledger provided
+    const validateEvidenceIds = evidenceLedger ? (ids: string[]) => {
+      // Check if all evidence IDs exist in the ledger
+      for (const id of ids) {
+        const entry = evidenceLedger.getEntry(id);
+        if (!entry) {
+          return false;
+        }
+      }
+      return true;
+    } : undefined;
+
+    manager.submitMediationDecision(args.session_id, args.decision, validateEvidenceIds);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const response = `# ❌ Validation Error\n\n${message}\n\nPlease update the mediation decision with a valid plan reference.`;
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease update the mediation decision with valid plan and evidence references.`;
 
     return {
       content: [{ type: 'text', text: response }]
@@ -549,7 +562,15 @@ ${i + 1}. **${d.decision_point}**
       plans_executed,
       plans_not_executed
     );
-    
+
+    // Add min_plans check
+    if (!result.completeness_check.min_plans_met) {
+      response += `\n### ❌ Minimum Plans Not Met\n\n`;
+      response += `**Required**: ${result.completeness_check.min_plans_required} plans\n`;
+      response += `**Submitted**: ${result.completeness_check.plans_submitted} plans\n\n`;
+      response += `You must submit at least ${result.completeness_check.min_plans_required - result.completeness_check.plans_submitted} more diverse plan(s) before finalization.\n\n`;
+    }
+
     if (result.completeness_check.decisions_without_evidence.length > 0) {
       response += `### Decisions Without Evidence\n\n`;
       response += result.completeness_check.decisions_without_evidence.map(d => `- ${d}`).join('\n') + '\n\n';

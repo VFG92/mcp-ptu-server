@@ -366,8 +366,15 @@ export class ParallelReasoningSessionManager {
 
   /**
    * Submit mediation decision
+   *
+   * Validates:
+   * - Plan exists
+   * - Evidence IDs are not empty (structural validation only)
+   *
+   * NOTE: Evidence ID existence validation against evidence ledger should be done
+   * at a higher level where the evidence ledger is available
    */
-  submitMediationDecision(session_id: string, decision: MediationDecision): void {
+  submitMediationDecision(session_id: string, decision: MediationDecision, validateEvidenceIds?: (ids: string[]) => boolean): void {
     const session = this.sessions.get(session_id);
     if (!session) {
       throw new Error('Session not found');
@@ -377,22 +384,34 @@ export class ParallelReasoningSessionManager {
       throw new Error(`Plan ID \`${decision.chosen_from_plan}\` not found in session \`${session_id}\``);
     }
 
+    // Validate evidence IDs if validator provided
+    if (validateEvidenceIds && decision.evidence_ids.length > 0) {
+      const allValid = validateEvidenceIds(decision.evidence_ids);
+      if (!allValid) {
+        throw new Error(`Mediation decision cites non-existent evidence IDs. All evidence must be recorded before citing in decisions.`);
+      }
+    }
+
     session.mediation_decisions.push(decision);
     session.updated_at = Date.now();
   }
 
   /**
    * Finalize session
-   * 
+   *
    * Validates completeness (structural only):
-   * - All plans have results
+   * - Minimum number of plans submitted (min_plans)
+   * - All submitted plans have execution results
    * - All decision points reference evidence IDs
    */
   finalizeSession(session_id: string): {
     finalized: boolean;
     completeness_check: {
+      min_plans_met: boolean;
       all_plans_executed: boolean;
       all_decisions_have_evidence: boolean;
+      plans_submitted: number;
+      min_plans_required: number;
       missing_plans: string[];
       decisions_without_evidence: string[];
     };
@@ -402,13 +421,20 @@ export class ParallelReasoningSessionManager {
       return {
         finalized: false,
         completeness_check: {
+          min_plans_met: false,
           all_plans_executed: false,
           all_decisions_have_evidence: false,
+          plans_submitted: 0,
+          min_plans_required: 0,
           missing_plans: [],
           decisions_without_evidence: []
         }
       };
     }
+
+    // Check minimum plans requirement
+    const plans_submitted = session.plans.size;
+    const min_plans_met = plans_submitted >= session.min_plans;
 
     // Check all plans have results
     const missing_plans: string[] = [];
@@ -430,16 +456,22 @@ export class ParallelReasoningSessionManager {
     const all_plans_executed = missing_plans.length === 0;
     const all_decisions_have_evidence = decisions_without_evidence.length === 0;
 
-    if (all_plans_executed && all_decisions_have_evidence) {
+    // Session is finalized only if ALL conditions are met
+    const finalized = min_plans_met && all_plans_executed && all_decisions_have_evidence;
+
+    if (finalized) {
       session.status = 'finalized';
       session.updated_at = Date.now();
     }
 
     return {
-      finalized: all_plans_executed && all_decisions_have_evidence,
+      finalized,
       completeness_check: {
+        min_plans_met,
         all_plans_executed,
         all_decisions_have_evidence,
+        plans_submitted,
+        min_plans_required: session.min_plans,
         missing_plans,
         decisions_without_evidence
       }

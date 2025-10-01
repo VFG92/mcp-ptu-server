@@ -78,6 +78,20 @@ export class EvidenceLedger {
   }
 
   /**
+   * Get a specific evidence entry by ID
+   */
+  getEntry(entryId: string): EvidenceLedgerEntry | undefined {
+    return this.entries.get(entryId);
+  }
+
+  /**
+   * Check if an evidence entry exists
+   */
+  hasEntry(entryId: string): boolean {
+    return this.entries.has(entryId);
+  }
+
+  /**
    * Get evidence for an artifact
    */
   getEvidenceForArtifact(artifactId: string): EvidenceLedgerEntry[] {

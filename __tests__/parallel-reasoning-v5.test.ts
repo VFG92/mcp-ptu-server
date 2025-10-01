@@ -211,9 +211,22 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       }
     }, manager);
 
+    await handleSubmitReasoningPlan({
+      session_id: executionSessionId,
+      plan: {
+        plan_id: 'plan_C',
+        description: 'Plan C stakeholder view',
+        diversity_axes: ['data_sources', 'analytical_models', 'stakeholder_views'],
+        capability_chain: TEST_CAP_CHAIN,
+        rationale: 'Stakeholder-focused analysis',
+        expected_outputs: ['stakeholder_map']
+      }
+    }, manager);
+
     analyzeWithCapabilitiesMock
       .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Mock result for plan A' }] })
-      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Mock result for plan B' }] });
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Mock result for plan B' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Mock result for plan C' }] });
 
     try {
       const planAExecution = await handleExecutePlanStep({
@@ -232,7 +245,15 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
 
       expect(planBExecution.content[0].text).toContain('Capability Executed: plan_B');
 
-      expect(analyzeWithCapabilitiesMock).toHaveBeenCalledTimes(2);
+      const planCExecution = await handleExecutePlanStep({
+        session_id: executionSessionId,
+        plan_id: 'plan_C',
+        task: 'Execute plan C capability chain'
+      }, undefined, manager);
+
+      expect(planCExecution.content[0].text).toContain('Capability Executed: plan_C');
+
+      expect(analyzeWithCapabilitiesMock).toHaveBeenCalledTimes(3);
       expect(analyzeWithCapabilitiesMock.mock.calls[0][0]).toMatchObject({
         session_id: `${executionSessionId}_plan_A`,
         task: 'Execute plan A capability chain',
@@ -243,6 +264,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       const session = manager.getSession(executionSessionId);
       expect(session?.plan_results.get('plan_A')?.[0]?.content[0].text).toContain('Mock result for plan A');
       expect(session?.plan_results.get('plan_B')?.[0]?.content[0].text).toContain('Mock result for plan B');
+      expect(session?.plan_results.get('plan_C')?.[0]?.content[0].text).toContain('Mock result for plan C');
 
       const finalize = await handleFinalizeParallelReasoning({
         session_id: executionSessionId

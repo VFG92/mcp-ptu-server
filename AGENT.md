@@ -1,8 +1,43 @@
 # 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.2.0** | For AI Agents Working on This Repository
+**Version 5.3.0** | For AI Agents Working on This Repository
 
 This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
+
+---
+
+## 🔧 Recent Fixes (v5.3.0)
+
+### Bug Fix: Finalization Ignores `min_plans`
+
+**Problem**: `finalizeSession()` only checked if submitted plans had execution results, but didn't validate that at least `min_plans` were submitted. A workflow with `min_plans=3` could finalize with only 2 plans.
+
+**Fix**:
+- Added `min_plans_met` check to `finalizeSession()`
+- Added `plans_submitted` and `min_plans_required` to completeness check
+- Updated finalization response to show "Minimum Plans Not Met" error
+- Added test coverage in `__tests__/validation-fixes.test.ts`
+
+**Files Changed**:
+- `src/workers/parallel-reasoning-mcp.ts` (lines 399-479)
+- `src/workers/parallel-reasoning-tools-v5.ts` (lines 547-578)
+
+### Bug Fix: Mediation Accepts Non-Existent Evidence IDs
+
+**Problem**: `submitMediationDecision()` accepted any evidence IDs without validating they exist in the evidence ledger. Fake IDs like `"fake_evidence_001"` would pass validation.
+
+**Fix**:
+- Added optional `validateEvidenceIds` parameter to `submitMediationDecision()`
+- Evidence ledger now provides `getEntry()` and `hasEntry()` methods
+- Handler validates evidence IDs when ledger is provided
+- Backward compatible: validation skipped if no ledger provided
+- Added test coverage in `__tests__/validation-fixes.test.ts`
+
+**Files Changed**:
+- `src/workers/parallel-reasoning-mcp.ts` (lines 367-397)
+- `src/workers/parallel-reasoning-tools-v5.ts` (lines 399-442)
+- `src/workers/everything-workers.ts` (line 665)
+- `src/workers/evidence-ledger.ts` (lines 80-104)
 
 ---
 
@@ -13,7 +48,6 @@ This document provides rules, guidelines, and technical context for AI agents (l
 **ONLY these files should be updated at the end of work**:
 - ✅ `README.md` - User-facing documentation with prompt templates
 - ✅ `AGENT.md` - This file, guidelines for AI agents
-- ✅ `TROUBLESHOOTING.md` - Common errors and solutions (when adding new features or fixing bugs)
 
 **DO NOT update unless explicitly requested**:
 - ❌ `docs/CHANGELOG.md` - Only when releasing a new version
@@ -70,10 +104,17 @@ npm test       # Run all 162 tests (all must pass)
 - ✅ Server validates structure only, NOT substance
 - ❌ DO NOT add semantic analysis or quality checks
 
-**Evidence-Based Mediation**:
+**Evidence-Based Mediation** (v5.3.0+):
 - ✅ All decisions must cite evidence IDs
-- ✅ Server validates evidence IDs exist
+- ✅ Server validates evidence IDs exist in ledger (v5.3.0 fix)
+- ✅ Validation only when evidence ledger is provided
 - ❌ DO NOT validate evidence quality or relevance
+
+**Finalization Validation** (v5.3.0+):
+- ✅ Server validates minimum plan count (`min_plans`) before finalization
+- ✅ Server validates all plans have execution results
+- ✅ Server validates all decisions cite evidence
+- ❌ DO NOT allow finalization if `plans_submitted < min_plans`
 
 **Session Persistence**:
 - ✅ Use Durable Objects for state across requests
