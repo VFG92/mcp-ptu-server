@@ -37,7 +37,11 @@ See [HEARTBEAT.md](./HEARTBEAT.md) for detailed implementation examples in Pytho
 
 **Core Principle**: You (ChatGPT) orchestrate the entire workflow. MCP provides only guardrails (diversity validation) and persistent memory.
 
-**⚠️ CRITICAL**: Use the **same session_id** for ALL tool calls in a workflow. If you change session_id between calls, the server will create a new Durable Object and you'll get "Session not found" errors.
+**⚠️ CRITICAL**: There are TWO different session IDs:
+1. **MCP Session ID** (header `mcp-session-id`): For Durable Object routing - returned by `initialize`, use for ALL requests
+2. **Parallel Reasoning Session ID** (tool argument `session_id`): For your workflow - you choose it, use same value for all parallel reasoning tools
+
+**See [SESSION_ID_EXPLAINED.md](./SESSION_ID_EXPLAINED.md) for detailed explanation and examples.**
 
 #### Template 1: Maximum Coverage (Complex Analysis)
 

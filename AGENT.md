@@ -224,8 +224,34 @@ State persists across requests using Durable Objects.
 
 ---
 
+## ⚠️ CRITICAL: Two Different Session IDs
+
+**DO NOT CONFUSE THESE TWO!**
+
+### 1. MCP Session ID (Durable Object Routing)
+- **Location**: HTTP header `mcp-session-id`
+- **Source**: Returned by server in `initialize` response header
+- **Format**: 64-character hexadecimal string
+- **Purpose**: Routes requests to correct Durable Object instance
+- **Usage**: Include in EVERY HTTP request after `initialize`
+
+### 2. Parallel Reasoning Session ID (Application Logic)
+- **Location**: Tool argument `session_id` in parallel reasoning tools
+- **Source**: You choose it (any string)
+- **Format**: Any string (e.g., `"analysis_001"`, `"my_workflow"`)
+- **Purpose**: Identifies a specific parallel reasoning workflow
+- **Usage**: Same value for all parallel reasoning tools in ONE workflow
+
+**See [SESSION_ID_EXPLAINED.md](./SESSION_ID_EXPLAINED.md) for detailed explanation with code examples.**
+
+**Common Bug**: Using parallel reasoning `session_id` in `mcp-session-id` header causes 400 Bad Request because the server tries to route to a non-existent Durable Object.
+
+---
+
 ## 🚀 Version History
 
+- **v5.2.3** (2025-10-01): Clarified two different session IDs, added SESSION_ID_EXPLAINED.md
+- **v5.2.2** (2025-10-01): Custom session IDs with idFromName()
 - **v5.1.0** (2025-10-01): Multi-path only, universal prompt templates
 - **v5.0.3** (2025-10-01): Fixed Map serialization
 - **v5.0.0** (2025-10-01): Parallel reasoning v5
