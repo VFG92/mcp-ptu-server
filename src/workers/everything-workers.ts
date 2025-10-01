@@ -42,24 +42,25 @@ import {
 } from './parallel-reasoning-tools-v5.js';
 
 // Legacy parallel reasoning tools (deprecated, kept for backward compatibility)
-import {
-  ParallelReasoningToolName,
-  ParallelReasoningInitSchema,
-  AgentReasoningStepSchema,
-  CrossAgentCommunicationSchema,
-  SynthesizeParallelReasoningSchema,
-  ParallelComputeStatusSchema,
-  AgentDebateSchema,
-  ValidateSessionSpecSchema,
-  handleParallelReasoningInit as handleParallelReasoningInitLegacy,
-  handleAgentReasoningStep,
-  handleCrossAgentCommunication,
-  handleSynthesizeParallelReasoning,
-  handleParallelComputeStatus,
-  handleAgentDebate,
-  handleListAgentPersonas,
-  handleValidateSessionSpec
-} from './parallel-reasoning-tools.js';
+// Legacy parallel reasoning tools removed - use v5.0 tools instead
+// import {
+//   ParallelReasoningToolName,
+//   ParallelReasoningInitSchema,
+//   AgentReasoningStepSchema,
+//   CrossAgentCommunicationSchema,
+//   SynthesizeParallelReasoningSchema,
+//   ParallelComputeStatusSchema,
+//   AgentDebateSchema,
+//   ValidateSessionSpecSchema,
+//   handleParallelReasoningInit as handleParallelReasoningInitLegacy,
+//   handleAgentReasoningStep,
+//   handleCrossAgentCommunication,
+//   handleSynthesizeParallelReasoning,
+//   handleParallelComputeStatus,
+//   handleAgentDebate,
+//   handleListAgentPersonas,
+//   handleValidateSessionSpec
+// } from './parallel-reasoning-tools.js';
 import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
 import { ParallelReasoningError } from './error-handling.js';
 
@@ -172,18 +173,23 @@ export const createServer = (
       },
       instructions: instructions + `
 
-## Parallel Reasoning (NEW!)
+## Parallel Reasoning v5.0 (LLM-Centric Architecture)
 
-This server now supports multi-agent parallel reasoning for complex analysis tasks in management consulting, finance, marketing strategy, and project management.
+This server supports parallel reasoning with diversity enforcement for complex analysis tasks.
 
-Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
-- parallel_reasoning_init: Initialize multi-agent session
-- agent_reasoning_step: Submit agent analysis
-- cross_agent_communication: Enable agent collaboration
-- synthesize_parallel_reasoning: Combine all perspectives
-- parallel_compute_status: Monitor progress
-- agent_debate: Facilitate agent debates
-- list_agent_personas: See available expert personas
+**Architecture**: MCP provides guardrails + memory, ChatGPT is sole deliberative agent.
+
+Use these 8 tools for multi-path reasoning:
+- init_parallel_reasoning: Initialize session with diversity requirements
+- submit_reasoning_plan: Submit plan with diversity validation
+- execute_plan_step: Execute capability for specific plan
+- submit_cross_plan_note: Cross-plan contamination
+- submit_peer_critique: Peer review (ChatGPT-generated)
+- submit_mediation_decision: Final mediation with evidence
+- list_plan_status: List pending frames
+- finalize_parallel_reasoning: Validate completeness
+
+**Diversity Axes**: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views
 `
     }
   );
@@ -606,84 +612,85 @@ Use these tools to enable Grok 4 Heavy / GPT-5 Pro style parallel compute:
         return result;
       }
 
-      // Legacy Parallel Reasoning Tool Handlers (Deprecated)
-      if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
-      console.log(`[CallTool] Handling parallel_reasoning_init (legacy)`);
-      const validatedArgs = ParallelReasoningInitSchema.parse(args);
-      const result = handleParallelReasoningInitLegacy(
-        validatedArgs,
-        sessionStore,
-        getTransportSessionId
-      );
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      console.log(`[CallTool] parallel_reasoning_init completed successfully`);
-      return result;
-    }
+      // Legacy Parallel Reasoning Tool Handlers (Deprecated - Removed in v5.0)
+      // Use v5.0 tools instead: init_parallel_reasoning, submit_reasoning_plan, etc.
+      // if (name === ParallelReasoningToolName.PARALLEL_REASONING_INIT) {
+      //   console.log(`[CallTool] Handling parallel_reasoning_init (legacy)`);
+      //   const validatedArgs = ParallelReasoningInitSchema.parse(args);
+      //   const result = handleParallelReasoningInitLegacy(
+      //     validatedArgs,
+      //     sessionStore,
+      //     getTransportSessionId
+      //   );
+      //   // Persist after state change
+      //   if (persistCallback) await persistCallback();
+      //   console.log(`[CallTool] parallel_reasoning_init completed successfully`);
+      //   return result;
+      // }
 
-    if (name === ParallelReasoningToolName.AGENT_REASONING_STEP) {
-      console.log(`[CallTool] Handling agent_reasoning_step`);
-      const validatedArgs = AgentReasoningStepSchema.parse(args);
-      const result = handleAgentReasoningStep(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      console.log(`[CallTool] agent_reasoning_step completed successfully`);
-      return result;
-    }
+      // if (name === ParallelReasoningToolName.AGENT_REASONING_STEP) {
+      //   console.log(`[CallTool] Handling agent_reasoning_step`);
+      //   const validatedArgs = AgentReasoningStepSchema.parse(args);
+      //   const result = handleAgentReasoningStep(validatedArgs, sessionStore);
+      //   // Persist after state change
+      //   if (persistCallback) await persistCallback();
+      //   console.log(`[CallTool] agent_reasoning_step completed successfully`);
+      //   return result;
+      // }
 
-    if (name === ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION) {
-      console.log(`[CallTool] Handling cross_agent_communication`);
-      const validatedArgs = CrossAgentCommunicationSchema.parse(args);
-      const result = handleCrossAgentCommunication(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      console.log(`[CallTool] cross_agent_communication completed successfully`);
-      return result;
-    }
+      // if (name === ParallelReasoningToolName.CROSS_AGENT_COMMUNICATION) {
+      //   console.log(`[CallTool] Handling cross_agent_communication`);
+      //   const validatedArgs = CrossAgentCommunicationSchema.parse(args);
+      //   const result = handleCrossAgentCommunication(validatedArgs, sessionStore);
+      //   // Persist after state change
+      //   if (persistCallback) await persistCallback();
+      //   console.log(`[CallTool] cross_agent_communication completed successfully`);
+      //   return result;
+      // }
 
-    if (name === ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING) {
-      console.log(`[CallTool] Handling synthesize_parallel_reasoning`);
-      const validatedArgs = SynthesizeParallelReasoningSchema.parse(args);
-      const result = handleSynthesizeParallelReasoning(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      console.log(`[CallTool] synthesize_parallel_reasoning completed successfully`);
-      return result;
-    }
+      // if (name === ParallelReasoningToolName.SYNTHESIZE_PARALLEL_REASONING) {
+      //   console.log(`[CallTool] Handling synthesize_parallel_reasoning`);
+      //   const validatedArgs = SynthesizeParallelReasoningSchema.parse(args);
+      //   const result = handleSynthesizeParallelReasoning(validatedArgs, sessionStore);
+      //   // Persist after state change
+      //   if (persistCallback) await persistCallback();
+      //   console.log(`[CallTool] synthesize_parallel_reasoning completed successfully`);
+      //   return result;
+      // }
 
-    if (name === ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS) {
-      console.log(`[CallTool] Handling parallel_compute_status`);
-      const validatedArgs = ParallelComputeStatusSchema.parse(args);
-      // No state change, no persist needed
-      const result = handleParallelComputeStatus(validatedArgs, sessionStore);
-      console.log(`[CallTool] parallel_compute_status completed successfully`);
-      return result;
-    }
+      // if (name === ParallelReasoningToolName.PARALLEL_COMPUTE_STATUS) {
+      //   console.log(`[CallTool] Handling parallel_compute_status`);
+      //   const validatedArgs = ParallelComputeStatusSchema.parse(args);
+      //   // No state change, no persist needed
+      //   const result = handleParallelComputeStatus(validatedArgs, sessionStore);
+      //   console.log(`[CallTool] parallel_compute_status completed successfully`);
+      //   return result;
+      // }
 
-    if (name === ParallelReasoningToolName.AGENT_DEBATE) {
-      console.log(`[CallTool] Handling agent_debate`);
-      const validatedArgs = AgentDebateSchema.parse(args);
-      const result = handleAgentDebate(validatedArgs, sessionStore);
-      // Persist after state change
-      if (persistCallback) await persistCallback();
-      console.log(`[CallTool] agent_debate completed successfully`);
-      return result;
-    }
+      // if (name === ParallelReasoningToolName.AGENT_DEBATE) {
+      //   console.log(`[CallTool] Handling agent_debate`);
+      //   const validatedArgs = AgentDebateSchema.parse(args);
+      //   const result = handleAgentDebate(validatedArgs, sessionStore);
+      //   // Persist after state change
+      //   if (persistCallback) await persistCallback();
+      //   console.log(`[CallTool] agent_debate completed successfully`);
+      //   return result;
+      // }
 
-    if (name === ParallelReasoningToolName.LIST_AGENT_PERSONAS) {
-      console.log(`[CallTool] Handling list_agent_personas`);
-      const result = handleListAgentPersonas();
-      console.log(`[CallTool] list_agent_personas completed successfully`);
-      return result;
-    }
+      // if (name === ParallelReasoningToolName.LIST_AGENT_PERSONAS) {
+      //   console.log(`[CallTool] Handling list_agent_personas`);
+      //   const result = handleListAgentPersonas();
+      //   console.log(`[CallTool] list_agent_personas completed successfully`);
+      //   return result;
+      // }
 
-    if (name === ParallelReasoningToolName.VALIDATE_SESSION_SPEC) {
-      console.log(`[CallTool] Handling validate_session_spec`);
-      const validatedArgs = ValidateSessionSpecSchema.parse(args);
-      const result = handleValidateSessionSpec(validatedArgs);
-      console.log(`[CallTool] validate_session_spec completed successfully`);
-      return result;
-    }
+      // if (name === ParallelReasoningToolName.VALIDATE_SESSION_SPEC) {
+      //   console.log(`[CallTool] Handling validate_session_spec`);
+      //   const validatedArgs = ValidateSessionSpecSchema.parse(args);
+      //   const result = handleValidateSessionSpec(validatedArgs);
+      //   console.log(`[CallTool] validate_session_spec completed successfully`);
+      //   return result;
+      // }
 
       // Capability Tool Handlers
       if (name === CapabilityToolName.ANALYZE_WITH_CAPABILITIES) {
