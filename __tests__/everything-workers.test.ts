@@ -139,7 +139,7 @@ describe('everything workers server', () => {
       }
     });
     expect(initResponse.content).toBeDefined();
-    expect(initResponse.content[0].text).toContain('Parallel Reasoning Session Initialized');
+    expect(initResponse.content[0].text).toContain('Session Initialized Successfully');
 
     const planResponse = await callToolHandler!.handler({
       params: {

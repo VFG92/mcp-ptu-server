@@ -31,6 +31,7 @@ import {
   MediationDecisionSchema
 } from './parallel-reasoning-mcp.js';
 import { handleAnalyzeWithCapabilities, type CapabilitySystemRefs } from './capability-tools.js';
+import * as GuidedResponses from './guided-responses.js';
 
 /**
  * Tool 1: Initialize Parallel Reasoning Session
@@ -50,7 +51,14 @@ export async function handleInitParallelReasoning(
   console.log(`[handleInitParallelReasoning] Session ID: ${args.session_id}`);
   const session = manager.initSession(args);
 
-  const response = `# ✅ Parallel Reasoning Session Initialized
+  const response = GuidedResponses.formatInitSuccess(
+    session.session_id,
+    session.task_description,
+    session.required_diversity_axes,
+    session.min_plans
+  );
+
+  const oldResponse = `# ✅ Parallel Reasoning Session Initialized
 
 **Session ID**: \`${session.session_id}\`
 **Task**: ${session.task_description}
@@ -144,51 +152,59 @@ export async function handleSubmitReasoningPlan(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   console.log(`[handleSubmitReasoningPlan] Using manager: ${manager === globalParallelReasoningManager ? 'global' : 'durable-object'}`);
   console.log(`[handleSubmitReasoningPlan] Session ID: ${args.session_id}`);
+
+  // Check if session exists
+  const session = manager.getSession(args.session_id);
+  if (!session) {
+    const response = GuidedResponses.formatSessionNotFound(args.session_id);
+    return { content: [{ type: 'text', text: response }] };
+  }
+
   const result = manager.submitPlan(args.session_id, args.plan);
 
-  let response = `# Plan Submission: ${args.plan.plan_id}\n\n`;
+  let response: string;
 
   if (result.accepted) {
-    response += `✅ **Plan Accepted**\n\n`;
-    response += `**Diversity Axes**: ${args.plan.diversity_axes.join(', ')}\n`;
-    response += `**Capability Chain**: ${args.plan.capability_chain.join(' → ')}\n`;
-    response += `**Rationale**: ${args.plan.rationale}\n\n`;
-
-    const session = manager.getSession(args.session_id);
-    if (session) {
-      response += `**Plans Submitted**: ${session.plans.size}/${session.min_plans}\n\n`;
-
-      if (session.plans.size >= session.min_plans) {
-        response += `---\n\n`;
-        response += `## ✅ Minimum Plans Met - Ready to Execute\n\n`;
-        response += `You have submitted ${session.plans.size} plans. You can now:\n\n`;
-        response += `1. **Execute each plan** using \`execute_plan_step\` for each capability in the chain\n`;
-        response += `2. **Exchange notes** between plans using \`submit_cross_plan_note\` (contamination)\n`;
-        response += `3. **Monitor progress** using \`list_plan_status\`\n\n`;
-        response += `**Recommended**: Start executing all plans in parallel, then use cross-plan notes to enable contamination.\n`;
-      } else {
-        response += `**Action Required**: Submit ${session.min_plans - session.plans.size} more plan(s) to reach minimum.\n`;
-      }
-    }
+    // Plan accepted - use guided response
+    response = GuidedResponses.formatPlanAccepted(
+      args.plan.plan_id,
+      args.session_id,
+      session.plans.size,
+      session.min_plans,
+      args.plan.diversity_axes
+    );
   } else {
-    response += `❌ **Plan Rejected**\n\n`;
-    response += `**Reason**: ${result.reason}\n\n`;
-    response += `**Diversity Validation**:\n`;
-    response += `- Axes declared: ${result.diversity_validation.axes_declared.join(', ')}\n`;
-    response += `- Min axes met (≥2): ${result.diversity_validation.min_axes_met ? '✅' : '❌'}\n`;
-    response += `- Required axes included (${result.diversity_validation.required_axes.join(', ') || 'none required'}): ${result.diversity_validation.required_axes_satisfied ? '✅' : '❌'}\n`;
-    response += `- Unique to existing plans: ${result.diversity_validation.axes_unique_to_existing ? '✅' : '❌'}\n\n`;
-    response += `---\n\n`;
-    response += `## 🔧 How to Fix\n\n`;
-
-    if (!result.diversity_validation.min_axes_met) {
-      response += `Your plan declares only ${result.diversity_validation.axes_declared.length} axis/axes. **You must declare at least 2 diversity axes**.\n\n`;
-      response += `Add another axis from: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views\n\n`;
-    }
-
+    // Plan rejected - determine reason and use appropriate guided response
     if (!result.diversity_validation.required_axes_satisfied) {
-      response += `Your plan is missing one or more **required** diversity axes for this session: ${result.diversity_validation.required_axes.join(', ')}.\n\n`;
-      response += `Add the missing axes to your plan's \`diversity_axes\` declaration, then resubmit.\n\n`;
+      // Missing required axes
+      response = GuidedResponses.formatPlanRejectedMissingAxes(
+        args.plan.plan_id,
+        args.session_id,
+        result.diversity_validation.required_axes,
+        result.diversity_validation.axes_declared
+      );
+    } else if (!result.diversity_validation.axes_unique_to_existing) {
+      // Too similar to existing plans
+      const existing_plans = Array.from(session.plans.values()).map(p => ({
+        plan_id: p.plan_id,
+        axes: p.diversity_axes
+      }));
+      response = GuidedResponses.formatPlanRejectedTooSimilar(
+        args.plan.plan_id,
+        args.session_id,
+        result.diversity_validation.axes_declared,
+        existing_plans,
+        result.diversity_validation.required_axes
+      );
+    } else {
+      // Fallback to old response for other cases
+      response = `# ❌ Plan Rejected: ${args.plan.plan_id}\n\n`;
+      response += `**Reason**: ${result.reason}\n\n`;
+      response += `**Diversity Validation**:\n`;
+      response += `- Axes declared: ${result.diversity_validation.axes_declared.join(', ')}\n`;
+      response += `- Min axes met (≥2): ${result.diversity_validation.min_axes_met ? '✅' : '❌'}\n`;
+      response += `- Required axes included: ${result.diversity_validation.required_axes_satisfied ? '✅' : '❌'}\n`;
+      response += `- Unique to existing plans: ${result.diversity_validation.axes_unique_to_existing ? '✅' : '❌'}\n\n`;
     }
 
     if (!result.diversity_validation.axes_unique_to_existing) {
@@ -228,23 +244,25 @@ export async function handleExecutePlanStep(
   const session = manager.getSession(args.session_id);
 
   if (!session) {
-    const response = `# ❌ Validation Error\n\n` +
-      `Parallel reasoning session \`${args.session_id}\` not found. ` +
-      `Initialize a session with \`init_parallel_reasoning\` before executing plan steps.`;
-
-    return {
-      content: [{ type: 'text', text: response }]
-    };
+    const response = GuidedResponses.formatSessionNotFound(args.session_id);
+    return { content: [{ type: 'text', text: response }] };
   }
 
   if (!session.plans.has(args.plan_id)) {
-    const response = `# ❌ Validation Error\n\n` +
-      `Plan ID \`${args.plan_id}\` not found in session \`${args.session_id}\`. ` +
-      `Submit the plan first using \`submit_reasoning_plan\`.`;
+    const response = `# ❌ Plan Not Found\n\n` +
+      `**Plan ID**: \`${args.plan_id}\`\n` +
+      `**Session ID**: \`${args.session_id}\`\n\n` +
+      `## Problem\n` +
+      `This plan does not exist in the session.\n\n` +
+      `## Available Plans\n` +
+      `${Array.from(session.plans.keys()).map(id => `- \`${id}\``).join('\n')}\n\n` +
+      `## Solution\n` +
+      `Either:\n` +
+      `1. Use one of the available plan IDs listed above\n` +
+      `2. Submit this plan first using \`submit_reasoning_plan\`\n\n` +
+      `⚠️ Remember: Use session_id \`${args.session_id}\` for all calls.`;
 
-    return {
-      content: [{ type: 'text', text: response }]
-    };
+    return { content: [{ type: 'text', text: response }] };
   }
 
   if (!session.plan_results.has(args.plan_id)) {
@@ -264,12 +282,22 @@ export async function handleExecutePlanStep(
   // Record result for plan using the provided session manager instance
   manager.recordPlanResult(args.session_id, args.plan_id, result);
 
-  // Prepend plan context to response
-  const planContext = `# Plan Step Executed: ${args.plan_id}\n\n`;
+  // Extract summary from result
   const originalText = result.content[0].text;
-  
+  const summary = originalText.substring(0, 200) + (originalText.length > 200 ? '...' : '');
+
+  // Use guided response
+  const guidedResponse = GuidedResponses.formatCapabilityExecuted(
+    args.session_id,
+    args.plan_id,
+    summary
+  );
+
+  // Append full result
+  const fullResponse = guidedResponse + '\n\n---\n\n## Full Capability Result\n\n' + originalText;
+
   return {
-    content: [{ type: 'text', text: planContext + originalText }]
+    content: [{ type: 'text', text: fullResponse }]
   };
 }
 
@@ -473,43 +501,54 @@ export async function handleFinalizeParallelReasoning(
   args: z.infer<typeof FinalizeParallelReasoningSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const result = manager.finalizeSession(args.session_id);
   const session = manager.getSession(args.session_id);
 
   if (!session) {
-    return {
-      content: [{ type: 'text', text: 'Session not found.' }]
-    };
+    const response = GuidedResponses.formatSessionNotFound(args.session_id);
+    return { content: [{ type: 'text', text: response }] };
   }
 
-  let response = `# Parallel Reasoning Session Finalized\n\n`;
+  const result = manager.finalizeSession(args.session_id);
+
+  let response: string;
 
   if (result.finalized) {
-    response += `✅ **Session Complete**\n\n`;
-    response += `## Summary\n\n`;
-    response += `- **Plans Executed**: ${session.plans.size}\n`;
-    response += `- **Cross-Plan Notes**: ${session.cross_plan_notes.length}\n`;
-    response += `- **Peer Critiques**: ${session.peer_critiques.length}\n`;
-    response += `- **Mediation Decisions**: ${session.mediation_decisions.length}\n\n`;
-    
-    response += `## Decision Map\n\n`;
-    response += session.mediation_decisions.map((d, i) => `
+    // Success - use guided response
+    response = GuidedResponses.formatFinalizationSuccess(
+      args.session_id,
+      session.plans.size,
+      session.mediation_decisions.length
+    );
+
+    // Append decision map
+    if (session.mediation_decisions.length > 0) {
+      response += `\n\n## Decision Map\n\n`;
+      response += session.mediation_decisions.map((d, i) => `
 ${i + 1}. **${d.decision_point}**
    - Chosen from: ${d.chosen_from_plan}
    - Confidence: ${(d.confidence * 100).toFixed(1)}%
    - Rationale: ${d.rationale}
    - Evidence: ${d.evidence_ids.join(', ')}
 `).join('\n');
-  } else {
-    response += `❌ **Session Incomplete**\n\n`;
-    response += `## Completeness Check\n\n`;
-    response += `- All plans executed: ${result.completeness_check.all_plans_executed ? '✅' : '❌'}\n`;
-    response += `- All decisions have evidence: ${result.completeness_check.all_decisions_have_evidence ? '✅' : '❌'}\n\n`;
-    
-    if (result.completeness_check.missing_plans.length > 0) {
-      response += `### Missing Plan Executions\n\n`;
-      response += result.completeness_check.missing_plans.map(p => `- ${p}`).join('\n') + '\n\n';
     }
+  } else {
+    // Incomplete - use guided response
+    const plans_executed = Array.from(session.plans.keys()).filter(plan_id => {
+      const results = session.plan_results.get(plan_id);
+      return results && results.length > 0;
+    });
+    const plans_not_executed = Array.from(session.plans.keys()).filter(plan_id => {
+      const results = session.plan_results.get(plan_id);
+      return !results || results.length === 0;
+    });
+
+    response = GuidedResponses.formatFinalizationIncomplete(
+      args.session_id,
+      session.plans.size,
+      session.min_plans,
+      plans_executed,
+      plans_not_executed
+    );
     
     if (result.completeness_check.decisions_without_evidence.length > 0) {
       response += `### Decisions Without Evidence\n\n`;

@@ -67,8 +67,8 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       min_plans: 3
     }, manager);
 
-    expect(initResult.content[0].text).toContain('Parallel Reasoning Session Initialized');
-    expect(initResult.content[0].text).toContain('Submit 3 plans');
+    expect(initResult.content[0].text).toContain('Session Initialized Successfully');
+    expect(initResult.content[0].text).toContain('session_id');
 
     // Step 2: Submit 3 diverse plans
     const planA = await handleSubmitReasoningPlan({
@@ -112,7 +112,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
     }, manager);
 
     expect(planC.content[0].text).toContain('Plan Accepted');
-    expect(planC.content[0].text).toContain('Minimum Plans Met');
+    expect(planC.content[0].text).toContain('execute_plan_step');
 
     // Step 3: Cross-plan contamination
     const note1 = await handleSubmitCrossPlanNote({
@@ -169,12 +169,12 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
 
     expect(status.content[0].text).toContain('Session Status');
 
-    // Step 7: Finalize
+    // Step 7: Finalize (should be incomplete since no plans were executed)
     const finalize = await handleFinalizeParallelReasoning({
       session_id: sessionId
     }, manager);
 
-    expect(finalize.content[0].text).toContain('Session Finalized');
+    expect(finalize.content[0].text).toContain('Session Incomplete');
   });
 
   it('records plan execution results on the injected manager and allows finalization', async () => {
@@ -222,7 +222,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         task: 'Execute plan A capability chain'
       }, undefined, manager);
 
-      expect(planAExecution.content[0].text).toContain('Plan Step Executed: plan_A');
+      expect(planAExecution.content[0].text).toContain('Capability Executed: plan_A');
 
       const planBExecution = await handleExecutePlanStep({
         session_id: executionSessionId,
@@ -230,7 +230,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         task: 'Execute plan B capability chain'
       }, undefined, manager);
 
-      expect(planBExecution.content[0].text).toContain('Plan Step Executed: plan_B');
+      expect(planBExecution.content[0].text).toContain('Capability Executed: plan_B');
 
       expect(analyzeWithCapabilitiesMock).toHaveBeenCalledTimes(2);
       expect(analyzeWithCapabilitiesMock.mock.calls[0][0]).toMatchObject({
@@ -248,7 +248,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         session_id: executionSessionId
       }, manager);
 
-      expect(finalize.content[0].text).toContain('Session Complete');
+      expect(finalize.content[0].text).toContain('Session Finalized Successfully');
     } finally {
       analyzeWithCapabilitiesMock.mockReset();
     }
@@ -290,7 +290,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
     }, manager);
 
     expect(result.content[0].text).toContain('Plan Rejected');
-    expect(result.content[0].text).toContain('at least 2 axes must differ');
+    expect(result.content[0].text).toContain('too similar');
   });
 
   it('should persist sessions across manager instances', () => {
@@ -357,8 +357,8 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       session_id: sessionId
     }, manager);
 
-    // Should still finalize but show what's missing
-    expect(result.content[0].text).toContain('Session Finalized');
+    // Should show incomplete
+    expect(result.content[0].text).toContain('Session Incomplete');
   });
 
   it('should track cross-plan notes for audit trail', async () => {

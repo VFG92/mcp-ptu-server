@@ -199,9 +199,9 @@ describe('parallel reasoning v5 tool handler validation', () => {
     }, manager);
 
     const text = response.content[0].text;
-    expect(text).toContain('❌ **Plan Rejected**');
-    expect(text).toContain('Plan must include required diversity axes');
-    expect(text).toContain('Required axes included (data_sources, analytical_models): ❌');
+    expect(text).toContain('Plan Rejected');
+    expect(text).toContain('Missing required diversity axes');
+    expect(text).toContain('MISSING');
   });
 
   it('rejects plan execution when session or plan is missing', async () => {
@@ -211,7 +211,7 @@ describe('parallel reasoning v5 tool handler validation', () => {
       task: 'Run nonexistent session step'
     }, undefined, manager);
 
-    expect(missingSession.content[0].text).toContain('Parallel reasoning session `missing_session` not found');
+    expect(missingSession.content[0].text).toContain('Session Not Found');
 
     const missingPlan = await handleExecutePlanStep({
       session_id: sessionId,
@@ -219,6 +219,6 @@ describe('parallel reasoning v5 tool handler validation', () => {
       task: 'Run nonexistent plan step'
     }, undefined, manager);
 
-    expect(missingPlan.content[0].text).toContain('Plan ID `ghost_plan` not found');
+    expect(missingPlan.content[0].text).toContain('Plan Not Found');
   });
 });

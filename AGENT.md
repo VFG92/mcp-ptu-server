@@ -1,6 +1,6 @@
 # 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.1.0** | For AI Agents Working on This Repository
+**Version 5.2.0** | For AI Agents Working on This Repository
 
 This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
 
