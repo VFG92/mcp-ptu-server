@@ -195,15 +195,28 @@ export class ParallelReasoningSessionManager {
     // Validate minimum axes
     const min_axes_met = plan.diversity_axes.length >= 2;
 
-    // Check if axes differ from existing plans
+    // Check if axes differ from existing plans by at least two unique axes overall
     let axes_unique = true;
-    for (const [existing_plan_id, existing_plan] of session.plans) {
-      const overlap = plan.diversity_axes.filter(axis => 
-        existing_plan.diversity_axes.includes(axis)
-      );
-      
-      // At least 2 axes must differ
-      if (overlap.length >= plan.diversity_axes.length - 1) {
+    const newAxesSet = new Set(plan.diversity_axes);
+
+    for (const [, existing_plan] of session.plans) {
+      const existingAxesSet = new Set(existing_plan.diversity_axes);
+
+      let symmetricDifferenceCount = 0;
+
+      for (const axis of newAxesSet) {
+        if (!existingAxesSet.has(axis)) {
+          symmetricDifferenceCount++;
+        }
+      }
+
+      for (const axis of existingAxesSet) {
+        if (!newAxesSet.has(axis)) {
+          symmetricDifferenceCount++;
+        }
+      }
+
+      if (symmetricDifferenceCount < 2) {
         axes_unique = false;
         break;
       }

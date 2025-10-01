@@ -141,4 +141,37 @@ describe('parallel reasoning v5 tool handler validation', () => {
 
     expect(valid.content[0].text).toContain('Mediation Decision Recorded');
   });
+
+  it('accepts plans that differ by two unique axes overall even when sharing core axes', () => {
+    const diversitySession = 'diversity_axes_symdiff';
+
+    manager.initSession({
+      session_id: diversitySession,
+      task_description: 'Validate symmetric difference diversity checks',
+      required_diversity_axes: ['data_sources', 'analytical_models'],
+      min_plans: 2
+    });
+
+    const first = manager.submitPlan(diversitySession, {
+      plan_id: 'plan_core',
+      description: 'Data and model baseline with horizon extension',
+      diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
+      capability_chain: ['market_scan'],
+      rationale: 'Extend baseline with forward-looking horizon',
+      expected_outputs: ['forecast_summary']
+    });
+    expect(first.accepted).toBe(true);
+    expect(first.diversity_validation.axes_unique_to_existing).toBe(true);
+
+    const second = manager.submitPlan(diversitySession, {
+      plan_id: 'plan_risk',
+      description: 'Data and model baseline with risk perspective',
+      diversity_axes: ['data_sources', 'analytical_models', 'risk_perspectives'],
+      capability_chain: ['market_scan'],
+      rationale: 'Introduce risk lens while keeping shared foundations',
+      expected_outputs: ['risk_summary']
+    });
+    expect(second.accepted).toBe(true);
+    expect(second.diversity_validation.axes_unique_to_existing).toBe(true);
+  });
 });
