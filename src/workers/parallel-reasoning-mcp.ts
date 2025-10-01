@@ -45,7 +45,7 @@ export const ReasoningPlanSchema = z.object({
   plan_id: z.string(),
   description: z.string(),
   diversity_axes: z.array(DiversityAxisSchema).min(2), // Minimum 2 axes must differ
-  capability_chain: z.array(z.string()),
+  capability_chain: z.array(z.string()).min(8).max(32).describe('Capability chain: 8-32 capabilities per workflow'),
   rationale: z.string(),
   expected_outputs: z.array(z.string())
 });
@@ -132,6 +132,9 @@ export class ParallelReasoningSessionManager {
     required_diversity_axes: DiversityAxis[];
     min_plans: number;
   }): ParallelReasoningSession {
+    console.log(`[ParallelReasoningSessionManager] Creating session: ${args.session_id}`);
+    console.log(`[ParallelReasoningSessionManager] Current sessions count: ${this.sessions.size}`);
+
     const session: ParallelReasoningSession = {
       session_id: args.session_id,
       task_description: args.task_description,
@@ -148,6 +151,7 @@ export class ParallelReasoningSessionManager {
     };
 
     this.sessions.set(args.session_id, session);
+    console.log(`[ParallelReasoningSessionManager] Session created. New sessions count: ${this.sessions.size}`);
     return session;
   }
 
@@ -169,8 +173,13 @@ export class ParallelReasoningSessionManager {
       required_axes: DiversityAxis[];
     };
   } {
+    console.log(`[ParallelReasoningSessionManager] Looking for session: ${session_id}`);
+    console.log(`[ParallelReasoningSessionManager] Available sessions: ${Array.from(this.sessions.keys()).join(', ')}`);
+    console.log(`[ParallelReasoningSessionManager] Total sessions count: ${this.sessions.size}`);
+
     const session = this.sessions.get(session_id);
     if (!session) {
+      console.log(`[ParallelReasoningSessionManager] Session not found: ${session_id}`);
       return {
         accepted: false,
         reason: 'Session not found',
@@ -183,6 +192,10 @@ export class ParallelReasoningSessionManager {
         }
       };
     }
+
+    console.log(`[ParallelReasoningSessionManager] Session found: ${session_id}`);
+    console.log(`[ParallelReasoningSessionManager] Plan diversity_axes: ${plan.diversity_axes.join(', ')}`);
+    console.log(`[ParallelReasoningSessionManager] Plan diversity_axes length: ${plan.diversity_axes.length}`);
 
     if (session.plans.has(plan.plan_id)) {
       return {
@@ -469,14 +482,18 @@ export class ParallelReasoningSessionManager {
   }
 
   /**
-   * Get session (for export)
+   * Get session (for export and debugging)
    */
   getSession(session_id: string): ParallelReasoningSession | null {
-    return this.sessions.get(session_id) || null;
+    console.log(`[ParallelReasoningSessionManager] getSession called for: ${session_id}`);
+    console.log(`[ParallelReasoningSessionManager] Available sessions: ${Array.from(this.sessions.keys()).join(', ')}`);
+    const session = this.sessions.get(session_id) || null;
+    console.log(`[ParallelReasoningSessionManager] Session found: ${!!session}`);
+    return session;
   }
 
   /**
-   * Get all sessions (for persistence)
+   * Get all sessions (for persistence and debugging)
    */
   getAllSessions(): Map<string, ParallelReasoningSession> {
     return this.sessions;

@@ -19,6 +19,9 @@ type HandleAnalyzeWithCapabilities = typeof import('../src/workers/capability-to
 
 const analyzeWithCapabilitiesMock = jest.fn() as jest.MockedFunction<HandleAnalyzeWithCapabilities>;
 
+// Standard test capability chain (8 capabilities minimum)
+const TEST_CAP_CHAIN = ['market_scan', 'tam_sam_som_build', 'competitor_analysis', 'customer_segmentation', 'brand_equity_valuation', 'gtm_strategy', 'digital_roi_attribution', 'customer_journey_mapping'];
+
 jest.unstable_mockModule('../src/workers/capability-tools.js', () => ({
   handleAnalyzeWithCapabilities: analyzeWithCapabilitiesMock
 }));
@@ -74,7 +77,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_A',
         description: 'Official statistics + Regression',
         diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
-        capability_chain: ['market_scan', 'tam_sam_som_build'],
+        capability_chain: ['market_scan', 'tam_sam_som_build', 'competitor_analysis', 'customer_segmentation', 'brand_equity_valuation', 'gtm_strategy', 'digital_roi_attribution', 'customer_journey_mapping'],
         rationale: 'Baseline using official data',
         expected_outputs: ['market_map', 'tam_sam_som']
       }
@@ -88,7 +91,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_B',
         description: 'Industry reports + Monte Carlo',
         diversity_axes: ['data_sources', 'analytical_models', 'risk_perspectives'], // Shares required axes, adds unique risk lens
-        capability_chain: ['market_scan', 'monte_carlo_finance'],
+        capability_chain: ['market_scan', 'monte_carlo_finance', 'competitor_analysis', 'customer_segmentation', 'brand_equity_valuation', 'gtm_strategy', 'digital_roi_attribution', 'customer_journey_mapping'],
         rationale: 'Probabilistic analysis',
         expected_outputs: ['market_map', 'monte_carlo_results']
       }
@@ -102,7 +105,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_C',
         description: 'Academic research + Normative',
         diversity_axes: ['data_sources', 'analytical_models', 'quality_metrics', 'stakeholder_views'], // Required axes plus two unique dimensions
-        capability_chain: ['market_scan', 'regulatory_scan'],
+        capability_chain: ['market_scan', 'regulatory_scan', 'competitor_analysis', 'customer_segmentation', 'brand_equity_valuation', 'gtm_strategy', 'digital_roi_attribution', 'customer_journey_mapping'],
         rationale: 'Long-term perspective',
         expected_outputs: ['market_map', 'regulatory_analysis']
       }
@@ -181,7 +184,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       session_id: executionSessionId,
       task_description: 'Validate plan execution result persistence',
       required_diversity_axes: ['data_sources', 'analytical_models'],
-      min_plans: 2
+      min_plans: 3
     }, manager);
 
     await handleSubmitReasoningPlan({
@@ -190,7 +193,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_A',
         description: 'Plan A baseline',
         diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
-        capability_chain: ['market_scan'],
+        capability_chain: TEST_CAP_CHAIN,
         rationale: 'Baseline analysis',
         expected_outputs: ['market_map']
       }
@@ -202,7 +205,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_B',
         description: 'Plan B alternative',
         diversity_axes: ['data_sources', 'analytical_models', 'risk_perspectives'],
-        capability_chain: ['market_scan'],
+        capability_chain: TEST_CAP_CHAIN,
         rationale: 'Risk-focused analysis',
         expected_outputs: ['risk_summary']
       }
@@ -257,7 +260,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       session_id: sessionId,
       task_description: 'Test',
       required_diversity_axes: ['data_sources', 'analytical_models'],
-      min_plans: 2
+      min_plans: 3
     }, manager);
 
     // Submit first plan
@@ -267,7 +270,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_A',
         description: 'Plan A',
         diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
-        capability_chain: ['market_scan'],
+        capability_chain: TEST_CAP_CHAIN,
         rationale: 'Test',
         expected_outputs: ['market_map']
       }
@@ -280,7 +283,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_B',
         description: 'Plan B',
         diversity_axes: ['data_sources', 'analytical_models'], // Same as Plan A
-        capability_chain: ['market_scan'],
+        capability_chain: TEST_CAP_CHAIN,
         rationale: 'Test',
         expected_outputs: ['market_map']
       }
@@ -297,7 +300,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       session_id: sessionId,
       task_description: 'Test persistence',
       required_diversity_axes: ['data_sources', 'analytical_models'],
-      min_plans: 2
+      min_plans: 3
     });
 
     // Serialize sessions
@@ -313,7 +316,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
     const session = manager2.getSession(sessionId);
     expect(session).not.toBeNull();
     expect(session?.task_description).toBe('Test persistence');
-    expect(session?.min_plans).toBe(2);
+    expect(session?.min_plans).toBe(3);
   });
 
   it('should validate completeness before finalization', async () => {
@@ -322,7 +325,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       session_id: sessionId,
       task_description: 'Test',
       required_diversity_axes: ['data_sources', 'analytical_models'],
-      min_plans: 2
+      min_plans: 3
     }, manager);
 
     await handleSubmitReasoningPlan({
@@ -331,7 +334,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_A',
         description: 'Plan A',
         diversity_axes: ['data_sources', 'analytical_models', 'time_horizons'],
-        capability_chain: ['market_scan'],
+        capability_chain: TEST_CAP_CHAIN,
         rationale: 'Test',
         expected_outputs: ['market_map']
       }
@@ -343,7 +346,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_B',
         description: 'Plan B',
         diversity_axes: ['data_sources', 'analytical_models', 'quality_metrics'], // Shares required axes, adds unique quality focus
-        capability_chain: ['market_scan'],
+        capability_chain: TEST_CAP_CHAIN,
         rationale: 'Test',
         expected_outputs: ['market_map']
       }
@@ -363,7 +366,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       session_id: sessionId,
       task_description: 'Test',
       required_diversity_axes: ['data_sources'],
-      min_plans: 2
+      min_plans: 3
     }, manager);
 
     await handleSubmitReasoningPlan({
@@ -372,7 +375,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_A',
         description: 'Plan A',
         diversity_axes: ['data_sources', 'analytical_models'],
-        capability_chain: ['market_scan'],
+        capability_chain: TEST_CAP_CHAIN,
         rationale: 'Test',
         expected_outputs: ['market_map']
       }
@@ -384,7 +387,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
         plan_id: 'plan_B',
         description: 'Plan B',
         diversity_axes: ['data_sources', 'risk_perspectives', 'stakeholder_views'],
-        capability_chain: ['market_scan'],
+        capability_chain: TEST_CAP_CHAIN,
         rationale: 'Test',
         expected_outputs: ['market_map']
       }

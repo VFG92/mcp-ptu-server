@@ -14,10 +14,9 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { InMemoryEventStore } from '@modelcontextprotocol/sdk/examples/shared/inMemoryEventStore.js';
 import { createServer } from './everything-workers.js';
 import { ExpressRequestAdapter, ExpressResponseAdapter } from './express-adapter.js';
-import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
 import { Whiteboard, type Artifact } from './whiteboard-memory.js';
 import { EvidenceLedger } from './evidence-ledger.js';
-import { ParallelReasoningSessionManager } from './parallel-reasoning-mcp.js';
+import { ParallelReasoningSessionManager, type ParallelReasoningSession } from './parallel-reasoning-mcp.js';
 
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;

@@ -41,8 +41,11 @@ An MCP server that enables **ChatGPT Developer Mode** to perform **evidence-back
 - ✅ **Evidence-Based Mediation** - Final decisions must cite evidence IDs from plans
 - ✅ **6 Diversity Axes** - data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views
 - ✅ **Quality Boost** - Based on Self-Consistency (Wang 2022), Tree-of-Thoughts (Yao 2023), Multi-Agent Debate (Du 2023)
+- ✅ **Session Persistence** - Resolved Durable Object routing issues for reliable multi-step workflows
 
 **Architecture Principle**: MCP = Guardrails + Persistent Memory | ChatGPT = Planning + Reasoning + Mediation
+
+**⚠️ Critical Requirement**: For parallel reasoning to work correctly, clients **MUST** maintain the same `mcp-session-id` header across all tool calls in a workflow. Each request without a consistent session ID creates a new Durable Object, causing "Session not found" errors. See [AGENT.md](./AGENT.md#-important-session-persistence-requirements) for technical details.
 
 ### 🆕 Version 4.2 Enhancements
 
@@ -175,7 +178,7 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
     "session_id": "fintech_parallel_001",
     "task_description": "Analyze European fintech market for B2B SaaS opportunities",
     "required_diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
-    "min_plans": 3
+    "min_plans": 3  // 3-32 plans, each with 8-32 capabilities
   }
 }
 ```
@@ -384,7 +387,15 @@ Export complete session for audit/compliance.
 #### `init_parallel_reasoning`
 Initialize parallel reasoning session with diversity requirements.
 
-**Arguments**: `session_id`, `task_description`, `required_diversity_axes`, `min_plans`
+**Arguments**:
+- `session_id` - Unique session identifier
+- `task_description` - Task to analyze
+- `required_diversity_axes` - Axes that must differ (min 2)
+- `min_plans` - Minimum number of plans (3-32, default 3)
+
+**Constraints**:
+- **Plans**: 3-32 parallel reasoning plans per session
+- **Capabilities**: 8-32 capabilities per plan workflow
 
 **Returns**: Actionable prompt with diversity axes reference
 
@@ -894,6 +905,39 @@ Contributions welcome! Please:
 
 ---
 
+## 📁 Project Structure
+
+```
+mcp-ptu-server/
+├── src/workers/              # Core server implementation
+│   ├── capabilities/         # 58 business capabilities (8 domains)
+│   ├── deprecated/           # Legacy code (v2.x, pre-v5.0)
+│   ├── examples/             # Code examples and integration guides
+│   ├── everything-workers.ts # Main MCP server with tool handlers
+│   ├── session.ts            # Durable Object session management
+│   ├── parallel-reasoning-*.ts # Parallel reasoning v5.0 tools
+│   └── capability-*.ts       # Capability orchestration system
+├── __tests__/                # Comprehensive test suite (20 test files)
+├── examples/                 # Working examples (parallel reasoning, peer review)
+├── scripts/                  # Test and utility scripts
+│   ├── test-parallel-reasoning-simple.sh
+│   └── test-parallel-reasoning-fix.sh
+├── docs/                     # Additional documentation (if needed)
+├── README.md                 # User documentation (this file)
+├── AGENT.md                  # Technical documentation
+├── package.json              # Dependencies and scripts
+├── tsconfig.json             # TypeScript configuration
+└── wrangler.toml             # Cloudflare Workers configuration
+```
+
+**Key Directories**:
+- **`src/workers/capabilities/`** - All 58 business capabilities organized by domain
+- **`src/workers/deprecated/`** - Legacy code kept for reference (will be removed in v6.0)
+- **`__tests__/`** - Unit and integration tests with 100% coverage of critical paths
+- **`scripts/`** - Test scripts for smoke testing and validation
+
+---
+
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file.
@@ -920,7 +964,17 @@ Built with:
 - ✅ **Enhanced Tournament** - Rankings now include peer review insights
 - ✅ **Enabled by Default** - Can be disabled with `peer_review_mode: false`
 
-### Bug Fixes (v4.1.1)
+### Bug Fixes
+
+#### v5.0.1 - Parallel Reasoning Session Persistence (2025-10-01)
+- ✅ **Session Persistence** - Fixed "Session not found" errors in parallel reasoning workflow
+- ✅ **Durable Object Routing** - Resolved inconsistent DO routing between requests
+- ✅ **Diversity Axes Validation** - Fixed "0 axes" error (was symptom of session persistence issue)
+- ✅ **Defensive Checks** - Added validation in all 8 parallel reasoning tool handlers
+- ✅ **Enhanced Logging** - Comprehensive session management tracking
+- ✅ **Test Coverage** - Added `test-parallel-reasoning-simple.sh` demonstrating correct usage
+
+#### v4.1.1 - Capability Session Persistence
 - ✅ **Session State Persistence** - Fixed session costs and execution history being reset on every call
 - ✅ **Artifact Versioning** - Fixed artifact versions always resetting to 1, now properly increments (1 → 2 → 3)
 - ✅ **Orchestrator Reuse** - Orchestrator instance now reused when storage references unchanged
@@ -928,7 +982,7 @@ Built with:
 - ✅ **Test Coverage** - Added comprehensive test suite for session persistence and versioning
 
 ### Technical Details
-See [AGENT.md](./AGENT.md) sections "Peer Review System (v4.2.0)" and "Bug Fixes (v4.1.1)" for complete technical details.
+See [AGENT.md](./AGENT.md) for complete technical documentation including session persistence requirements, peer review system, and bug fix details.
 
 ---
 

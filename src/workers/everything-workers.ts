@@ -41,6 +41,9 @@ import {
   handleFinalizeParallelReasoning
 } from './parallel-reasoning-tools-v5.js';
 
+// Import parallel reasoning session type
+import type { ParallelReasoningSession } from './parallel-reasoning-mcp.js';
+
 // Legacy parallel reasoning tools (deprecated, kept for backward compatibility)
 // Legacy parallel reasoning tools removed - use v5.0 tools instead
 // import {
@@ -61,7 +64,6 @@ import {
 //   handleListAgentPersonas,
 //   handleValidateSessionSpec
 // } from './parallel-reasoning-tools.js';
-import type { ParallelReasoningSession } from './parallel-reasoning-engine.js';
 import { ParallelReasoningError } from './error-handling.js';
 
 // Import capability tools
@@ -551,6 +553,16 @@ Use these 8 tools for multi-path reasoning:
       // Parallel Reasoning v5 Tool Handlers (LLM-Centric Architecture)
       if (name === ParallelReasoningV5ToolName.INIT_PARALLEL_REASONING) {
         console.log(`[CallTool] Handling init_parallel_reasoning (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
         const validatedArgs = InitParallelReasoningSchema.parse(args);
         const result = await handleInitParallelReasoning(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
@@ -559,6 +571,16 @@ Use these 8 tools for multi-path reasoning:
 
       if (name === ParallelReasoningV5ToolName.SUBMIT_REASONING_PLAN) {
         console.log(`[CallTool] Handling submit_reasoning_plan (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
         const validatedArgs = SubmitReasoningPlanSchema.parse(args);
         const result = await handleSubmitReasoningPlan(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
@@ -567,6 +589,16 @@ Use these 8 tools for multi-path reasoning:
 
       if (name === ParallelReasoningV5ToolName.EXECUTE_PLAN_STEP) {
         console.log(`[CallTool] Handling execute_plan_step (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
         const validatedArgs = ExecutePlanStepSchema.parse(args);
         const result = await handleExecutePlanStep(validatedArgs, capabilitySystemRefs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
@@ -575,6 +607,16 @@ Use these 8 tools for multi-path reasoning:
 
       if (name === ParallelReasoningV5ToolName.SUBMIT_CROSS_PLAN_NOTE) {
         console.log(`[CallTool] Handling submit_cross_plan_note (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
         const validatedArgs = SubmitCrossPlanNoteSchema.parse(args);
         const result = await handleSubmitCrossPlanNote(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
@@ -583,6 +625,16 @@ Use these 8 tools for multi-path reasoning:
 
       if (name === ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE) {
         console.log(`[CallTool] Handling submit_peer_critique (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
         const validatedArgs = SubmitPeerCritiqueSchema.parse(args);
         const result = await handleSubmitPeerCritique(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
@@ -591,6 +643,16 @@ Use these 8 tools for multi-path reasoning:
 
       if (name === ParallelReasoningV5ToolName.SUBMIT_MEDIATION_DECISION) {
         console.log(`[CallTool] Handling submit_mediation_decision (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
         const validatedArgs = SubmitMediationDecisionSchema.parse(args);
         const result = await handleSubmitMediationDecision(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
@@ -599,6 +661,16 @@ Use these 8 tools for multi-path reasoning:
 
       if (name === ParallelReasoningV5ToolName.LIST_PLAN_STATUS) {
         console.log(`[CallTool] Handling list_plan_status (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
         const validatedArgs = ListPlanStatusSchema.parse(args);
         const result = await handleListPlanStatus(validatedArgs, parallelReasoningV5Manager);
         return result;
@@ -606,6 +678,16 @@ Use these 8 tools for multi-path reasoning:
 
       if (name === ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING) {
         console.log(`[CallTool] Handling finalize_parallel_reasoning (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
         const validatedArgs = FinalizeParallelReasoningSchema.parse(args);
         const result = await handleFinalizeParallelReasoning(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();

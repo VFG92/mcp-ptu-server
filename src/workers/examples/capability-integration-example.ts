@@ -5,12 +5,12 @@
  * for business analysis tasks.
  */
 
-import { globalCapabilityGraph } from './capability-graph.js';
-import { globalEvidenceLedger } from './evidence-ledger.js';
-import { globalWhiteboard } from './whiteboard-memory.js';
-import { CapabilityOrchestrator, createDefaultBudget, createDefaultPolicy } from './capability-orchestrator.js';
-import { registerAllCapabilities } from './capabilities/index.js';
-import { getAdapter } from './capability-adapters.js';
+import { globalCapabilityGraph } from '../capability-graph.js';
+import { globalEvidenceLedger } from '../evidence-ledger.js';
+import { globalWhiteboard } from '../whiteboard-memory.js';
+import { CapabilityOrchestrator, createDefaultBudget, createDefaultPolicy } from '../capability-orchestrator.js';
+import { registerAllCapabilities } from '../capabilities/index.js';
+import { getAdapter } from '../capability-adapters.js';
 
 /**
  * Initialize the capability system
@@ -101,7 +101,7 @@ export async function exampleFinancialModeling() {
   console.log(`✓ Partial: ${result.partial}`);
   
   // Find unit economics artifact
-  const unitEcon = result.artifacts.find(a => a.id === 'unit_economics_model');
+  const unitEcon = result.artifacts.find((a: any) => a.id === 'unit_economics_model');
   if (unitEcon) {
     console.log('\n💰 Unit Economics:');
     console.log(`   LTV: $${unitEcon.data.ltv.value.toFixed(0)}`);
@@ -135,7 +135,7 @@ export async function exampleRiskAssessment() {
   console.log(`✓ Success: ${result.success}`);
   
   // Find risk register
-  const riskReg = result.artifacts.find(a => a.id === 'risk_register_build');
+  const riskReg = result.artifacts.find((a: any) => a.id === 'risk_register_build');
   if (riskReg) {
     console.log('\n⚠️  Risk Summary:');
     console.log(`   Total Risks: ${riskReg.data.risk_summary.total_risks}`);
@@ -211,14 +211,14 @@ export async function examplePartialSuccess() {
   
   if (result.missing_capabilities.length > 0) {
     console.log(`\n⚠️  Missing Capabilities:`);
-    result.missing_capabilities.forEach(cap => {
+    result.missing_capabilities.forEach((cap: any) => {
       console.log(`   - ${cap}`);
     });
   }
-  
+
   if (result.blocking_artifacts.length > 0) {
     console.log(`\n❌ Blocking Artifacts (couldn't be produced):`);
-    result.blocking_artifacts.forEach(art => {
+    result.blocking_artifacts.forEach((art: any) => {
       console.log(`   - ${art}`);
     });
   }
@@ -317,5 +317,5 @@ export async function runAllExamples() {
 
 // Note: initializeCapabilitySystem is already exported above
 // Re-exporting createDefaultBudget and createDefaultPolicy from orchestrator
-export { createDefaultBudget, createDefaultPolicy } from './capability-orchestrator.js';
+export { createDefaultBudget, createDefaultPolicy } from '../capability-orchestrator.js';
 

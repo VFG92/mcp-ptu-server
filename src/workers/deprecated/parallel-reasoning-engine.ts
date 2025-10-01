@@ -17,8 +17,8 @@
  */
 
 import { getAgentPersona, generateAgentPrompt, type AgentPersona, getAllAgentPersonas, findSimilarPersonas } from './agent-personas.js';
-import { synthesizeResults, type AgentResult, type SynthesisResult } from './synthesis-strategies.js';
-import { ErrorFactory } from './error-handling.js';
+import { synthesizeResults, type AgentResult, type SynthesisResult } from '../synthesis-strategies.js';
+import { ErrorFactory } from '../error-handling.js';
 
 export interface AgentState {
   agent_id: string;

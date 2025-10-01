@@ -8,15 +8,9 @@
   "homepage": "https://modelcontextprotocol.io",
   "bugs": "https://github.com/modelcontextprotocol/servers/issues",
   "type": "module",
-  "workspaces": [
-    "src/*"
-  ],
   "files": [],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "watch": "npm run watch --workspaces",
-    "publish-all": "npm publish --workspaces --access public",
-    "link-all": "npm link --workspaces",
+    "build": "tsc --noEmit",
     "workers:dev": "wrangler dev",
     "workers:deploy": "wrangler deploy",
     "workers:tail": "wrangler tail",

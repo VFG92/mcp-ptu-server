@@ -307,3 +307,10 @@ cython_debug/
 
 # Test temp files
 /tmp/
+
+# Test output files
+headers.txt
+*.response.json
+
+# Deprecated/archived code
+docs/archive/

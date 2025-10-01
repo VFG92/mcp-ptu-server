@@ -39,13 +39,15 @@ export const InitParallelReasoningSchema = z.object({
   session_id: z.string().describe('Unique session identifier'),
   task_description: z.string().describe('Task to analyze with parallel reasoning'),
   required_diversity_axes: z.array(DiversityAxisSchema).min(2).describe('Axes that must differ between plans (min 2)'),
-  min_plans: z.number().int().min(2).max(8).default(3).describe('Minimum number of parallel plans (2-8, default 3)')
+  min_plans: z.number().int().min(3).max(32).default(3).describe('Minimum number of parallel plans (3-32, default 3)')
 });
 
 export async function handleInitParallelReasoning(
   args: z.infer<typeof InitParallelReasoningSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  console.log(`[handleInitParallelReasoning] Using manager: ${manager === globalParallelReasoningManager ? 'global' : 'durable-object'}`);
+  console.log(`[handleInitParallelReasoning] Session ID: ${args.session_id}`);
   const session = manager.initSession(args);
 
   const response = `# ✅ Parallel Reasoning Session Initialized
@@ -140,6 +142,8 @@ export async function handleSubmitReasoningPlan(
   args: z.infer<typeof SubmitReasoningPlanSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  console.log(`[handleSubmitReasoningPlan] Using manager: ${manager === globalParallelReasoningManager ? 'global' : 'durable-object'}`);
+  console.log(`[handleSubmitReasoningPlan] Session ID: ${args.session_id}`);
   const result = manager.submitPlan(args.session_id, args.plan);
 
   let response = `# Plan Submission: ${args.plan.plan_id}\n\n`;

@@ -88,10 +88,19 @@ describe('everything workers server', () => {
     const sessionStore = new Map();
     const persist = jest.fn(async () => undefined);
 
+    // Import ParallelReasoningSessionManager for testing
+    const { ParallelReasoningSessionManager } = await import('../src/workers/parallel-reasoning-mcp.js');
+    const parallelReasoningV5Manager = new ParallelReasoningSessionManager();
+
     const { server, cleanup } = createServer(
-      sessionStore,
-      persist,
-      () => 'a'.repeat(64)
+      sessionStore,                    // parallelReasoningSessions
+      persist,                         // persistCallback
+      () => 'a'.repeat(64),           // getTransportSessionId
+      undefined,                       // capabilityWhiteboard
+      undefined,                       // capabilityLedger
+      undefined,                       // capabilityPersistCallback
+      parallelReasoningV5Manager,     // parallelReasoningV5Manager
+      undefined                        // parallelReasoningV5PersistCallback
     );
 
     expect(MockServer.instances.length).toBe(1);
@@ -118,7 +127,7 @@ describe('everything workers server', () => {
           session_id: sessionId,
           task_description: 'Quick market scan',
           required_diversity_axes: ['data_sources', 'analytical_models'],
-          min_plans: 2
+          min_plans: 3
         }
       }
     });
@@ -134,7 +143,7 @@ describe('everything workers server', () => {
             plan_id: 'plan_A',
             description: 'Baseline plan',
             diversity_axes: ['data_sources', 'analytical_models'],
-            capability_chain: ['market_scan'],
+            capability_chain: ['market_scan', 'tam_sam_som_build', 'competitor_analysis', 'customer_segmentation', 'brand_equity_valuation', 'gtm_strategy', 'digital_roi_attribution', 'customer_journey_mapping'],
             rationale: 'Provide baseline analysis',
             expected_outputs: ['market_map']
           }

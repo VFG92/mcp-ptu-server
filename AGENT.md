@@ -126,6 +126,23 @@ Durable Objects (Persistent State)
 - **ChatGPT**: Sole deliberative agent. Generates plans, diversifies approaches, contaminates perspectives, mediates final result.
 - **Parallel Reasoning**: Happens **inside ChatGPT**, not in server. ChatGPT simulates multiple reasoning paths internally.
 
+#### v5.0.1 Bug Fix - Session Persistence (2025-10-01)
+
+**Issue**: Critical session persistence failure in parallel reasoning workflow
+- `init_parallel_reasoning` succeeded, but all subsequent endpoints failed with "Session not found"
+- `submit_reasoning_plan` reported "0 axis/axes" despite correct diversity_axes in request
+
+**Root Cause**: Inconsistent Durable Object routing - each request created a new DO instance with separate session storage
+
+**Solution**:
+- ✅ Added defensive checks in all 8 parallel reasoning tool handlers
+- ✅ Enhanced logging throughout session management flow
+- ✅ Fixed duplicate method definitions
+- ✅ Created test script (`test-parallel-reasoning-simple.sh`) demonstrating correct usage
+- ✅ Updated documentation with session persistence requirements
+
+**Impact**: Parallel reasoning now works reliably when clients maintain consistent `mcp-session-id` header across all tool calls
+
 **References**:
 - Wang et al., "Self-Consistency Improves Chain of Thought Reasoning in Language Models", 2022
 - Yao et al., "Tree of Thoughts: Deliberate Problem Solving with Large Language Models", 2023
@@ -1292,6 +1309,115 @@ Export complete session with full artifact data for audit/compliance.
 
 **8 LLM-centric tools for multi-path reasoning with diversity enforcement and contamination**
 
+### ⚠️ Important: Session Persistence Requirements
+
+**For parallel reasoning to work correctly, MCP clients MUST:**
+
+1. **Initialize the MCP session first** and capture the `mcp-session-id` from response headers
+2. **Include the same `mcp-session-id` header in ALL subsequent tool calls** within the same workflow
+3. **Use the same Durable Object session** for the entire parallel reasoning workflow (init → submit plans → execute → finalize)
+
+**Why this matters**: Each parallel reasoning tool call must access the same Durable Object instance to maintain session state. Without consistent session IDs, each request creates a new Durable Object, causing "Session not found" errors.
+
+#### Root Cause Analysis (v5.0.1 Fix)
+
+**Problem**: Users reported two critical issues:
+- **Issue A**: `init_parallel_reasoning` succeeded, but all subsequent endpoints failed with "Session not found"
+- **Issue B**: `submit_reasoning_plan` reported "Your plan declares only 0 axis/axes" despite correct input
+
+**Root Cause**: Inconsistent Durable Object routing between requests
+- Each MCP request was being routed to a **different Durable Object instance**
+- Each DO has its own `ParallelReasoningSessionManager` instance with separate in-memory storage
+- Sessions created in DO-A were not visible to DO-B
+- This happened when clients didn't consistently provide the `mcp-session-id` header
+
+**Issue B was a symptom**: When `submitPlan()` couldn't find the session, it returned `axes_declared: []`, causing the "0 axes" error message. The diversity axes in the request were correct, but the session lookup failed first.
+
+#### Solution Implemented (v5.0.1)
+
+1. **Defensive Checks**: Added explicit validation in all 8 parallel reasoning tool handlers to detect undefined `parallelReasoningV5Manager` and return clear error messages instead of silent fallback to global manager
+
+2. **Enhanced Logging**: Comprehensive logging throughout session management:
+   - Manager type tracking: `[handleInitParallelReasoning] Using manager: durable-object`
+   - Session creation: `[ParallelReasoningSessionManager] Creating session: {id}`
+   - Session lookup: `[ParallelReasoningSessionManager] Available sessions: {list}`
+   - Diversity validation: `[ParallelReasoningSessionManager] Plan diversity_axes length: {count}`
+
+3. **Fixed Duplicates**: Removed duplicate `getAllSessions()` and `getSession()` methods causing compilation warnings
+
+**Files Modified**:
+- `src/workers/everything-workers.ts` - Defensive checks in 8 tool handlers
+- `src/workers/parallel-reasoning-mcp.ts` - Enhanced logging, fixed duplicates
+- `src/workers/parallel-reasoning-tools-v5.ts` - Manager type logging
+
+#### Correct Usage Pattern
+
+```bash
+# Step 1: Initialize MCP session and capture session ID
+curl -X POST "https://mcp-server.vf-ghizzoni.workers.dev/mcp" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -D headers.txt \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {},
+      "clientInfo": {"name": "test-client", "version": "1.0.0"}
+    }
+  }'
+
+# Extract session ID from response headers
+SESSION_ID=$(grep -i "mcp-session-id:" headers.txt | cut -d' ' -f2 | tr -d '\r\n')
+
+# Step 2: Use same SESSION_ID for ALL subsequent calls
+curl -X POST "https://mcp-server.vf-ghizzoni.workers.dev/mcp" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "mcp-session-id: $SESSION_ID" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "init_parallel_reasoning",
+      "arguments": {
+        "session_id": "my_analysis_001",
+        "task_description": "Analyze market opportunity",
+        "required_diversity_axes": ["data_sources", "analytical_models"],
+        "min_plans": 2
+      }
+    }
+  }'
+
+# Step 3: Continue using same SESSION_ID for all workflow steps
+# submit_reasoning_plan, execute_plan_step, list_plan_status, finalize_parallel_reasoning
+```
+
+**Test Script**: `test-parallel-reasoning-simple.sh` demonstrates the complete correct usage pattern and verifies:
+- ✅ Session persistence across multiple tool calls
+- ✅ Diversity axes validation works correctly
+- ✅ Plan status listing works correctly
+- ✅ All operations use the same Durable Object instance
+
+**Verification Logs** (successful operation):
+```
+[CallTool] parallelReasoningV5Manager defined: true
+[handleInitParallelReasoning] Using manager: durable-object
+[ParallelReasoningSessionManager] Creating session: test_session_001
+[ParallelReasoningSessionManager] Session created. New sessions count: 1
+
+[handleSubmitReasoningPlan] Using manager: durable-object
+[ParallelReasoningSessionManager] Looking for session: test_session_001
+[ParallelReasoningSessionManager] Available sessions: test_session_001
+[ParallelReasoningSessionManager] Session found: test_session_001
+[ParallelReasoningSessionManager] Plan diversity_axes length: 2
+```
+
+---
+
 ### `init_parallel_reasoning`
 
 Initialize a parallel reasoning session where ChatGPT generates multiple diverse reasoning plans.
@@ -1303,10 +1429,15 @@ Initialize a parallel reasoning session where ChatGPT generates multiple diverse
 {
   session_id: string;
   task_description: string;
-  required_diversity_axes: DiversityAxis[];  // Choose from 6 axes
-  min_plans: number;                         // Minimum 2, recommended 3
+  required_diversity_axes: DiversityAxis[];  // Choose from 6 axes (min 2)
+  min_plans: number;                         // 3-32 plans (default 3)
 }
 ```
+
+**Constraints**:
+- **Plans**: 3-32 parallel reasoning plans per session
+- **Capabilities per plan**: 8-32 capabilities in each plan's workflow
+- **Diversity axes**: Minimum 2 axes per plan, at least 2 axes must differ between plans
 
 **Output**: Actionable prompt with diversity axes reference and next steps.
 
@@ -1336,12 +1467,17 @@ Submit a reasoning plan with diversity axes. Server validates structural diversi
     plan_id: string;
     description: string;
     diversity_axes: DiversityAxis[];  // Must declare ≥2
-    capability_chain: string[];       // Capabilities to execute
+    capability_chain: string[];       // 8-32 capabilities per workflow
     rationale: string;                // Why this plan adds value
     expected_outputs: string[];       // Expected artifact types
   };
 }
 ```
+
+**Constraints**:
+- **Capability chain**: 8-32 capabilities per plan workflow
+- **Diversity axes**: Minimum 2 axes per plan
+- **Diversity validation**: At least 2 axes must differ from existing plans
 
 **Output**: Acceptance/rejection with diversity validation feedback.
 
