@@ -23,65 +23,226 @@ An MCP server that enables **ChatGPT** to orchestrate multi-path business analys
 
 **Core Principle**: You (ChatGPT) orchestrate the entire workflow. MCP provides only guardrails (diversity validation) and persistent memory.
 
+**⚠️ CRITICAL**: Use the **same session_id** for ALL tool calls in a workflow. If you change session_id between calls, the server will create a new Durable Object and you'll get "Session not found" errors.
+
 #### Template 1: Maximum Coverage (Complex Analysis)
 
 ```
 I need to analyze: [YOUR TASK]
 
+⚠️ IMPORTANT: Use the SAME session_id for ALL tool calls below (e.g., "analysis_001")
+
 Orchestrate a complete parallel reasoning workflow:
 
 PHASE 1 - INITIALIZATION
-- Initialize session with init_parallel_reasoning
-- Declare diversity requirements: [2-3 axes from: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views]
-- Set min_plans: [3-5 based on task complexity]
+⚠️ CALL TOOL: init_parallel_reasoning
+
+{
+  "name": "init_parallel_reasoning",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ USE THIS EXACT ID FOR ALL SUBSEQUENT CALLS
+    "task_description": "[YOUR TASK]",
+    "required_diversity_axes": ["data_sources", "analytical_models"],
+    "min_plans": 3
+  }
+}
+
+WAIT FOR RESPONSE. The server will return:
+- ✅ "Session Initialized" with session_id confirmation
+- List of diversity axes you must use
+- Minimum number of plans required
+
+DO NOT PROCEED until you receive this confirmation.
 
 PHASE 2 - PLAN GENERATION (Real Diversity, Not Cosmetic Variants)
-For each plan, ensure:
-- Differs on ≥2 axes from other plans
-- Uses 8-32 capabilities (scale based on decision tree depth)
-- Covers different branches of the decision tree
-- Has clear rationale for approach
+⚠️ CALL TOOL: submit_reasoning_plan (3 times, once per plan)
+⚠️ CRITICAL: Use session_id: "analysis_001" for ALL calls
+CALL 1 - Submit Plan A:
+{
+  "name": "submit_reasoning_plan",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ SAME ID AS INIT
+    "plan": {
+      "plan_id": "plan_A",
+      "description": "Quantitative analysis with official data",
+      "diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
+      "capability_chain": ["capability_1", "capability_2", ..., "capability_N"],  // 8-32 capabilities
+      "rationale": "Uses official statistics + regression + 3-year horizon",
+      "expected_outputs": ["Market size", "Growth forecast", "Risk assessment"]
+    }
+  }
+}
 
-Example diversity patterns:
-- Plan A: Quantitative (official data + regression + short-term)
-- Plan B: Risk-adjusted (industry data + Monte Carlo + stress scenarios)
-- Plan C: Qualitative (expert input + stakeholder analysis + long-term)
+WAIT FOR RESPONSE. The server will return:
+- ✅ "Plan Accepted" if diversity is sufficient (≥2 axes different from existing plans)
+- ❌ "Plan Rejected" if diversity is insufficient (<2 axes different)
+
+If rejected, MODIFY the diversity_axes and resubmit.
+
+CALL 2 - Submit Plan B:
+{
+  "name": "submit_reasoning_plan",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ SAME ID
+    "plan": {
+      "plan_id": "plan_B",
+      "description": "Risk-adjusted analysis with Monte Carlo",
+      "diversity_axes": ["data_sources", "analytical_models", "risk_perspectives"],  // ⚠️ Must differ on ≥2 axes from Plan A
+      "capability_chain": ["capability_X", "capability_Y", ..., "capability_Z"],
+      "rationale": "Uses industry reports + Monte Carlo + stress scenarios",
+      "expected_outputs": ["Risk-adjusted NPV", "Scenario analysis", "Sensitivity"]
+    }
+  }
+}
+
+WAIT FOR RESPONSE. Check if accepted.
+
+CALL 3 - Submit Plan C:
+{
+  "name": "submit_reasoning_plan",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ SAME ID
+    "plan": {
+      "plan_id": "plan_C",
+      "description": "Qualitative stakeholder analysis",
+      "diversity_axes": ["data_sources", "stakeholder_views", "quality_metrics"],  // ⚠️ Must differ on ≥2 axes from A and B
+      "capability_chain": ["capability_P", "capability_Q", ..., "capability_R"],
+      "rationale": "Uses expert interviews + stakeholder perspectives + robustness focus",
+      "expected_outputs": ["Stakeholder map", "Pain points", "Success criteria"]
+    }
+  }
+}
+
+WAIT FOR RESPONSE. Check if accepted.
 
 PHASE 3 - EXECUTION (Full Decision Tree Coverage)
-For each plan:
-- Execute capabilities systematically (use execute_plan_step)
-- Cover all decision branches relevant to that plan's perspective
-- Record evidence IDs for all findings
-- Scale capability usage: simple tasks (8-12), complex tasks (16-32)
+⚠️ CALL TOOL: execute_plan_step (multiple times per plan)
+⚠️ CRITICAL: Use session_id: "analysis_001" for ALL calls
+
+For Plan A, execute each capability:
+CALL 1:
+{
+  "name": "execute_plan_step",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ SAME ID
+    "plan_id": "plan_A",
+    "task": "Perform market sizing using official statistics",
+    "adapter_id": "strategy",
+    "budget": {"max_tokens_in": 15000, "max_tokens_out": 15000}
+  }
+}
+
+WAIT FOR RESPONSE. The server will return:
+- Analysis result with evidence IDs (e.g., evidence_001, evidence_002)
+- Record these evidence IDs for later mediation
+
+CALL 2:
+{
+  "name": "execute_plan_step",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ SAME ID
+    "plan_id": "plan_A",
+    "task": "Forecast growth using regression analysis",
+    "adapter_id": "finance"
+  }
+}
+
+WAIT FOR RESPONSE. Record evidence IDs.
+
+Repeat for all capabilities in Plan A (8-32 calls total).
+Then repeat for Plan B and Plan C.
 
 PHASE 4 - CONTAMINATION (Cross-Plan Learning)
-As you execute:
-- Share quantitative findings from Plan A with Plan B/C
-- Share risk insights from Plan B with Plan A/C
-- Share stakeholder concerns from Plan C with Plan A/B
-- Use submit_cross_plan_note for each insight transfer
+⚠️ CALL TOOL: submit_cross_plan_note (multiple times)
+⚠️ CRITICAL: Use session_id: "analysis_001" for ALL calls
+
+When Plan A discovers something relevant to Plan B:
+{
+  "name": "submit_cross_plan_note",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ SAME ID
+    "note": {
+      "from_plan_id": "plan_A",
+      "to_plan_id": "plan_B",
+      "note": "Market size is €2.5B with 15% CAGR. Use this as base case for Monte Carlo.",
+      "references": ["evidence_001"],  // Evidence IDs from Plan A execution
+      "timestamp": 1696118400000
+    }
+  }
+}
+
+WAIT FOR RESPONSE. The server will return:
+- ✅ "Cross-plan note recorded"
+
+Repeat for all insights you want to share between plans (5-10 notes total).
 
 PHASE 5 - PEER REVIEW (Challenge Assumptions)
-Each plan reviews others:
-- Identify claims that need validation
-- Propose falsification tests
-- Highlight residual risks
-- Suggest improvements
-- Use submit_peer_critique for each review
+⚠️ CALL TOOL: submit_peer_critique (multiple times)
+⚠️ CRITICAL: Use session_id: "analysis_001" for ALL calls
+
+Plan A reviews Plan B:
+{
+  "name": "submit_peer_critique",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ SAME ID
+    "critique": {
+      "reviewer_plan_id": "plan_A",
+      "reviewed_plan_id": "plan_B",
+      "strengths": ["Comprehensive risk modeling", "Probabilistic outcomes"],
+      "weaknesses": ["Assumes normal distribution", "Lacks specific triggers"],
+      "suggestions": ["Use log-normal for revenue", "Define regulatory triggers"],
+      "confidence": 0.75
+    }
+  }
+}
+
+WAIT FOR RESPONSE. The server will return:
+- ✅ "Peer critique recorded"
+
+Repeat for all plan pairs (Plan A→B, Plan A→C, Plan B→A, Plan B→C, Plan C→A, Plan C→B = 6 critiques).
 
 PHASE 6 - MEDIATION (Evidence-Based Synthesis)
+⚠️ CALL TOOL: submit_mediation_decision (multiple times)
+⚠️ CRITICAL: Use session_id: "analysis_001" for ALL calls
+
 For each major decision point:
-- Identify which plan's approach to use
-- Cite evidence IDs from multiple plans
-- Explain why this synthesis is optimal
-- Use submit_mediation_decision for each decision
+{
+  "name": "submit_mediation_decision",
+  "arguments": {
+    "session_id": "analysis_001",  // ⚠️ SAME ID
+    "decision": {
+      "decision_point": "Target market selection",
+      "chosen_from_plan": "plan_A",
+      "rationale": "Plan A's data-driven TAM/SAM/SOM provides most defensible sizing. Incorporate Plan B's risk-adjusted NPV and Plan C's customer pain points.",
+      "evidence_ids": ["evidence_001", "evidence_042", "evidence_089"],  // Must cite evidence from multiple plans
+      "confidence": 0.85
+    }
+  }
+}
+
+WAIT FOR RESPONSE. The server will return:
+- ✅ "Mediation decision recorded" if evidence IDs exist
+- ❌ "Evidence IDs not found" if you cite non-existent evidence
+
+Repeat for all major decision points (5-15 decisions total).
 
 PHASE 7 - FINALIZATION
-- Use finalize_parallel_reasoning
-- Ensure all decision branches covered
-- Validate evidence trail complete
+⚠️ CALL TOOL: finalize_parallel_reasoning
 
-Execute this workflow end-to-end. The MCP server will validate diversity and store state, but you orchestrate everything.
+{
+  "name": "finalize_parallel_reasoning",
+  "arguments": {
+    "session_id": "analysis_001"  // ⚠️ SAME ID
+  }
+}
+
+WAIT FOR RESPONSE. The server will return:
+- ✅ "Session finalized" with complete decision map and audit trail
+- ❌ "Incomplete session" if any plans not executed or decisions missing evidence
+
+DO NOT SUMMARIZE OR SYNTHESIZE ON YOUR OWN. The server response contains the complete mediated result.
+
+Execute this workflow end-to-end using the exact tool calls above. The MCP server validates diversity and stores state, but you orchestrate everything.
 ```
 
 #### Template 2: Rapid Coverage (Time-Constrained)
@@ -89,26 +250,41 @@ Execute this workflow end-to-end. The MCP server will validate diversity and sto
 ```
 I need to analyze: [YOUR TASK]
 
+⚠️ IMPORTANT: Use session_id "rapid_001" for ALL tool calls below.
+
 Orchestrate a streamlined parallel reasoning workflow:
 
-1. INIT: Use init_parallel_reasoning with 3 plans, 2 diversity axes
+1. INIT: ⚠️ CALL init_parallel_reasoning
+   {"name": "init_parallel_reasoning", "arguments": {"session_id": "rapid_001", "task_description": "[YOUR TASK]", "required_diversity_axes": ["data_sources", "analytical_models"], "min_plans": 3}}
+   WAIT FOR RESPONSE.
 
-2. GENERATE 3 PLANS (Real Diversity):
+2. GENERATE 3 PLANS: ⚠️ CALL submit_reasoning_plan (3 times with session_id "rapid_001")
    - Plan A: [Axis 1 variant] + [Axis 2 variant] + 8-12 capabilities
-   - Plan B: [Axis 1 variant] + [Axis 2 variant] + 8-12 capabilities
-   - Plan C: [Axis 1 variant] + [Axis 2 variant] + 8-12 capabilities
+   - Plan B: [Axis 1 variant] + [Axis 2 variant] + 8-12 capabilities (must differ on ≥2 axes)
+   - Plan C: [Axis 1 variant] + [Axis 2 variant] + 8-12 capabilities (must differ on ≥2 axes)
+   WAIT FOR ACCEPTANCE after each submission.
 
-3. EXECUTE: Run capabilities for each plan, cover main decision branches
+3. EXECUTE: ⚠️ CALL execute_plan_step (24-36 times with session_id "rapid_001")
+   Run capabilities for each plan, cover main decision branches.
+   WAIT FOR RESPONSE after each call. Record evidence IDs.
 
-4. CONTAMINATE: Share 2-3 key insights between plans
+4. CONTAMINATE: ⚠️ CALL submit_cross_plan_note (2-3 times with session_id "rapid_001")
+   Share 2-3 key insights between plans.
+   WAIT FOR RESPONSE after each call.
 
-5. PEER REVIEW: Each plan reviews one other (3 total reviews)
+5. PEER REVIEW: ⚠️ CALL submit_peer_critique (3 times with session_id "rapid_001")
+   Each plan reviews one other (3 total reviews).
+   WAIT FOR RESPONSE after each call.
 
-6. MEDIATE: Make 3-5 key decisions citing evidence from multiple plans
+6. MEDIATE: ⚠️ CALL submit_mediation_decision (3-5 times with session_id "rapid_001")
+   Make 3-5 key decisions citing evidence from multiple plans.
+   WAIT FOR RESPONSE after each call.
 
-7. FINALIZE: Close session with complete decision map
+7. FINALIZE: ⚠️ CALL finalize_parallel_reasoning
+   {"name": "finalize_parallel_reasoning", "arguments": {"session_id": "rapid_001"}}
+   WAIT FOR RESPONSE. Use the server's synthesized result.
 
-Execute end-to-end. MCP validates and stores, you orchestrate.
+Execute end-to-end using exact tool calls. MCP validates and stores, you orchestrate.
 ```
 
 #### Template 3: Deep Coverage (High-Stakes Decision)
@@ -116,41 +292,51 @@ Execute end-to-end. MCP validates and stores, you orchestrate.
 ```
 I need to analyze: [YOUR TASK]
 
+⚠️ IMPORTANT: Use session_id "deep_001" for ALL tool calls below.
+
 Orchestrate an exhaustive parallel reasoning workflow:
 
-1. INIT: Use init_parallel_reasoning with 5 plans, 3 diversity axes
+1. INIT: ⚠️ CALL init_parallel_reasoning
+   {"name": "init_parallel_reasoning", "arguments": {"session_id": "deep_001", "task_description": "[YOUR TASK]", "required_diversity_axes": ["data_sources", "analytical_models", "risk_perspectives"], "min_plans": 5}}
+   WAIT FOR RESPONSE.
 
-2. GENERATE 5 PLANS (Maximum Diversity):
-   - Plan A: [Axis 1 + Axis 2 + Axis 3] + 16-24 capabilities
-   - Plan B: [Axis 1 + Axis 2 + Axis 3] + 16-24 capabilities
-   - Plan C: [Axis 1 + Axis 2 + Axis 3] + 16-24 capabilities
-   - Plan D: [Axis 1 + Axis 2 + Axis 3] + 16-24 capabilities
-   - Plan E: [Axis 1 + Axis 2 + Axis 3] + 16-24 capabilities
+2. GENERATE 5 PLANS: ⚠️ CALL submit_reasoning_plan (5 times with session_id "deep_001")
+   - Plan A: [Axis 1 + Axis 2 + Axis 3] + 20-32 capabilities
+   - Plan B: [Axis 1 + Axis 2 + Axis 3] + 20-32 capabilities (must differ on ≥2 axes)
+   - Plan C: [Axis 1 + Axis 2 + Axis 3] + 20-32 capabilities (must differ on ≥2 axes)
+   - Plan D: [Axis 1 + Axis 2 + Axis 3] + 20-32 capabilities (must differ on ≥2 axes)
+   - Plan E: [Axis 1 + Axis 2 + Axis 3] + 20-32 capabilities (must differ on ≥2 axes)
+   WAIT FOR ACCEPTANCE after each submission.
 
-3. EXECUTE: Systematic capability execution
+3. EXECUTE: ⚠️ CALL execute_plan_step (100-160 times with session_id "deep_001")
    - Cover all decision tree branches
    - Document evidence IDs for every finding
    - Use 20-32 capabilities per plan for complex decisions
+   WAIT FOR RESPONSE after each call. Record evidence IDs.
 
-4. CONTAMINATE: Structured cross-plan learning
+4. CONTAMINATE: ⚠️ CALL submit_cross_plan_note (10-15 times with session_id "deep_001")
    - Share quantitative findings across all plans
    - Share risk insights across all plans
    - Share stakeholder concerns across all plans
-   - 10-15 cross-plan notes total
+   WAIT FOR RESPONSE after each call.
 
-5. PEER REVIEW: Complete review matrix
+5. PEER REVIEW: ⚠️ CALL submit_peer_critique (20 times with session_id "deep_001")
    - Each plan reviews every other plan
    - 20 total reviews (5 plans × 4 reviews each)
    - Focus on: claim validation, falsification tests, residual risks
+   WAIT FOR RESPONSE after each call.
 
-6. MEDIATE: Comprehensive decision synthesis
+6. MEDIATE: ⚠️ CALL submit_mediation_decision (10-15 times with session_id "deep_001")
    - 10-15 major decision points
    - Each decision cites evidence from 3+ plans
    - Explain conflicts and how resolved
+   WAIT FOR RESPONSE after each call.
 
-7. FINALIZE: Complete audit trail with full decision coverage
+7. FINALIZE: ⚠️ CALL finalize_parallel_reasoning
+   {"name": "finalize_parallel_reasoning", "arguments": {"session_id": "deep_001"}}
+   WAIT FOR RESPONSE. Use the server's complete audit trail.
 
-Execute end-to-end. MCP validates and stores, you orchestrate.
+Execute end-to-end using exact tool calls. This is for high-stakes decisions where thoroughness is critical.
 ```
 
 ---

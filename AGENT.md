@@ -1,615 +1,218 @@
-# 🤖 MCP PTU Server - Technical Documentation
+# 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.1.0** | For AI Agents & Developers
+**Version 5.1.0** | For AI Agents Working on This Repository
 
----
-
-## 📋 Quick Reference
-
-**Platform**: Cloudflare Workers + Durable Objects
-**Language**: TypeScript (Strict Mode)
-**Protocol**: Model Context Protocol (MCP) 2024-11-05
-**Production URL**: `https://mcp-server.vf-ghizzoni.workers.dev/mcp`
-**Tests**: 162/162 passing
-**Build**: ✅ 0 TypeScript errors
-
-**Architecture**: LLM-Centric Parallel Reasoning
-- **ChatGPT**: Sole deliberative agent (generates plans, executes, reviews, mediates)
-- **MCP Server**: Guardrails only (validates diversity ≥2 axes, completeness)
-- **Capabilities**: 58 execution units (8-32 per plan, scale based on decision tree depth)
-- **Workflow**: End-to-end orchestration by ChatGPT with external constraints
+This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
 
 ---
 
-## 🏗️ Architecture: LLM-Centric Design
+## 📋 Rules for AI Agents
 
-### Core Principle
+### 1. Documentation Updates
 
-**ChatGPT is the sole deliberative agent.** MCP server provides only:
-1. **Guardrails**: Validates diversity (≥2 axes), completeness (evidence citations)
-2. **Persistent Memory**: Stores plans, results, notes, critiques across requests
-3. **Typed Contracts**: Defines required fields, no computation
+**ONLY these files should be updated at the end of work**:
+- ✅ `README.md` - User-facing documentation with prompt templates
+- ✅ `AGENT.md` - This file, guidelines for AI agents
 
-**ChatGPT orchestrates:**
-- Generates diverse reasoning plans internally
-- Executes capabilities through each plan's lens
-- Cross-contaminates insights between plans
-- Peer reviews from multiple perspectives
-- Mediates final decisions with evidence
+**DO NOT update unless explicitly requested**:
+- ❌ `docs/CHANGELOG.md` - Only when releasing a new version
+- ❌ `docs/EXAMPLES.md` - Only when adding new use case patterns
 
-### System Flow
+### 2. Code Changes Workflow
+
+**Before making any code changes**:
+1. Use `codebase-retrieval` to understand existing patterns
+2. Use `view` to read relevant files
+3. Use `git-commit-retrieval` to see how similar changes were made
+4. Confirm with user before making breaking changes
+
+**When making changes**:
+- ✅ Use `str-replace-editor` for editing existing files (NEVER recreate from scratch)
+- ✅ Use `save-file` only for new files
+- ✅ Keep edits under 150 lines per tool call
+- ✅ Run `npm run build` after TypeScript changes
+- ✅ Run `npm test` after any changes
+
+**After making changes**:
+```bash
+npm run build  # Check TypeScript compilation (0 errors expected)
+npm test       # Run all 162 tests (all must pass)
+```
+
+### 3. Testing Protocol
+
+**If tests fail**:
+1. Read error message carefully
+2. Use `view` to inspect failing test file
+3. Fix issue (usually test expectations need updating)
+4. Re-run tests to verify fix
+
+**Common test failures**:
+- Tool list changed → Update `__tests__/everything-workers.test.ts`
+- Schema changed → Update relevant test expectations
+- New feature → Add new test file
+
+### 4. Architecture Constraints (DO NOT VIOLATE)
+
+**LLM-Centric Design** (v5.1.0+):
+- ✅ ChatGPT orchestrates entire workflow
+- ✅ MCP provides only guardrails (diversity validation) + persistent memory
+- ❌ DO NOT add server-side intelligence or decision-making
+
+**Multi-Path Only** (v5.1.0+):
+- ✅ Only expose 8 parallel reasoning tools to clients
+- ❌ DO NOT expose single-path tools (`analyze_with_capabilities`, `list_capabilities`, etc.)
+- ✅ Keep single-path functions internal (used by `execute_plan_step`)
+
+**Diversity Validation**:
+- ✅ Server enforces ≥2 axes difference between plans
+- ✅ Server validates structure only, NOT substance
+- ❌ DO NOT add semantic analysis or quality checks
+
+**Evidence-Based Mediation**:
+- ✅ All decisions must cite evidence IDs
+- ✅ Server validates evidence IDs exist
+- ❌ DO NOT validate evidence quality or relevance
+
+**Session Persistence**:
+- ✅ Use Durable Objects for state across requests
+- ✅ Route requests by `session_id` (from body or header)
+- ✅ Serialize/deserialize Maps properly (see v5.0.3 fix)
+
+---
+
+## 🏗️ Architecture Overview
+
+### System Components
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ChatGPT (Sole Deliberative Agent)                           │
-│ - Generates diverse reasoning plans                         │
-│ - Executes plans in parallel (internally)                   │
-│ - Cross-contaminates insights                               │
-│ - Peer reviews between plans                                │
-│ - Mediates final decisions                                  │
-└────────────────────┬────────────────────────────────────────┘
-                     │ MCP Tool Calls
-┌────────────────────▼────────────────────────────────────────┐
-│ Cloudflare Worker (index.ts)                                │
-│ - Routes by session_id to Durable Object                    │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│ Durable Object (session.ts)                                 │
-│ - One instance per session_id                               │
-│ - Persists parallel reasoning state                         │
-│ - Serializes/deserializes nested Maps                       │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│ MCP Server (everything-workers.ts)                          │
-│ - Exposes 8 parallel reasoning tools                        │
-│ - Validates diversity (≥2 axes difference)                  │
-│ - Validates completeness (evidence IDs cited)               │
-│ - NO computation, NO evaluation, NO planning                │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│ Capability System (Internal, Not Exposed)                   │
-│ - 58 capabilities invoked via execute_plan_step             │
-│ - Evidence tracking, budget management                      │
-│ - Tournament mode, peer review                              │
-└──────────────────────────────────────────────────────────────┘
+│                         ChatGPT                             │
+│  (Sole Deliberative Agent - Orchestrates Everything)       │
+└────────────┬────────────────────────────────────┬───────────┘
+             │                                    │
+             │ MCP Protocol                       │ MCP Protocol
+             │ (Tool Calls)                       │ (Responses)
+             ▼                                    ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Cloudflare Worker (index.ts)                   │
+│  - Routes requests by session_id                            │
+│  - Extracts session_id from body or header                  │
+│  - Creates/reuses Durable Object                            │
+└────────────┬────────────────────────────────────────────────┘
+             │
+             │ Forwards request
+             ▼
+┌─────────────────────────────────────────────────────────────┐
+│         Durable Object (session.ts)                         │
+│  - Persistent state for session                             │
+│  - Hosts MCP server (everything-workers.ts)                 │
+│  - Manages ParallelReasoningSessionManager                  │
+└────────────┬────────────────────────────────────────────────┘
+             │
+             │ Tool handlers
+             ▼
+┌─────────────────────────────────────────────────────────────┐
+│     Parallel Reasoning Tools (parallel-reasoning-tools-v5)  │
+│  - init_parallel_reasoning                                  │
+│  - submit_reasoning_plan (validates diversity)              │
+│  - execute_plan_step (invokes capabilities)                 │
+│  - submit_cross_plan_note                                   │
+│  - submit_peer_critique                                     │
+│  - submit_mediation_decision (validates evidence IDs)       │
+│  - list_plan_status                                         │
+│  - finalize_parallel_reasoning                              │
+└────────────┬────────────────────────────────────────────────┘
+             │
+             │ Internal calls
+             ▼
+┌─────────────────────────────────────────────────────────────┐
+│         Capability System (capability-tools.ts)             │
+│  - 58 capabilities (market, finance, operations, etc.)      │
+│  - Invoked by execute_plan_step                             │
+│  - NOT exposed to clients                                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Key Components
+### Request Routing (Critical for Session Persistence)
 
-**index.ts** - Worker entry point
-- Routes requests by `session_id` (from body or header)
-- Creates/retrieves Durable Object instances
-- Handles CORS, health checks
+**Priority 1**: Extract `session_id` from request body
+- Check `body.params.arguments.session_id`
+- Check `body.params.session_id`
+- Check `body.session_id`
 
-**session.ts** - Durable Object
-- One instance per `session_id`
-- Manages MCP Server lifecycle
-- Persists state to DO storage
-- **Critical**: Serializes nested Maps (`plans`, `plan_results`) to arrays before storage
+**Priority 2**: Fall back to `mcp-session-id` header
 
-**everything-workers.ts** - MCP Server
-- **Exposes**: 8 parallel reasoning tools (multi-path only)
-- **Internal**: 58 capabilities (invoked via `execute_plan_step`)
-- **Validates**: Diversity (≥2 axes), completeness (evidence IDs)
-- **Never**: Computes, evaluates, or plans
+**Result**: Route to Durable Object with that ID
+- If `session_id` found → `c.env.MCP_SESSION.idFromString(session_id)`
+- If not found → `c.env.MCP_SESSION.newUniqueId()` (new session)
 
-**parallel-reasoning-mcp.ts** - Session Manager
-- Manages parallel reasoning sessions
-- Validates diversity (≥2 axes difference)
-- Stores plans, results, notes, critiques
-- **Fixed in v5.0.3**: Proper Map serialization for Durable Objects
-
-### Design Rationale
-
-**Why LLM-centric?**
-- Research shows quality improves when LLM explores multiple reasoning paths (Wang 2022, Yao 2023, Du 2023)
-- MCP's role is "standardized connector" between models and systems (OpenAI 2025, modelcontextprotocol.io 2024)
-- Function calling is the interface, but deliberation stays in the model (OpenAI 2025)
-
-**Why diversity validation?**
-- Prevents semantic drift (cosmetic variants don't improve quality)
-- Forces real exploration of different hypotheses
-- Server validates structure (≥2 axes), ChatGPT chooses substance
-
-**Why contamination?**
-- Multi-agent debate improves factuality (Du 2023)
-- Cross-plan notes enable structured interaction
-- Server stores for audit, ChatGPT decides what to share
-
-**Why evidence-based mediation?**
-- Self-consistency: marginalize over multiple coherent paths (Wang 2022)
-- Server validates evidence IDs exist, ChatGPT chooses synthesis
-- Audit trail for compliance and review
+**⚠️ CRITICAL**: If ChatGPT changes `session_id` between calls, server creates new Durable Object → "Session not found" error.
 
 ---
 
-## 🌳 Decision Tree Coverage
+## 🔧 Key Files
 
-### Maximizing Coverage with Parallel Plans
-
-**Goal**: Each plan explores different branches of the decision tree, collectively covering all major decision points.
-
-#### Decision Tree Depth → Capability Scaling
-
-```
-Simple Decision Tree (3-5 major decisions)
-├─ Plan A: 8-12 capabilities
-├─ Plan B: 8-12 capabilities
-└─ Plan C: 8-12 capabilities
-Total: 24-36 capability executions
-
-Medium Decision Tree (6-10 major decisions)
-├─ Plan A: 12-20 capabilities
-├─ Plan B: 12-20 capabilities
-├─ Plan C: 12-20 capabilities
-└─ Plan D: 12-20 capabilities
-Total: 48-80 capability executions
-
-Complex Decision Tree (10+ major decisions)
-├─ Plan A: 20-32 capabilities
-├─ Plan B: 20-32 capabilities
-├─ Plan C: 20-32 capabilities
-├─ Plan D: 20-32 capabilities
-└─ Plan E: 20-32 capabilities
-Total: 100-160 capability executions
-```
-
-#### Coverage Strategy
-
-**1. Identify Decision Branches**
-```
-Example: Market Entry Strategy
-├─ Market Sizing
-│   ├─ TAM/SAM/SOM (Plan A: regression)
-│   ├─ Growth scenarios (Plan B: Monte Carlo)
-│   └─ Addressable segments (Plan C: qualitative)
-├─ Competitive Analysis
-│   ├─ Market share (Plan A: quantitative)
-│   ├─ Positioning (Plan B: perceptual map)
-│   └─ Barriers to entry (Plan C: Porter's 5 forces)
-├─ Go-to-Market
-│   ├─ Channel strategy (Plan A: cost analysis)
-│   ├─ Pricing (Plan B: elasticity model)
-│   └─ Customer acquisition (Plan C: journey mapping)
-└─ Financial Projections
-    ├─ Revenue forecast (Plan A: regression)
-    ├─ Risk-adjusted NPV (Plan B: Monte Carlo)
-    └─ Scenario analysis (Plan C: stress testing)
-```
-
-**2. Assign Capabilities to Plans**
-- Plan A covers quantitative branches (regression, cost analysis, revenue forecast)
-- Plan B covers probabilistic branches (Monte Carlo, elasticity, risk-adjusted NPV)
-- Plan C covers qualitative branches (segments, positioning, journey mapping)
-
-**3. Ensure No Gaps**
-- Every major decision has ≥1 plan covering it
-- Critical decisions have ≥2 plans covering them (for validation)
-- High-risk decisions have all plans covering them (for consensus)
-
-#### Coverage Validation
-
-**Server validates** (formal only):
-- ✅ Each plan has 8-32 capabilities declared
-- ✅ Plans differ on ≥2 diversity axes
-- ✅ Evidence IDs cited in mediation exist
-
-**ChatGPT ensures** (substantive):
-- ✅ All decision branches covered by at least one plan
-- ✅ Critical decisions covered by multiple plans
-- ✅ No redundant capability executions (unless intentional for validation)
-- ✅ Capability chains logically flow through decision tree
+**`src/workers/index.ts`** - Cloudflare Worker entry point, routes by session_id  
+**`src/workers/session.ts`** - Durable Object with persistent state  
+**`src/workers/everything-workers.ts`** - MCP server, registers 8 tools  
+**`src/workers/parallel-reasoning-tools-v5.ts`** - Tool handlers, validates diversity  
+**`src/workers/parallel-reasoning-mcp.ts`** - Session manager, serializes state  
+**`src/workers/capability-tools.ts`** - 58 capabilities (internal only)
 
 ---
 
-## 🔄 Workflow Orchestration
+## 🎯 Design Principles
 
-### End-to-End Orchestration Pattern
+### 1. LLM-Centric Architecture
+ChatGPT is sole deliberative agent. MCP provides only guardrails and memory.
 
-**Phase 1: Initialization**
-```
-ChatGPT → init_parallel_reasoning
-Server → Validates structure, creates session, returns session_id
-```
+### 2. Diversity Validation
+Plans must differ on ≥2 axes to prevent semantic drift.
 
-**Phase 2: Plan Generation**
-```
-ChatGPT → Generates Plan A with diversity axes [X, Y, Z]
-ChatGPT → submit_reasoning_plan (Plan A)
-Server → Validates diversity (first plan, auto-accept)
+### 3. Evidence-Based Mediation
+Final decisions must cite evidence IDs from multiple plans.
 
-ChatGPT → Generates Plan B with diversity axes [X, Y, W]
-ChatGPT → submit_reasoning_plan (Plan B)
-Server → Validates diversity (differs from A on ≥2 axes? Yes → accept)
-
-ChatGPT → Generates Plan C with diversity axes [X, Q, R]
-ChatGPT → submit_reasoning_plan (Plan C)
-Server → Validates diversity (differs from A,B on ≥2 axes? Yes → accept)
-```
-
-**Phase 3: Execution (Parallel Internally)**
-```
-ChatGPT → Executes Plan A, step 1
-ChatGPT → execute_plan_step (Plan A, capability_1)
-Server → Invokes capability, records result, returns evidence_001
-
-ChatGPT → Executes Plan B, step 1
-ChatGPT → execute_plan_step (Plan B, capability_2)
-Server → Invokes capability, records result, returns evidence_002
-
-[Continue for all capabilities across all plans]
-```
-
-**Phase 4: Contamination**
-```
-ChatGPT → Discovers insight in Plan A relevant to Plan B
-ChatGPT → submit_cross_plan_note (from A to B, references evidence_001)
-Server → Stores note for audit trail
-
-[Repeat for all cross-plan insights]
-```
-
-**Phase 5: Peer Review**
-```
-ChatGPT → Plan A reviews Plan B
-ChatGPT → submit_peer_critique (reviewer: A, reviewed: B)
-Server → Stores critique
-
-[Repeat for all plan pairs]
-```
-
-**Phase 6: Mediation**
-```
-ChatGPT → Decision point: "Market sizing approach"
-ChatGPT → submit_mediation_decision (chosen: Plan A, evidence: [001, 042, 089])
-Server → Validates evidence IDs exist
-
-[Repeat for all decision points]
-```
-
-**Phase 7: Finalization**
-```
-ChatGPT → finalize_parallel_reasoning
-Server → Validates completeness (all plans executed, all decisions have evidence)
-Server → Returns decision map with audit trail
-```
-
-### Constraints (External, Enforced by Server)
-
-1. **Diversity Constraint**: Plans must differ on ≥2 axes
-   - Server rejects plans that violate this
-   - Prevents semantic drift
-
-2. **Completeness Constraint**: Decisions must cite evidence IDs
-   - Server validates evidence IDs exist
-   - Ensures traceability
-
-3. **Capability Range Constraint**: 8-32 capabilities per plan
-   - Server validates range
-   - Prevents under/over-specification
-
-4. **Session Persistence**: State stored in Durable Objects
-   - Server handles serialization/deserialization
-   - Enables multi-step workflows across requests
+### 4. Session Persistence
+State persists across requests using Durable Objects.
 
 ---
 
-## 🔧 API Reference
-
-### Parallel Reasoning Tools (v5.0)
-
-**Design Philosophy**: MCP provides guardrails and memory, ChatGPT provides intelligence.
-
-- **Server validates**: Structure (required fields), diversity (≥2 axes), completeness (evidence IDs)
-- **Server stores**: Plans, results, notes, critiques (persistent memory)
-- **Server never**: Computes, evaluates, scores, or plans
-- **ChatGPT generates**: Plans, insights, critiques, decisions
-
-#### 1. init_parallel_reasoning
-
-**Purpose**: Initialize session, declare diversity requirements.
-
-**Server role**: Creates session, stores requirements, returns session ID.
-
-**ChatGPT role**: Decides task, chooses diversity axes, sets min_plans.
-
-```typescript
-{
-  session_id: string;                    // Required: Unique session ID
-  task_description: string;              // Required: Task to analyze
-  required_diversity_axes: string[];     // Required: 2+ axes from list below
-  min_plans: number;                     // Required: 3-32 plans
-}
-```
-
-**Diversity Axes**:
-- `data_sources`: Official statistics vs industry reports vs expert interviews
-- `analytical_models`: Regression vs Monte Carlo vs qualitative analysis
-- `time_horizons`: 1-year vs 3-year vs 10-year outlook
-- `quality_metrics`: Precision vs recall vs robustness vs speed
-- `risk_perspectives`: Optimistic vs base case vs stress scenarios
-- `stakeholder_views`: Customer vs investor vs regulator vs employee
-
-#### 2. submit_reasoning_plan
-
-**Purpose**: Submit a reasoning plan with diversity axes.
-
-**Server role**:
-- Validates plan differs by ≥2 axes from existing plans
-- Rejects if diversity insufficient (prevents semantic drift)
-- Stores plan if valid
-
-**ChatGPT role**:
-- Generates plan with real diversity (not cosmetic variants)
-- Chooses capability chain (8-32 capabilities, scale based on task)
-- Provides rationale for approach
-
-```typescript
-{
-  session_id: string;
-  plan: {
-    plan_id: string;                     // Unique plan identifier
-    description: string;                 // Plan description
-    diversity_axes: string[];            // Must differ by ≥2 axes from existing plans
-    capability_chain: string[];          // 8-32 capability IDs
-    rationale: string;                   // Why this approach
-    expected_outputs: string[];          // Expected artifacts
-  };
-}
-```
-
-**Example - Good Diversity**:
-```typescript
-// Plan A
-diversity_axes: ["data_sources", "analytical_models", "time_horizons"]
-// Official statistics + Regression + 3-year horizon
-
-// Plan B
-diversity_axes: ["data_sources", "analytical_models", "risk_perspectives"]
-// Industry reports + Monte Carlo + Stress scenarios
-
-// ✅ Differs on 2 axes: data_sources, analytical_models
-```
-
-**Example - Bad Diversity** (rejected):
-```typescript
-// Plan A
-diversity_axes: ["data_sources", "analytical_models", "time_horizons"]
-
-// Plan B
-diversity_axes: ["data_sources", "quality_metrics", "stakeholder_views"]
-
-// ❌ Differs on only 1 axis: data_sources (semantic drift risk)
-```
-
-#### 3. execute_plan_step
-
-Execute a capability step within a plan.
-
-```typescript
-{
-  session_id: string;
-  plan_id: string;
-  task: string;                          // Capability-specific task
-  adapter_id: string;                    // Adapter to use
-  budget?: { ... };                      // Optional budget
-}
-```
-
-#### 4. submit_cross_plan_note
-
-Share insights between plans (contamination).
-
-```typescript
-{
-  session_id: string;
-  note: {
-    from_plan_id: string;
-    to_plan_id: string;
-    note: string;
-    references: string[];                // Evidence IDs
-    timestamp: number;
-  };
-}
-```
-
-#### 5. submit_peer_critique
-
-Peer review between plans.
-
-```typescript
-{
-  session_id: string;
-  critique: {
-    reviewer_plan_id: string;
-    reviewed_plan_id: string;
-    strengths: string[];
-    weaknesses: string[];
-    suggestions: string[];
-    confidence: number;                  // 0.0-1.0
-  };
-}
-```
-
-#### 6. submit_mediation_decision
-
-Make evidence-backed final decision.
-
-```typescript
-{
-  session_id: string;
-  decision: {
-    decision_point: string;
-    chosen_from_plan: string;            // Plan ID
-    rationale: string;
-    evidence_ids: string[];              // Must reference evidence
-    confidence: number;                  // 0.0-1.0
-  };
-}
-```
-
-#### 7. list_plan_status
-
-Check progress across all plans.
-
-```typescript
-{
-  session_id: string;
-}
-```
-
-#### 8. finalize_parallel_reasoning
-
-Complete workflow with audit trail.
-
-```typescript
-{
-  session_id: string;
-}
-```
-
----
-
-## 🔬 Development
-
-### Setup
-
-```bash
-git clone https://github.com/VFG92/mcp-ptu-server
-cd mcp-ptu-server
-npm install
-```
-
-### Testing
-
-```bash
-npm test                    # Run all tests (162)
-npm run test:watch          # Watch mode
-npm run test:coverage       # Coverage report
-```
-
-### Building
-
-```bash
-npm run build               # TypeScript compilation (no emit)
-npx tsc --noEmit            # Check types
-```
-
-### Deployment
-
-```bash
-wrangler dev                # Local development
-wrangler deploy             # Deploy to production
-wrangler tail               # View live logs
-```
-
-### Environment Variables
-
-Create `.dev.vars` for local development:
-
-```bash
-# Optional: Add any environment variables here
-# EXAMPLE_VAR=value
-```
-
----
-
-## 🐛 Troubleshooting
+## 🐛 Common Issues
 
 ### "Session not found" Error
+**Cause**: ChatGPT used different `session_id` than in `init_parallel_reasoning`.  
+**Fix**: Update prompt templates to emphasize using SAME `session_id` for ALL calls.
 
-**Cause**: Session ID mismatch or Durable Object routing issue.
+### "Your plan declares only 0 axis/axes"
+**Cause**: Session not found (see above).  
+**Fix**: Ensure consistent `session_id`.
 
-**Solution**:
-1. Ensure consistent `session_id` across all tool calls
-2. Check that `session_id` is passed in request body (preferred) or header
-3. Verify Durable Object binding in `wrangler.toml`
+### Test Failures After Removing Tools
+**Cause**: Test expects removed tool in list.  
+**Fix**: Update test to verify tool is NOT exposed.
 
-### Nested Map Serialization Issues
-
-**Fixed in v5.0.3**: Custom serialization now handles nested Maps correctly.
-
-**Technical Details**:
-- `plans` and `plan_results` are Maps, not plain objects
-- Serialization converts Maps → Arrays before storage
-- Deserialization converts Arrays → Maps after loading
-
-### TypeScript Compilation Errors
-
-```bash
-npm run build               # Should show 0 errors
-npx tsc --noEmit            # Detailed type checking
-```
-
-### Test Failures
-
-```bash
-npm test -- --verbose       # Detailed test output
-npm test -- <test-file>     # Run specific test
-```
+### Map Serialization in Durable Objects
+**Cause**: Maps serialize to `{}` in JSON.  
+**Fix** (v5.0.3): Convert Maps ↔ Arrays in `serializeSessions()` / `loadSessions()`.
 
 ---
 
-## 📊 Performance
+## 📚 Research References
 
-### Cloudflare Workers Limits
-
-**Free Tier**:
-- CPU Time: 10ms per request
-- Memory: 128 MB
-- Requests: 100,000/day
-
-**Paid Tier**:
-- CPU Time: 50ms (standard), 30s (unbound)
-- Memory: 128 MB
-- Requests: Unlimited
-
-### Optimization Tips
-
-1. **Budget Management**: Set appropriate `max_tokens_in/out` limits
-2. **Capability Selection**: Use targeted adapters (strategy, finance) vs comprehensive
-3. **Tournament Mode**: Disable if speed > quality
-4. **Parallel Reasoning**: Use 3-5 plans (not 32) for practical workflows
+- Wang et al. (2022): Self-Consistency Improves Chain of Thought Reasoning
+- Yao et al. (2023): Tree of Thoughts
+- Du et al. (2023): Improving Factuality through Multiagent Debate
+- OpenAI (2025): Model Context Protocol
+- modelcontextprotocol.io (2024): MCP Specification
 
 ---
 
-## 🔐 Security
+## 🚀 Version History
 
-### PII Filtering
+- **v5.1.0** (2025-10-01): Multi-path only, universal prompt templates
+- **v5.0.3** (2025-10-01): Fixed Map serialization
+- **v5.0.0** (2025-10-01): Parallel reasoning v5
 
-Automatic PII detection and filtering in capability outputs.
-
-### Compliance
-
-- GDPR-compliant data handling
-- No persistent storage of user data (except session state in DO)
-- Audit trail for all operations
-
----
-
-## 📚 Additional Resources
-
-- **[README.md](./README.md)** - User-friendly guide with prompt templates
-- **[docs/CHANGELOG.md](./docs/CHANGELOG.md)** - Version history
-- **[docs/EXAMPLES.md](./docs/EXAMPLES.md)** - Advanced use cases
-- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** - Deep dive into system design
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Ensure all tests pass (`npm test`)
-5. Submit a pull request
-
----
-
-## 📄 License
-
-MIT License - See [LICENSE](./LICENSE) for details.
+See `docs/CHANGELOG.md` for complete history.
 
