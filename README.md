@@ -190,7 +190,7 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
     "plan": {
       "plan_id": "plan_A",
       "description": "Data-driven baseline using official market statistics",
-      "diversity_axes": ["data_sources", "analytical_models"],
+      "diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
       "capability_chain": ["market_scan", "tam_sam_som_build", "competitor_analysis"],
       "rationale": "Provides reliable baseline using official statistics and proven regression techniques",
       "expected_outputs": ["market_map", "tam_sam_som"]
@@ -198,8 +198,37 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
   }
 }
 
-// Plan B: Industry reports + Monte Carlo (different axes)
-// Plan C: Academic research + Normative analysis (different axes)
+// Plan B: Industry reports + Monte Carlo (shares required axes, adds risk lens)
+{
+  "name": "submit_reasoning_plan",
+  "arguments": {
+    "session_id": "fintech_parallel_001",
+    "plan": {
+      "plan_id": "plan_B",
+      "description": "Probabilistic modeling using industry research",
+      "diversity_axes": ["data_sources", "analytical_models", "risk_perspectives"],
+      "capability_chain": ["market_scan", "monte_carlo_finance"],
+      "rationale": "Extends baseline with Monte Carlo simulations and risk assessments",
+      "expected_outputs": ["market_map", "monte_carlo_results"]
+    }
+  }
+}
+
+// Plan C: Academic research + Normative analysis (shares required axes, adds quality & stakeholder views)
+{
+  "name": "submit_reasoning_plan",
+  "arguments": {
+    "session_id": "fintech_parallel_001",
+    "plan": {
+      "plan_id": "plan_C",
+      "description": "Normative perspective using academic research",
+      "diversity_axes": ["data_sources", "analytical_models", "quality_metrics", "stakeholder_views"],
+      "capability_chain": ["market_scan", "regulatory_scan"],
+      "rationale": "Incorporates qualitative stakeholder insights with academic benchmarks",
+      "expected_outputs": ["market_map", "regulatory_analysis"]
+    }
+  }
+}
 ```
 
 > ℹ️ **Plan IDs must be unique per session.** The server rejects duplicate `plan_id` values and preserves existing results.
@@ -366,7 +395,7 @@ Initialize parallel reasoning session with diversity requirements.
 #### `submit_reasoning_plan`
 Submit reasoning plan with diversity validation (≥2 axes differ from existing plans).
 
-**Arguments**: `session_id`, `plan` (with `diversity_axes`, `capability_chain`, `rationale`)
+**Arguments**: `session_id`, `plan` (with `diversity_axes`, `capability_chain`, `rationale`). Every plan must include the session’s `required_diversity_axes` plus any additional axes needed for differentiation.
 
 **Returns**: Acceptance/rejection with diversity validation feedback
 

@@ -1352,13 +1352,15 @@ Submit a reasoning plan with diversity axes. Server validates structural diversi
   "plan": {
     "plan_id": "plan_A",
     "description": "Market-driven analysis using official statistics",
-    "diversity_axes": ["data_sources", "analytical_models"],
+    "diversity_axes": ["data_sources", "analytical_models", "time_horizons"],
     "capability_chain": ["market_scan", "tam_sam_som_build", "competitor_analysis"],
     "rationale": "Provides data-driven baseline using official market statistics",
     "expected_outputs": ["market_map", "tam_sam_som", "competitive_landscape"]
   }
 }
 ```
+
+> ℹ️ All submitted plans must include the session’s `required_diversity_axes` before adding extra axes for differentiation. For example, follow-up plans might declare `['data_sources', 'analytical_models', 'risk_perspectives']` or `['data_sources', 'analytical_models', 'stakeholder_views', 'quality_metrics']`.
 
 ---
 
