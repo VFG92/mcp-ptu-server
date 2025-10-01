@@ -13,6 +13,7 @@ This document provides rules, guidelines, and technical context for AI agents (l
 **ONLY these files should be updated at the end of work**:
 - ✅ `README.md` - User-facing documentation with prompt templates
 - ✅ `AGENT.md` - This file, guidelines for AI agents
+- ✅ `TROUBLESHOOTING.md` - Common errors and solutions (when adding new features or fixing bugs)
 
 **DO NOT update unless explicitly requested**:
 - ❌ `docs/CHANGELOG.md` - Only when releasing a new version
@@ -196,20 +197,32 @@ State persists across requests using Durable Objects.
 
 ## 🐛 Common Issues
 
+### HTTP 400 Bad Request: "Server not initialized"
+**Cause**: Tool called before MCP `initialize` method.
+**Fix**: Always call `initialize` first, then call tools. See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
+
+### HTTP 406 Not Acceptable: "Client must accept both application/json and text/event-stream"
+**Cause**: Missing or incorrect `Accept` header.
+**Fix**: Include `Accept: application/json, text/event-stream` in all requests. See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
+
+### HTTP 400 Bad Request: Validation errors
+**Cause**: Parameters don't match Zod schema (e.g., `required_diversity_axes` has <2 elements).
+**Fix**: Check server logs for detailed Zod error, fix parameters. See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
+
 ### "Session not found" Error
-**Cause**: ChatGPT used different `session_id` than in `init_parallel_reasoning`.  
+**Cause**: ChatGPT used different `session_id` than in `init_parallel_reasoning`.
 **Fix**: Update prompt templates to emphasize using SAME `session_id` for ALL calls.
 
 ### "Your plan declares only 0 axis/axes"
-**Cause**: Session not found (see above).  
+**Cause**: Session not found (see above).
 **Fix**: Ensure consistent `session_id`.
 
 ### Test Failures After Removing Tools
-**Cause**: Test expects removed tool in list.  
+**Cause**: Test expects removed tool in list.
 **Fix**: Update test to verify tool is NOT exposed.
 
 ### Map Serialization in Durable Objects
-**Cause**: Maps serialize to `{}` in JSON.  
+**Cause**: Maps serialize to `{}` in JSON.
 **Fix** (v5.0.3): Convert Maps ↔ Arrays in `serializeSessions()` / `loadSessions()`.
 
 ---

@@ -30,6 +30,8 @@ An MCP server that enables **ChatGPT** to orchestrate multi-path business analys
 - Requires manual `mcp-session-id` header management
 - Use only if you have full control over HTTP headers
 
+**🔧 Troubleshooting**: If you encounter HTTP 400/406 errors, see [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed solutions.
+
 ### ⚠️ Important: Session Keep-Alive
 
 **For long-running workflows (>30 seconds between tool calls)**, you must send heartbeats to prevent session eviction:
