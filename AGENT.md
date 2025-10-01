@@ -246,10 +246,21 @@ State persists across requests using Durable Objects.
 
 **Common Bug**: Using parallel reasoning `session_id` in `mcp-session-id` header causes 400 Bad Request because the server tries to route to a non-existent Durable Object.
 
+### Proxy Endpoint for ChatGPT
+
+**Problem**: ChatGPT's `api_tool.call_tool` doesn't support custom headers, so it can't send `mcp-session-id` header.
+
+**Solution**: Use `/proxy` endpoint instead of `/mcp`:
+- URL: `https://mcp-server.vf-ghizzoni.workers.dev/proxy`
+- Automatically extracts `session_id` from `body.params.arguments.session_id`
+- Adds it as `mcp-session-id` header before forwarding to `/mcp`
+- ChatGPT can use the same `session_id` value for all tool calls without header management
+
 ---
 
 ## 🚀 Version History
 
+- **v5.2.4** (2025-10-01): Added /proxy endpoint for ChatGPT compatibility (no header management needed)
 - **v5.2.3** (2025-10-01): Clarified two different session IDs, added SESSION_ID_EXPLAINED.md
 - **v5.2.2** (2025-10-01): Custom session IDs with idFromName()
 - **v5.1.0** (2025-10-01): Multi-path only, universal prompt templates

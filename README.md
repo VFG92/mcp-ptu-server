@@ -15,9 +15,18 @@ An MCP server that enables **ChatGPT** to orchestrate multi-path business analys
 
 ### Connect to ChatGPT
 
+**🎯 Recommended: Use the Proxy Endpoint (No Header Management)**
+
 1. Open ChatGPT Settings → Beta Features → Enable "Developer Mode"
-2. Add MCP Server: `https://mcp-server.vf-ghizzoni.workers.dev`
+2. Add MCP Server: `https://mcp-server.vf-ghizzoni.workers.dev/proxy`
 3. Start using the prompt templates below!
+
+**Why `/proxy`?** ChatGPT's `api_tool.call_tool` doesn't support custom headers. The `/proxy` endpoint automatically extracts `session_id` from the request body and adds it as the `mcp-session-id` header.
+
+**Alternative: Direct Endpoint (Advanced)**
+- URL: `https://mcp-server.vf-ghizzoni.workers.dev/mcp`
+- Requires manual `mcp-session-id` header management
+- Use only if you have full control over HTTP headers
 
 ### ⚠️ Important: Session Keep-Alive
 
@@ -40,6 +49,8 @@ See [HEARTBEAT.md](./HEARTBEAT.md) for detailed implementation examples in Pytho
 **⚠️ CRITICAL**: There are TWO different session IDs:
 1. **MCP Session ID** (header `mcp-session-id`): For Durable Object routing - returned by `initialize`, use for ALL requests
 2. **Parallel Reasoning Session ID** (tool argument `session_id`): For your workflow - you choose it, use same value for all parallel reasoning tools
+
+**Using `/proxy` endpoint?** You don't need to worry about #1! Just use the same `session_id` value in all tool calls and the proxy handles the rest.
 
 **See [SESSION_ID_EXPLAINED.md](./SESSION_ID_EXPLAINED.md) for detailed explanation and examples.**
 
