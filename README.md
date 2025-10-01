@@ -19,6 +19,20 @@ An MCP server that enables **ChatGPT** to orchestrate multi-path business analys
 2. Add MCP Server: `https://mcp-server.vf-ghizzoni.workers.dev`
 3. Start using the prompt templates below!
 
+### ⚠️ Important: Session Keep-Alive
+
+**For long-running workflows (>30 seconds between tool calls)**, you must send heartbeats to prevent session eviction:
+
+```bash
+# Send heartbeat every 20 seconds
+POST /heartbeat
+Headers: mcp-session-id: <your-session-id>
+```
+
+See [HEARTBEAT.md](./HEARTBEAT.md) for detailed implementation examples in Python, JavaScript, and Bash.
+
+**Why?** Cloudflare Durable Objects are evicted after 30 seconds of inactivity. Heartbeats keep your session alive during long reasoning periods.
+
 ### 📝 Universal Prompt Template
 
 **Core Principle**: You (ChatGPT) orchestrate the entire workflow. MCP provides only guardrails (diversity validation) and persistent memory.
@@ -592,6 +606,18 @@ Capability System
 ---
 
 ## 📊 Recent Updates
+
+### v5.2.1 (2025-01-15) - Session Keep-Alive & Heartbeat
+
+✅ **New**: `/heartbeat` endpoint prevents session eviction during long operations
+✅ **Fix**: Cloudflare Durable Objects timeout issue (30s inactivity limit)
+✅ **Resilience**: Aggressive state persistence + automatic recovery
+✅ **Documentation**: Complete guide with Python/JS/Bash examples
+✅ **Testing**: All 162 tests passing + manual test suite
+
+**Why this matters**: ChatGPT can now perform long-running parallel reasoning workflows without losing session state!
+
+See [HEARTBEAT.md](./HEARTBEAT.md) for implementation details.
 
 ### v5.1.0 (2025-10-01) - Multi-Path Only Architecture
 

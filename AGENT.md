@@ -78,6 +78,15 @@ npm test       # Run all 162 tests (all must pass)
 - ✅ Use Durable Objects for state across requests
 - ✅ Route requests by `session_id` (from body or header)
 - ✅ Serialize/deserialize Maps properly (see v5.0.3 fix)
+- ✅ Persist state after every mutating operation
+- ✅ Reload state on Durable Object startup
+
+**Session Keep-Alive** (v5.2.1+):
+- ✅ Heartbeat endpoint (`POST /heartbeat`) keeps sessions alive
+- ✅ Cloudflare evicts Durable Objects after 30s of inactivity
+- ✅ Clients should send heartbeat every 20s during long operations
+- ✅ State is persisted on every heartbeat for resilience
+- ✅ See [HEARTBEAT.md](./HEARTBEAT.md) for implementation details
 
 ---
 

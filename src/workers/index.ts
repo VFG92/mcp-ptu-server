@@ -97,6 +97,56 @@ app.options('/*', (c) => {
   return c.newResponse(null, { status: 204 });
 });
 
+// Heartbeat endpoint - lightweight keep-alive for long-running sessions
+app.post('/heartbeat', async (c) => {
+  const sessionId = c.req.header('mcp-session-id');
+
+  if (!sessionId) {
+    return c.json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Bad Request: No session ID provided in mcp-session-id header',
+      },
+      id: null,
+    }, 400);
+  }
+
+  // Validate session ID format
+  if (sessionId.length !== 64 || !/^[0-9a-f]+$/i.test(sessionId)) {
+    return c.json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: `Bad Request: Invalid session ID format (expected 64 hex chars, got ${sessionId.length})`,
+      },
+      id: null,
+    }, 400);
+  }
+
+  console.log(`[Worker] POST /heartbeat - Session ID: ${sessionId}`);
+
+  // Get the Durable Object for this session
+  let id: DurableObjectId;
+  try {
+    id = c.env.MCP_SESSION.idFromString(sessionId);
+  } catch (error) {
+    return c.json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: `Bad Request: Failed to parse session ID: ${error}`,
+      },
+      id: null,
+    }, 400);
+  }
+
+  const stub = c.env.MCP_SESSION.get(id);
+
+  // Forward to the Durable Object's /heartbeat handler
+  return stub.fetch(c.req.raw);
+});
+
 // MCP POST endpoint - initialization and requests
 app.post('/mcp', async (c) => {
   const rawRequest = c.req.raw;

@@ -82,6 +82,12 @@ export class MCPSession extends DurableObject {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
+    const pathname = url.pathname;
+
+    // Handle heartbeat endpoint - lightweight keep-alive
+    if (method === 'POST' && pathname === '/heartbeat') {
+      return this.handleHeartbeat(request);
+    }
 
     // Handle POST requests (initialization and tool calls)
     if (method === 'POST') {
@@ -271,6 +277,74 @@ export class MCPSession extends DurableObject {
 
     const response = await expressRes.toResponse();
     return this.attachSessionHeader(response);
+  }
+
+  private async handleHeartbeat(request: Request): Promise<Response> {
+    const sessionIdHeader = request.headers.get('mcp-session-id');
+
+    console.log(`[MCPSession] HEARTBEAT received. Session header: ${sessionIdHeader}, DO ID: ${this.sessionId}`);
+
+    // Validate session
+    if (!this.sessionId) {
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Session not initialized'
+        },
+        id: null,
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (sessionIdHeader && sessionIdHeader !== this.sessionId) {
+      return new Response(JSON.stringify({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: `Session ID mismatch (expected ${this.sessionId}, got ${sessionIdHeader})`
+        },
+        id: null,
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Update last activity timestamp
+    const now = Date.now();
+    console.log(`[MCPSession] Heartbeat keeping session ${this.sessionId} alive at ${new Date(now).toISOString()}`);
+
+    // Persist state to ensure resilience against eviction
+    try {
+      await Promise.all([
+        this.persistParallelReasoningV5Sessions(),
+        this.persistCapabilityState()
+      ]);
+      console.log(`[MCPSession] State persisted successfully on heartbeat`);
+    } catch (error) {
+      console.error(`[MCPSession] Failed to persist state on heartbeat:`, error);
+    }
+
+    // Return lightweight response
+    return new Response(JSON.stringify({
+      jsonrpc: '2.0',
+      result: {
+        success: true,
+        session_id: this.sessionId,
+        timestamp: now,
+        message: 'Heartbeat acknowledged, session kept alive'
+      },
+      id: null,
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'mcp-session-id': this.sessionId
+      }
+    });
   }
 
   private async handleDelete(request: Request): Promise<Response> {
