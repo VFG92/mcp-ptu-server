@@ -141,6 +141,7 @@ Durable Objects (Persistent State)
 ✅ **`submit_reasoning_plan`** - Submit plan with diversity validation
   - ChatGPT generates plan with diversity axes, capability chain, rationale
   - Server validates: ≥2 axes declared, ≥2 axes differ from existing plans
+  - **Plan IDs must be unique per session**; duplicates are rejected without altering stored results
   - Rejects plans with insufficient diversification (prevents deriva semantica)
 
 ✅ **`execute_plan_step`** - Execute capability for specific plan
@@ -153,16 +154,19 @@ Durable Objects (Persistent State)
   - ChatGPT sends note from one plan to another
   - Example: "Plan A found regulatory risk X, consider in your analysis"
   - Server stores for audit trail, no processing
+  - **Validation**: both `from_plan_id` and `to_plan_id` must exist in the session
 
 ✅ **`submit_peer_critique`** - Peer review (ChatGPT-generated)
   - ChatGPT generates critique: claims_challenged, falsification_tests, residual_risks
   - Server stores critique, no evaluation
   - Enables consensus analysis
+  - **Validation**: reviewer/reviewed plan IDs must exist; otherwise the handler returns a structured error
 
 ✅ **`submit_mediation_decision`** - Final mediation
   - ChatGPT chooses which plan's approach for each decision point
   - Must cite evidence_ids from plans
   - Server validates completeness (formal only), no quality judgment
+  - **Validation**: `chosen_from_plan` must reference an existing plan or the server rejects the decision
 
 ✅ **`list_plan_status`** - Passive status listing
   - Lists pending frames: plan_execution:plan_B, peer_review:4_remaining

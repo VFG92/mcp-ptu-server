@@ -104,100 +104,54 @@ describe('everything workers server', () => {
     const toolsResponse = await listToolsHandler!.handler({ params: {} });
     expect(Array.isArray(toolsResponse.tools)).toBe(true);
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'analyze_with_capabilities')).toBe(true);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'init_parallel_reasoning')).toBe(true);
 
     // Invoke call_tool handler to exercise branching logic
     const callToolHandler = requestHandlers.find(handler => handler.schema.method === 'call_tool');
     expect(callToolHandler).toBeDefined();
-    const callResponse = await callToolHandler!.handler({
-      params: {
-        name: 'parallel_reasoning_init',
-        arguments: {
-          task: 'Quick market scan',
-          perspectives: ['strategy_consultant']
-        }
-      }
-    });
-    expect(callResponse.content).toBeDefined();
-    expect(sessionStore.size).toBe(1);
-    expect(persist).toHaveBeenCalled();
+    const sessionId = 'parallel_reasoning_v5_test_session';
 
-    const text = callResponse.content[0].text as string;
-    const sessionIdMatch = text.match(/SESSION_ID: ([^\n]+)/);
-    expect(sessionIdMatch).not.toBeNull();
-    const sessionId = sessionIdMatch![1];
-    const payload = JSON.parse(text.slice(text.indexOf('{')));
-    const agentIds: string[] = payload.agents.map((agent: any) => agent.agent_id);
-
-    await callToolHandler!.handler({
+    const initResponse = await callToolHandler!.handler({
       params: {
-        name: 'agent_reasoning_step',
+        name: 'init_parallel_reasoning',
         arguments: {
           session_id: sessionId,
-          agent_id: agentIds[0],
-          reasoning: 'Outlined strategic options',
-          confidence: 0.65
+          task_description: 'Quick market scan',
+          required_diversity_axes: ['data_sources', 'analytical_models'],
+          min_plans: 2
         }
       }
     });
+    expect(initResponse.content).toBeDefined();
+    expect(initResponse.content[0].text).toContain('Parallel Reasoning Session Initialized');
 
-    await callToolHandler!.handler({
+    const planResponse = await callToolHandler!.handler({
       params: {
-        name: 'cross_agent_communication',
+        name: 'submit_reasoning_plan',
         arguments: {
           session_id: sessionId,
-          from_agent: agentIds[0],
-          to_agent: agentIds[0],
-          message: 'Sync on priorities',
-          message_type: 'info'
+          plan: {
+            plan_id: 'plan_A',
+            description: 'Baseline plan',
+            diversity_axes: ['data_sources', 'analytical_models'],
+            capability_chain: ['market_scan'],
+            rationale: 'Provide baseline analysis',
+            expected_outputs: ['market_map']
+          }
         }
       }
     });
+    expect(planResponse.content?.[0]?.text).toContain('Plan Accepted');
 
-    await callToolHandler!.handler({
+    const statusResponse = await callToolHandler!.handler({
       params: {
-        name: 'synthesize_parallel_reasoning',
+        name: 'list_plan_status',
         arguments: {
-          session_id: sessionId,
-          synthesis_strategy: 'consensus',
-          require_all_completed: false
+          session_id: sessionId
         }
       }
     });
-
-    await callToolHandler!.handler({
-      params: {
-        name: 'parallel_compute_status',
-        arguments: { session_id: sessionId }
-      }
-    });
-
-    await callToolHandler!.handler({
-      params: {
-        name: 'agent_debate',
-        arguments: {
-          session_id: sessionId,
-          topic: 'Should we accelerate migration?',
-          agent_ids: agentIds.slice(0, 1)
-        }
-      }
-    });
-
-    await callToolHandler!.handler({
-      params: {
-        name: 'list_agent_personas',
-        arguments: {}
-      }
-    });
-
-    await callToolHandler!.handler({
-      params: {
-        name: 'validate_session_spec',
-        arguments: {
-          task: 'Validate personas',
-          perspectives: ['strategy_consultant', 'unknown_persona']
-        }
-      }
-    });
+    expect(statusResponse.content?.[0]?.text).toContain('Session Status');
 
     await callToolHandler!.handler({
       params: {

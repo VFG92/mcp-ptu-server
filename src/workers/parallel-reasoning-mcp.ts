@@ -169,7 +169,27 @@ export class ParallelReasoningSessionManager {
   } {
     const session = this.sessions.get(session_id);
     if (!session) {
-      return { accepted: false, reason: 'Session not found', diversity_validation: { axes_declared: [], axes_unique_to_existing: false, min_axes_met: false } };
+      return {
+        accepted: false,
+        reason: 'Session not found',
+        diversity_validation: {
+          axes_declared: [],
+          axes_unique_to_existing: false,
+          min_axes_met: false
+        }
+      };
+    }
+
+    if (session.plans.has(plan.plan_id)) {
+      return {
+        accepted: false,
+        reason: `Plan ID \`${plan.plan_id}\` already exists. Plan IDs must be unique per session.`,
+        diversity_validation: {
+          axes_declared: plan.diversity_axes,
+          axes_unique_to_existing: true,
+          min_axes_met: plan.diversity_axes.length >= 2
+        }
+      };
     }
 
     // Validate minimum axes
@@ -251,7 +271,17 @@ export class ParallelReasoningSessionManager {
    */
   submitCrossPlanNote(session_id: string, note: CrossPlanNote): void {
     const session = this.sessions.get(session_id);
-    if (!session) return;
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    if (!session.plans.has(note.from_plan_id)) {
+      throw new Error(`Plan ID \`${note.from_plan_id}\` not found in session \`${session_id}\``);
+    }
+
+    if (!session.plans.has(note.to_plan_id)) {
+      throw new Error(`Plan ID \`${note.to_plan_id}\` not found in session \`${session_id}\``);
+    }
 
     session.cross_plan_notes.push(note);
     session.updated_at = Date.now();
@@ -262,7 +292,17 @@ export class ParallelReasoningSessionManager {
    */
   submitPeerCritique(session_id: string, critique: PeerCritique): void {
     const session = this.sessions.get(session_id);
-    if (!session) return;
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    if (!session.plans.has(critique.reviewer_plan_id)) {
+      throw new Error(`Reviewer plan ID \`${critique.reviewer_plan_id}\` not found in session \`${session_id}\``);
+    }
+
+    if (!session.plans.has(critique.reviewed_plan_id)) {
+      throw new Error(`Reviewed plan ID \`${critique.reviewed_plan_id}\` not found in session \`${session_id}\``);
+    }
 
     session.peer_critiques.push(critique);
     session.status = 'peer_review';
@@ -274,7 +314,13 @@ export class ParallelReasoningSessionManager {
    */
   submitMediationDecision(session_id: string, decision: MediationDecision): void {
     const session = this.sessions.get(session_id);
-    if (!session) return;
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    if (!session.plans.has(decision.chosen_from_plan)) {
+      throw new Error(`Plan ID \`${decision.chosen_from_plan}\` not found in session \`${session_id}\``);
+    }
 
     session.mediation_decisions.push(decision);
     session.updated_at = Date.now();
@@ -420,4 +466,3 @@ export class ParallelReasoningSessionManager {
  * Global session manager (for non-DO environments)
  */
 export const globalParallelReasoningManager = new ParallelReasoningSessionManager();
-

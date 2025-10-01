@@ -1,183 +1,144 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 
 import {
-  handleParallelReasoningInit,
-  handleAgentReasoningStep,
-  handleCrossAgentCommunication,
-  handleSynthesizeParallelReasoning,
-  handleParallelComputeStatus,
-  handleAgentDebate,
-  handleListAgentPersonas,
-  handleValidateSessionSpec
-} from '../src/workers/parallel-reasoning-tools.js';
-import { ParallelReasoningError } from '../src/workers/error-handling.js';
-import type { ParallelReasoningSession } from '../src/workers/parallel-reasoning-engine.js';
+  handleInitParallelReasoning,
+  handleSubmitReasoningPlan,
+  handleSubmitCrossPlanNote,
+  handleSubmitPeerCritique,
+  handleSubmitMediationDecision
+} from '../src/workers/parallel-reasoning-tools-v5.js';
+import { ParallelReasoningSessionManager } from '../src/workers/parallel-reasoning-mcp.js';
 
-function parseContent(response: any) {
-  const text: string = response.content[0].text;
-  const jsonStart = text.indexOf('{');
-  return {
-    raw: text,
-    data: jsonStart >= 0 ? JSON.parse(text.slice(jsonStart)) : null,
-  };
-}
+const sessionId = 'tool_handler_validation_session';
 
-describe('legacy parallel reasoning tools integration', () => {
-  it('runs a mini session through init, messaging, synthesis, and validation', () => {
-    const sessionStore = new Map<string, ParallelReasoningSession>();
-    const durableObjectId = 'a'.repeat(64);
+describe('parallel reasoning v5 tool handler validation', () => {
+  let manager: ParallelReasoningSessionManager;
 
-    const initResponse = handleParallelReasoningInit(
-      {
-        task: 'Assess cloud migration strategy for fintech startup',
-        perspectives: ['strategy_consultant', 'financial_analyst'],
-        coordination_strategy: 'collaborative'
-      },
-      sessionStore,
-      () => durableObjectId
-    );
+  beforeEach(async () => {
+    manager = new ParallelReasoningSessionManager();
 
-    const initParsed = parseContent(initResponse);
-    const sessionIdMatch = initParsed.raw.match(/SESSION_ID: ([^\n]+)/);
-    expect(sessionIdMatch).not.toBeNull();
-    const sessionId = sessionIdMatch![1].trim();
-    expect(sessionStore.has(sessionId)).toBe(true);
-
-    const agents = initParsed.data?.agents ?? [];
-    expect(agents).toHaveLength(2);
-    const [agentOne, agentTwo] = agents.map((agent: any) => agent.agent_id);
-
-    const missingStatus = parseContent(handleParallelComputeStatus({ session_id: 'missing_session' }, sessionStore));
-    expect(missingStatus.data?.status).toBe('not_found');
-
-    let missingSessionError: ParallelReasoningError | null = null;
-    try {
-      handleAgentReasoningStep({
-        session_id: 'missing_session',
-        agent_id: 'agent_1_strategy_consultant',
-        reasoning: 'Should never persist',
-        confidence: 0.5
-      }, sessionStore);
-    } catch (error) {
-      missingSessionError = error as ParallelReasoningError;
-    }
-    expect(missingSessionError).toBeInstanceOf(ParallelReasoningError);
-    expect(missingSessionError?.toStructured().http_code).toBe(404);
-    expect(missingSessionError?.toToolResponse().isError).toBe(true);
-
-    let missingAgentError: ParallelReasoningError | null = null;
-    try {
-      handleAgentReasoningStep({
-        session_id: sessionId,
-        agent_id: 'agent_unknown',
-        reasoning: 'Invalid agent update',
-        confidence: 0.4
-      }, sessionStore);
-    } catch (error) {
-      missingAgentError = error as ParallelReasoningError;
-    }
-    expect(missingAgentError).toBeInstanceOf(ParallelReasoningError);
-    expect(missingAgentError?.toStructured().http_code).toBe(404);
-
-    const firstStep = parseContent(handleAgentReasoningStep({
+    await handleInitParallelReasoning({
       session_id: sessionId,
-      agent_id: agentOne,
-      reasoning: 'Outlined strategic options and key KPIs to track.',
-      confidence: 0.65,
-      key_points: ['Hybrid migration recommended'],
-      concerns: ['Dependency on third-party APIs'],
-      recommendations: ['Pilot migration with core services first']
-    }, sessionStore));
-    expect(firstStep.data?.agent_status).toBe('reasoning');
+      task_description: 'Validate tool-level error handling',
+      required_diversity_axes: ['data_sources', 'analytical_models'],
+      min_plans: 2
+    }, manager);
 
-    const waitingStep = parseContent(handleAgentReasoningStep({
+    await handleSubmitReasoningPlan({
       session_id: sessionId,
-      agent_id: agentTwo,
-      reasoning: 'Financial model indicates ROI within 18 months.',
-      confidence: 0.55,
-      dependencies: [agentOne]
-    }, sessionStore));
-    expect(waitingStep.data?.agent_status).toBe('waiting');
-    expect(waitingStep.data?.unresolved_dependencies).toEqual([agentOne]);
+      plan: {
+        plan_id: 'plan_A',
+        description: 'Baseline plan',
+        diversity_axes: ['data_sources', 'analytical_models'],
+        capability_chain: ['market_scan'],
+        rationale: 'Baseline analysis',
+        expected_outputs: ['market_map']
+      }
+    }, manager);
 
-    const messageResponse = parseContent(handleCrossAgentCommunication({
+    await handleSubmitReasoningPlan({
       session_id: sessionId,
-      from_agent: agentOne,
-      to_agent: agentTwo,
-      message: 'Please validate CapEx assumptions.',
-      message_type: 'question'
-    }, sessionStore));
-    expect(messageResponse.data?.message_sent).toBe(true);
+      plan: {
+        plan_id: 'plan_B',
+        description: 'Risk-focused plan',
+        diversity_axes: ['risk_perspectives', 'time_horizons'],
+        capability_chain: ['market_scan'],
+        rationale: 'Risk lens',
+        expected_outputs: ['risk_map']
+      }
+    }, manager);
+  });
 
-    let partialError: ParallelReasoningError | null = null;
-    try {
-      handleSynthesizeParallelReasoning({
-        session_id: sessionId,
-        synthesis_strategy: 'consensus',
-        require_all_completed: true
-      }, sessionStore);
-    } catch (error) {
-      partialError = error as ParallelReasoningError;
-    }
-    expect(partialError).toBeInstanceOf(ParallelReasoningError);
-    expect(partialError?.retriable).toBe(true);
-    expect(partialError?.toStructured().error_type).toBe('agents_not_completed');
-
-    const partialResponse = parseContent(handleSynthesizeParallelReasoning({
+  it('surfaces validation errors for cross-plan notes referencing missing plans', async () => {
+    const invalid = await handleSubmitCrossPlanNote({
       session_id: sessionId,
-      synthesis_strategy: 'weighted',
-      require_all_completed: false
-    }, sessionStore));
-    expect(partialResponse.data?.partial_synthesis).toBe(true);
+      note: {
+        from_plan_id: 'missing_plan',
+        to_plan_id: 'plan_B',
+        note: 'Should fail',
+        references: [],
+        timestamp: Date.now()
+      }
+    }, manager);
 
-    const completeFirst = parseContent(handleAgentReasoningStep({
+    expect(invalid.content[0].text).toContain('❌ Validation Error');
+    expect(invalid.content[0].text).toContain('missing_plan');
+
+    const valid = await handleSubmitCrossPlanNote({
       session_id: sessionId,
-      agent_id: agentOne,
-      reasoning: 'Finalized recommendation with phased implementation.',
-      confidence: 0.95
-    }, sessionStore));
-    expect(completeFirst.data?.agent_status).toBe('completed');
+      note: {
+        from_plan_id: 'plan_A',
+        to_plan_id: 'plan_B',
+        note: 'Regulatory update shared',
+        references: ['evidence_001'],
+        timestamp: Date.now()
+      }
+    }, manager);
 
-    const completeSecond = parseContent(handleAgentReasoningStep({
+    expect(valid.content[0].text).toContain('Cross-Plan Note Recorded');
+  });
+
+  it('surfaces validation errors for peer critiques referencing missing plans', async () => {
+    const invalid = await handleSubmitPeerCritique({
       session_id: sessionId,
-      agent_id: agentTwo,
-      reasoning: 'Updated model confirms positive cash flow impact.',
-      confidence: 0.9,
-      dependencies: []
-    }, sessionStore));
-    expect(completeSecond.data?.agent_status).toBe('completed');
+      critique: {
+        reviewer_plan_id: 'ghost_plan',
+        reviewed_plan_id: 'plan_A',
+        claims_challenged: [],
+        residual_risks: [],
+        agreement_score: 0.5,
+        timestamp: Date.now()
+      }
+    }, manager);
 
-    const finalSynthesis = parseContent(handleSynthesizeParallelReasoning({
+    expect(invalid.content[0].text).toContain('❌ Validation Error');
+    expect(invalid.content[0].text).toContain('ghost_plan');
+
+    const valid = await handleSubmitPeerCritique({
       session_id: sessionId,
-      synthesis_strategy: 'consensus',
-      require_all_completed: true
-    }, sessionStore));
-    expect(finalSynthesis.data?.synthesis_complete).toBe(true);
-    expect(finalSynthesis.data?.partial_synthesis).toBe(false);
+      critique: {
+        reviewer_plan_id: 'plan_A',
+        reviewed_plan_id: 'plan_B',
+        claims_challenged: [{
+          claim: 'Risk probability 5%',
+          evidence_ids: ['evidence_002'],
+          challenge: 'Consider worst-case 10%'
+        }],
+        residual_risks: ['Supply chain disruption'],
+        agreement_score: 0.7,
+        timestamp: Date.now()
+      }
+    }, manager);
 
-    const debateResponse = parseContent(handleAgentDebate({
+    expect(valid.content[0].text).toContain('Peer Critique Recorded');
+  });
+
+  it('surfaces validation errors for mediation decisions referencing missing plans', async () => {
+    const invalid = await handleSubmitMediationDecision({
       session_id: sessionId,
-      topic: 'Should we accelerate migration timeline?',
-      agent_ids: [agentOne, agentTwo]
-    }, sessionStore));
-    expect(debateResponse.data?.debate_initiated).toBe(true);
+      decision: {
+        decision_point: 'Final recommendation',
+        chosen_from_plan: 'unknown_plan',
+        rationale: 'Should fail due to missing plan',
+        evidence_ids: ['evidence_003'],
+        confidence: 0.6
+      }
+    }, manager);
 
-    const statusResponse = parseContent(handleParallelComputeStatus({ session_id: sessionId }, sessionStore));
-    expect(statusResponse.data?.status).toBeDefined();
-    expect(statusResponse.data?.agents).toHaveLength(2);
+    expect(invalid.content[0].text).toContain('❌ Validation Error');
+    expect(invalid.content[0].text).toContain('unknown_plan');
 
-    const personaList = parseContent(handleListAgentPersonas());
-    expect(personaList.data?.total_personas).toBeGreaterThan(0);
+    const valid = await handleSubmitMediationDecision({
+      session_id: sessionId,
+      decision: {
+        decision_point: 'Final recommendation',
+        chosen_from_plan: 'plan_A',
+        rationale: 'Baseline plan supported by evidence',
+        evidence_ids: ['evidence_004'],
+        confidence: 0.85
+      }
+    }, manager);
 
-    const validation = parseContent(handleValidateSessionSpec({
-      task: 'Validate personas for new session',
-      perspectives: ['strategy_consultant', 'unknown_persona']
-    }));
-    expect(validation.data?.results).toHaveLength(2);
-    const invalid = validation.data?.results.find((r: any) => r.status === 'invalid');
-    expect(invalid?.persona_id).toBe('unknown_persona');
-    if (invalid?.did_you_mean) {
-      expect(invalid.did_you_mean.length).toBeGreaterThan(0);
-    }
+    expect(valid.content[0].text).toContain('Mediation Decision Recorded');
   });
 });

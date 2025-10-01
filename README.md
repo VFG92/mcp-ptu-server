@@ -202,6 +202,8 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
 // Plan C: Academic research + Normative analysis (different axes)
 ```
 
+> ℹ️ **Plan IDs must be unique per session.** The server rejects duplicate `plan_id` values and preserves existing results.
+
 **Step 3: Execute Plan Steps (results persist on the session manager you provide)**
 ```typescript
 {
@@ -217,6 +219,8 @@ Add MCP server: `https://mcp-server.vf-ghizzoni.workers.dev`
 // Response includes "# Plan Step Executed: plan_A" followed by capability output.
 // Result is recorded via the injected ParallelReasoningSessionManager (supports Durable Objects).
 ```
+
+> ✅ **Structural validation:** cross-plan notes, peer critiques, and mediation decisions must reference plans that exist in the session. Invalid references return a structured validation error so you can correct the request.
 
 **Step 4: Contamination** (Plans exchange insights)
 ```typescript

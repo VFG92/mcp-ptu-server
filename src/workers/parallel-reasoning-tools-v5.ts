@@ -249,7 +249,16 @@ export async function handleSubmitCrossPlanNote(
   args: z.infer<typeof SubmitCrossPlanNoteSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  manager.submitCrossPlanNote(args.session_id, args.note);
+  try {
+    manager.submitCrossPlanNote(args.session_id, args.note);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease correct the plan references and try again.`;
+
+    return {
+      content: [{ type: 'text', text: response }]
+    };
+  }
 
   const response = `# Cross-Plan Note Recorded
 
@@ -278,7 +287,16 @@ export async function handleSubmitPeerCritique(
   args: z.infer<typeof SubmitPeerCritiqueSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  manager.submitPeerCritique(args.session_id, args.critique);
+  try {
+    manager.submitPeerCritique(args.session_id, args.critique);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease fix the critique and resubmit.`;
+
+    return {
+      content: [{ type: 'text', text: response }]
+    };
+  }
 
   const response = `# Peer Critique Recorded
 
@@ -318,7 +336,16 @@ export async function handleSubmitMediationDecision(
   args: z.infer<typeof SubmitMediationDecisionSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
-  manager.submitMediationDecision(args.session_id, args.decision);
+  try {
+    manager.submitMediationDecision(args.session_id, args.decision);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease update the mediation decision with a valid plan reference.`;
+
+    return {
+      content: [{ type: 'text', text: response }]
+    };
+  }
 
   const response = `# Mediation Decision Recorded
 

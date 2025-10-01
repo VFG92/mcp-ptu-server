@@ -383,7 +383,7 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       plan: {
         plan_id: 'plan_B',
         description: 'Plan B',
-        diversity_axes: ['data_sources', 'time_horizons'],
+        diversity_axes: ['risk_perspectives', 'time_horizons'],
         capability_chain: ['market_scan'],
         rationale: 'Test',
         expected_outputs: ['market_map']
