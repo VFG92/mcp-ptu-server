@@ -1,14 +1,38 @@
 # 🧠 MCP PTU Server
 
-**Version 5.5.1** | LLM-Centric Parallel Reasoning with Dynamic Guardrails
+**Version 5.6.0** | LLM-Centric Parallel Reasoning with Dynamic Guardrails
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-5.5.1-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Version](https://img.shields.io/badge/Version-5.6.0-green)](https://github.com/VFG92/mcp-ptu-server)
 [![Tests](https://img.shields.io/badge/Tests-167%2F167-brightgreen)]()
 [![Session Persistence](https://img.shields.io/badge/Session%20Persistence-3%2B%20minutes-blue)]()
 
 An MCP server that enables **ChatGPT** to orchestrate multi-path business analysis. **You (ChatGPT) are the sole deliberative agent** — the server provides only guardrails (diversity validation) and persistent memory. You generate diverse reasoning plans, cross-contaminate insights, peer review, and mediate final decisions.
+
+---
+
+## 🎯 What's New in v5.6.0 (2025-10-02)
+
+### Critical Fixes & Evidence System 🔧📋
+
+#### 1. **Session Registry Priority Fix** 🎯
+- **Problem**: ChatGPT opens new MCP connections for each tool call, creating new Durable Object instances
+- **Impact**: `submit_reasoning_plan` couldn't find sessions created by `init_parallel_reasoning`
+- **Solution**: Registry lookup now has **priority over MCP headers** when custom `session_id` is present
+- **Result**: All tool calls correctly route to the same DO instance ✅
+
+#### 2. **Automatic Evidence ID Generation** 📋
+- **Feature**: `execute_plan_step` now automatically generates evidence IDs
+- **Format**: `{session_id}:{plan_id}:step{N}` (e.g., `sess-abc:plan1:step1`)
+- **Display**: Evidence IDs shown prominently in execution results
+- **Purpose**: Enables traceability from mediation decisions back to execution results
+
+#### 3. **Flexible Evidence Validation** ⚠️
+- **Change**: Evidence IDs in mediation decisions are now **recommended but not required**
+- **Before**: Finalization blocked if any decision lacked evidence IDs
+- **Now**: Finalization succeeds with warnings for missing evidence
+- **Rationale**: Maintains forcing mechanism while reducing friction
 
 ---
 

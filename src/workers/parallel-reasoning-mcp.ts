@@ -520,7 +520,7 @@ export class ParallelReasoningSessionManager {
    * Validates completeness (structural only):
    * - Minimum number of plans submitted (min_plans)
    * - All submitted plans have execution results
-   * - All decision points reference evidence IDs
+   * - Evidence IDs are recommended but not required (warnings only)
    */
   finalizeSession(session_id: string): {
     finalized: boolean;
@@ -533,6 +533,7 @@ export class ParallelReasoningSessionManager {
       missing_plans: string[];
       decisions_without_evidence: string[];
     };
+    warnings?: string[];
   } {
     const session = this.sessions.get(session_id);
     if (!session) {
@@ -546,7 +547,8 @@ export class ParallelReasoningSessionManager {
           min_plans_required: 0,
           missing_plans: [],
           decisions_without_evidence: []
-        }
+        },
+        warnings: []
       };
     }
 

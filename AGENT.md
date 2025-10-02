@@ -1,12 +1,140 @@
 # 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.5.1** | For AI Agents Working on This Repository
+**Version 5.6.0** | For AI Agents Working on This Repository
 
 This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
 
 ---
 
 ## 🔧 Recent Fixes
+
+### v5.6.0 - Evidence System & Registry Priority (2025-10-02)
+
+**CRITICAL FIXES**: Resolved session routing with registry priority and implemented automatic evidence ID generation.
+
+#### Problem Statement
+
+After v5.5.1 deployment, users reported:
+1. **Session Not Found**: `submit_reasoning_plan` couldn't find sessions created by `init_parallel_reasoning`
+2. **Evidence ID Blocking**: Finalization failed due to missing evidence IDs in mediation decisions
+3. **No Evidence Traceability**: No way to link mediation decisions back to execution results
+
+#### Solutions Implemented
+
+##### 1. Session Registry Priority Fix
+
+**Problem**: ChatGPT opens new MCP connections for each tool call sequence, creating new Durable Object instances with different IDs. The registry was created but never consulted because header-based routing had priority.
+
+**Root Cause**:
+```typescript
+// BEFORE (WRONG): Header had priority, registry never checked
+if (headerSessionId) {
+  routedDoId = extractSessionId(headerSessionId);
+  // Registry lookup code never reached
+}
+```
+
+**Solution**:
+- **Inverted priority**: Check body for custom `session_id` FIRST
+- If custom `session_id` found, check registry for mapping
+- Only fall back to header if no registry mapping exists
+- Registry lookup happens BEFORE header-based routing
+
+**Files Modified**:
+- `src/workers/index.ts` - Lines 241-300: Routing logic refactored with registry priority
+
+**Code Flow**:
+```typescript
+// STEP 1: Parse body and check for custom session_id
+const customSessionId = extractFromBody(body, 'params.arguments.session_id');
+
+// STEP 2: If custom session_id exists, check registry FIRST
+if (customSessionId) {
+  const registryMapping = await lookupRegistry(customSessionId);
+  if (registryMapping) {
+    routedDoId = registryMapping; // Use registry mapping
+  }
+}
+
+// STEP 3: Fall back to header only if no registry mapping
+if (!routedDoId) {
+  routedDoId = extractSessionId(headerSessionId);
+}
+```
+
+**Result**: All tool calls with custom `session_id` now correctly route to the same DO instance ✅
+
+##### 2. Automatic Evidence ID Generation
+
+**Problem**: System required evidence IDs in mediation decisions but provided no way to generate them. Users had to manually create arbitrary IDs.
+
+**Solution**:
+- `recordPlanResult()` now generates and returns evidence IDs automatically
+- Format: `{session_id}:{plan_id}:step{N}` (e.g., `sess-abc:plan1:step1`)
+- Evidence ID stored with execution result
+- Evidence ID displayed prominently in tool response
+
+**Files Modified**:
+- `src/workers/parallel-reasoning-mcp.ts` - Lines 410-440: `recordPlanResult()` now returns evidence ID
+- `src/workers/parallel-reasoning-tools-v5.ts` - Lines 300-321: Display evidence ID in response
+
+**Code Changes**:
+```typescript
+// BEFORE
+recordPlanResult(session_id: string, plan_id: string, result: any): void {
+  results.push(result);
+}
+
+// AFTER
+recordPlanResult(session_id: string, plan_id: string, result: any): string {
+  const evidence_id = `${session_id}:${plan_id}:step${results.length + 1}`;
+  const resultWithEvidence = { ...result, evidence_id };
+  results.push(resultWithEvidence);
+  return evidence_id; // Return for display
+}
+```
+
+**User Experience**:
+```
+📋 Evidence ID Generated: `sess-abc:plan1:step1`
+
+Important: Use this evidence ID when:
+- Submitting peer critiques (in `evidence_ids` field)
+- Submitting mediation decisions (in `evidence_ids` field)
+```
+
+##### 3. Flexible Evidence Validation
+
+**Problem**: Finalization was blocked if any mediation decision lacked evidence IDs, even though the system didn't provide clear guidance on generating them.
+
+**Solution**:
+- Evidence IDs now **recommended but not required** for finalization
+- Finalization succeeds with warnings instead of hard blocking
+- Warnings clearly indicate which decisions lack evidence
+- Maintains forcing mechanism while reducing friction
+
+**Files Modified**:
+- `src/workers/parallel-reasoning-mcp.ts` - Lines 566-600: Finalization logic updated
+- `src/workers/parallel-reasoning-tools-v5.ts` - Lines 547-572: Display warnings in response
+
+**Code Changes**:
+```typescript
+// BEFORE: Hard blocking
+const finalized = min_plans_met && all_plans_executed && all_decisions_have_evidence;
+
+// AFTER: Warning-based
+const finalized = min_plans_met && all_plans_executed;
+return {
+  finalized,
+  warnings: decisions_without_evidence.length > 0 ? [
+    `⚠️ ${decisions_without_evidence.length} decision(s) lack evidence IDs`
+  ] : []
+};
+```
+
+**Result**: Users can finalize workflows while being reminded about evidence traceability ✅
+
+---
 
 ### v5.5.1 - Critical Bug Fixes (2025-10-02)
 
