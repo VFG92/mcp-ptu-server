@@ -1,12 +1,90 @@
 # 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.5.0** | For AI Agents Working on This Repository
+**Version 5.5.1** | For AI Agents Working on This Repository
 
 This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
 
 ---
 
 ## 🔧 Recent Fixes
+
+### v5.5.1 - Critical Bug Fixes (2025-10-02)
+
+**CRITICAL FIXES**: Resolved session routing and lifecycle issues that prevented proper operation.
+
+#### Problem Statement
+
+After v5.5.0 deployment, three critical bugs were discovered:
+1. **Session Routing**: Worker used `session_id` from tool arguments for DO routing, creating separate DO instances
+2. **Terminated Session Handling**: `initSession()` returned terminated sessions unchanged, blocking reuse
+3. **Silent Failures**: Some methods returned silently instead of throwing errors
+
+#### Solutions Implemented
+
+##### 1. Session Routing Priority Fix
+
+**Problem**: Worker extracted `session_id` from `body.params.arguments.session_id` and used it for Durable Object routing. This created a new DO instance for each parallel reasoning session, separate from the MCP session DO.
+
+**Root Cause**:
+```typescript
+// BEFORE (WRONG): Body had priority over header
+considerCandidate(args['session_id'], 'body.params.arguments.session_id');
+// This routed to DO with ID based on "sess-2025-10-02-cost-ops-r2"
+// But MCP session was on DO with ID "15a55a4e0d4014b672ab7dc49c831f9225c2b8678ae49a959b6ba3d0b7d9b67b"
+```
+
+**Solution**:
+- Inverted routing priority: header `mcp-session-id` now has absolute priority
+- Body parameters only used during `initialize` (when no header exists yet)
+- Removed `args['session_id']` from routing candidates (it's for internal logic, not routing)
+
+**Files Modified**:
+- `src/workers/index.ts` - Lines 240-291: Routing logic refactored
+
+**Result**: All tool calls now correctly route to the same DO instance with initialized MCP transport.
+
+##### 2. Terminated Session Auto-Reset
+
+**Problem**: `initSession()` was idempotent but returned terminated sessions unchanged. Subsequent operations failed because the session was still marked as terminated.
+
+**Root Cause**:
+```typescript
+// BEFORE (WRONG): Returned terminated session as-is
+if (existingSession) {
+  existingSession.updated_at = Date.now();
+  return existingSession; // Still has status: 'terminated'
+}
+```
+
+**Solution**:
+- Added special case in `initSession()` to detect terminated sessions
+- Automatically calls `resetSession()` to clear execution state
+- Updates session parameters with new values from init call
+
+**Files Modified**:
+- `src/workers/parallel-reasoning-mcp.ts` - Lines 201-264: `initSession()` method
+- `__tests__/session-lifecycle.test.ts` - Lines 90-120: Updated test expectations
+
+**Result**: Sessions can be reused after termination without manual intervention.
+
+##### 3. Explicit Error Handling
+
+**Problem**: `submitPlan()` returned `{accepted: false, reason: 'Session not found'}` and `recordPlanResult()` did silent return when session not found.
+
+**Solution**:
+- Changed both methods to throw explicit errors for non-existent sessions
+- Enhanced `loadSessions()` to handle corrupted/invalid storage data gracefully
+- Added validation for null/undefined/non-array inputs
+
+**Files Modified**:
+- `src/workers/parallel-reasoning-mcp.ts`:
+  - Lines 266-294: `submitPlan()` now throws error
+  - Lines 410-426: `recordPlanResult()` now throws error
+  - Lines 658-710: `loadSessions()` with robust error handling
+
+**Result**: Clear error messages, no silent failures, graceful degradation for corrupted data.
+
+---
 
 ### v5.5.0 - Complete Architecture Refinement (2025-10-01)
 
@@ -15,13 +93,13 @@ This document provides rules, guidelines, and technical context for AI agents (l
 #### Problem Statement
 
 After initial deployment, three critical issues were identified:
-1. **Session Termination**: Calling `init_parallel_reasoning` with a new `session_id` caused immediate "Session terminated" errors
-2. **Rigid Diversity Axes**: Fixed 6 axes were always suggested, regardless of task context
-3. **Pre-Script Capabilities**: Capabilities returned deterministic output instead of analytical guardrails
+1. **Rigid Diversity Axes**: Fixed 6 axes were always suggested, regardless of task context
+2. **Pre-Script Capabilities**: Capabilities returned deterministic output instead of analytical guardrails
+3. **Session Lifecycle**: Basic idempotency issues
 
 #### Solutions Implemented
 
-##### 1. Session Lifecycle Improvements
+##### 1. Session Lifecycle Improvements (Enhanced in v5.5.1)
 
 **Problem**: `initSession()` was not idempotent - calling it twice with same `session_id` would overwrite the existing session.
 
@@ -31,10 +109,11 @@ After initial deployment, three critical issues were identified:
 - Added `listSessions()` method to inspect all active sessions
 - Added `resetSession()` and `deleteSession()` for recovery
 - Added `'terminated'` status to session state machine
+- **v5.5.1**: Auto-reset terminated sessions on init
 
 **Files Modified**:
 - `src/workers/parallel-reasoning-mcp.ts` - Session management methods
-- `__tests__/session-lifecycle.test.ts` - NEW: Comprehensive session lifecycle tests
+- `__tests__/session-lifecycle.test.ts` - Comprehensive session lifecycle tests
 
 ##### 2. Dynamic Diversity Axes
 

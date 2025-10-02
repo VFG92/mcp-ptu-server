@@ -1,14 +1,37 @@
 # 🧠 MCP PTU Server
 
-**Version 5.5.0** | LLM-Centric Parallel Reasoning with Dynamic Guardrails
+**Version 5.5.1** | LLM-Centric Parallel Reasoning with Dynamic Guardrails
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-5.5.0-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Version](https://img.shields.io/badge/Version-5.5.1-green)](https://github.com/VFG92/mcp-ptu-server)
 [![Tests](https://img.shields.io/badge/Tests-167%2F167-brightgreen)]()
 [![Session Persistence](https://img.shields.io/badge/Session%20Persistence-3%2B%20minutes-blue)]()
 
 An MCP server that enables **ChatGPT** to orchestrate multi-path business analysis. **You (ChatGPT) are the sole deliberative agent** — the server provides only guardrails (diversity validation) and persistent memory. You generate diverse reasoning plans, cross-contaminate insights, peer review, and mediate final decisions.
+
+---
+
+## 🎯 What's New in v5.5.1 (2025-10-02)
+
+### Critical Bug Fixes 🐛
+
+#### 1. **Session Routing Fix** 🔧
+- **Problem**: Worker was using `session_id` from tool arguments for Durable Object routing, creating separate DO instances
+- **Impact**: `init_parallel_reasoning` calls were routed to different DOs without MCP transport initialized
+- **Solution**: Header `mcp-session-id` now has priority over body parameters for routing
+- **Result**: All tool calls correctly route to the same DO instance with initialized MCP session
+
+#### 2. **Terminated Session Auto-Reset** 🔄
+- **Problem**: Calling `init_parallel_reasoning` on a terminated session returned the terminated session unchanged
+- **Impact**: Subsequent operations failed with "Session terminated" errors
+- **Solution**: `initSession()` now automatically resets terminated sessions to `initialized` state
+- **Result**: Sessions can be reused after termination without manual reset
+
+#### 3. **Robust Error Handling** 🛡️
+- **Enhanced**: `submitPlan()` and `recordPlanResult()` now throw explicit errors for non-existent sessions
+- **Enhanced**: `loadSessions()` gracefully handles corrupted/invalid storage data
+- **Result**: Clear error messages and no silent failures
 
 ---
 
