@@ -297,8 +297,8 @@ export async function handleExecutePlanStep(
     peer_review_mode: true
   }, refs);
 
-  // Record result for plan using the provided session manager instance
-  manager.recordPlanResult(args.session_id, args.plan_id, result);
+  // Record result for plan using the provided session manager instance and get evidence ID
+  const evidence_id = manager.recordPlanResult(args.session_id, args.plan_id, result);
 
   // Extract summary from result
   const originalText = result.content[0].text;
@@ -311,8 +311,9 @@ export async function handleExecutePlanStep(
     summary
   );
 
-  // Append full result
-  const fullResponse = guidedResponse + '\n\n---\n\n## Full Capability Result\n\n' + originalText;
+  // Append evidence ID and full result
+  const evidenceNotice = `\n\n**📋 Evidence ID Generated**: \`${evidence_id}\`\n\n**Important**: Use this evidence ID when:\n- Submitting peer critiques (in \`evidence_ids\` field of challenged claims)\n- Submitting mediation decisions (in \`evidence_ids\` field)\n\nThis allows the system to trace decisions back to specific execution results.`;
+  const fullResponse = guidedResponse + evidenceNotice + '\n\n---\n\n## Full Capability Result\n\n' + originalText;
 
   return {
     content: [{ type: 'text', text: fullResponse }]
@@ -551,6 +552,12 @@ export async function handleFinalizeParallelReasoning(
       session.mediation_decisions.length
     );
 
+    // Append warnings if any
+    if (result.warnings && result.warnings.length > 0) {
+      response += `\n\n## ⚠️ Warnings\n\n`;
+      response += result.warnings.map(w => `- ${w}`).join('\n') + '\n';
+    }
+
     // Append decision map
     if (session.mediation_decisions.length > 0) {
       response += `\n\n## Decision Map\n\n`;
@@ -559,7 +566,7 @@ ${i + 1}. **${d.decision_point}**
    - Chosen from: ${d.chosen_from_plan}
    - Confidence: ${(d.confidence * 100).toFixed(1)}%
    - Rationale: ${d.rationale}
-   - Evidence: ${d.evidence_ids.join(', ')}
+   - Evidence: ${d.evidence_ids.length > 0 ? d.evidence_ids.join(', ') : '(no evidence IDs provided)'}
 `).join('\n');
     }
   } else {

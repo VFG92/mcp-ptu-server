@@ -409,10 +409,11 @@ export class ParallelReasoningSessionManager {
 
   /**
    * Record capability result for a plan
+   * Returns the generated evidence ID for this result
    *
    * @throws Error if session not found
    */
-  recordPlanResult(session_id: string, plan_id: string, result: any): void {
+  recordPlanResult(session_id: string, plan_id: string, result: any): string {
     const session = this.sessions.get(session_id);
     if (!session) {
       throw new Error(`Session ${session_id} not found`);
@@ -420,9 +421,22 @@ export class ParallelReasoningSessionManager {
 
     const results = session.plan_results.get(plan_id);
     if (results) {
-      results.push(result);
+      // Generate evidence ID: session_id:plan_id:step_index
+      const evidence_id = `${session_id}:${plan_id}:step${results.length + 1}`;
+
+      // Store result with evidence ID
+      const resultWithEvidence = {
+        ...result,
+        evidence_id
+      };
+
+      results.push(resultWithEvidence);
       session.updated_at = Date.now();
+
+      return evidence_id;
     }
+
+    throw new Error(`Plan ${plan_id} not found in session ${session_id}`);
   }
 
   /**
@@ -549,7 +563,7 @@ export class ParallelReasoningSessionManager {
       }
     }
 
-    // Check all decisions have evidence
+    // Check all decisions have evidence (WARNING, not blocking)
     const decisions_without_evidence: string[] = [];
     for (const decision of session.mediation_decisions) {
       if (decision.evidence_ids.length === 0) {
@@ -560,8 +574,9 @@ export class ParallelReasoningSessionManager {
     const all_plans_executed = missing_plans.length === 0;
     const all_decisions_have_evidence = decisions_without_evidence.length === 0;
 
-    // Session is finalized only if ALL conditions are met
-    const finalized = min_plans_met && all_plans_executed && all_decisions_have_evidence;
+    // Session is finalized if minimum plans are met and all plans are executed
+    // Evidence IDs are recommended but not required (warning only)
+    const finalized = min_plans_met && all_plans_executed;
 
     if (finalized) {
       session.status = 'finalized';
@@ -578,7 +593,10 @@ export class ParallelReasoningSessionManager {
         min_plans_required: session.min_plans,
         missing_plans,
         decisions_without_evidence
-      }
+      },
+      warnings: decisions_without_evidence.length > 0 ? [
+        `⚠️ ${decisions_without_evidence.length} mediation decision(s) lack evidence IDs. While not blocking finalization, evidence IDs improve traceability.`
+      ] : []
     };
   }
 
