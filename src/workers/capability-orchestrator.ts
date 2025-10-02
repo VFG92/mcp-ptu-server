@@ -27,6 +27,7 @@ import {
   type NativeEnhancementAttempt,
   type NativeEnhancementResult
 } from './llm-native-capabilities.js';
+import { getGuardrails } from './guardrail-generator.js';
 
 /**
  * Orchestration request
@@ -60,6 +61,10 @@ export interface OrchestrationResult {
     confidence: number;
     evidence_quality: number;
     validation_errors?: string[];
+    metadata?: {
+      has_guardrails?: boolean;
+      legacy_output_filtered?: boolean;
+    };
   }>;
   
   // Coverage
@@ -259,6 +264,16 @@ export class CapabilityOrchestrator {
       const capability = this.graph.get(capId);
 
       if (capability) {
+        // GUARDRAIL ENRICHMENT: Add analytical guardrails to result
+        try {
+          const guardrails = getGuardrails(capability);
+          result.guardrails = guardrails;
+          console.log(`[Orchestrator] Enriched ${capId} with guardrails`);
+        } catch (error) {
+          console.warn(`[Orchestrator] Failed to generate guardrails for ${capId}:`, error);
+          // Continue without guardrails - not critical
+        }
+
         const enhancementResult = await runNativeEnhancement(capability, result, context);
         if (enhancementResult.outcome) {
           this.integrateNativeEnhancement(
@@ -300,8 +315,9 @@ export class CapabilityOrchestrator {
         );
       }
 
-      // Verify evidence
-      const verification = this.ledger.verifyArtifact(capId, result.output);
+      // Verify evidence using guardrails (not legacy output)
+      const dataToVerify = result.guardrails || result.output;
+      const verification = this.ledger.verifyArtifact(capId, dataToVerify);
       verifications.set(capId, verification);
 
       // Calculate evidence quality
@@ -317,20 +333,29 @@ export class CapabilityOrchestrator {
 
       let validationErrors: string[] | undefined;
 
-      if (capability) {
+      // Skip validation for guardrails (they have their own schema)
+      // Legacy output validation is deprecated
+      if (capability && result.output && !result.guardrails) {
         const validation = capability.output_contract.schema.safeParse(result.output);
         if (!validation.success) {
           validationErrors = validation.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
+          console.warn(`[Orchestrator] Legacy output validation failed for ${capId}. Consider migrating to guardrails.`);
         }
       }
 
-      // Add or update artifact on whiteboard
-      // Check if artifact already exists to maintain version history
+      // ARCHITECTURE CHANGE: Use ONLY guardrails for artifacts
+      // Legacy output is NOT shown to ChatGPT
+      const artifactData = result.guardrails || {
+        _warning: 'No guardrails generated for this capability',
+        _legacy_output_hidden: true
+      };
+
+      // Add or update artifact on whiteboard with guardrails only
       if (this.whiteboard.has(capId)) {
         // Artifact exists - update it to increment version
         this.whiteboard.update(
           capId,
-          result.output,
+          artifactData,
           capId,
           `Updated by capability execution at ${new Date().toISOString()}`
         );
@@ -339,7 +364,7 @@ export class CapabilityOrchestrator {
         this.whiteboard.add(
           capId,
           capability?.category || 'unknown',
-          result.output,
+          artifactData,
           capId,
           'accepted'
         );
@@ -348,10 +373,14 @@ export class CapabilityOrchestrator {
       artifacts.push({
         id: capId,
         type: capability?.category || 'unknown',
-        data: result.output,
+        data: artifactData, // ONLY guardrails, NO legacy output
         confidence: confidenceResult.confidence,
         evidence_quality: evidenceQuality,
-        validation_errors: validationErrors
+        validation_errors: validationErrors,
+        metadata: {
+          has_guardrails: !!result.guardrails,
+          legacy_output_filtered: !!result.output && !result.guardrails
+        }
       });
     }
 

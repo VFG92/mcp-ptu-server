@@ -10,6 +10,47 @@
  */
 
 import type { DiversityAxis, ReasoningPlan } from './parallel-reasoning-mcp.js';
+import { suggestDiversityAxes, COMMON_DIVERSITY_AXES } from './parallel-reasoning-mcp.js';
+
+/**
+ * Format session already exists (idempotent behavior)
+ */
+export function formatSessionAlreadyExists(
+  session_id: string,
+  task_description: string,
+  status: string,
+  plans_count: number,
+  min_plans: number
+): string {
+  return `# ℹ️ Session Already Exists (Idempotent)
+
+**Session ID**: \`${session_id}\`
+
+This session was already initialized. Returning existing session state.
+
+## Current State
+- **Task**: ${task_description}
+- **Status**: ${status}
+- **Plans submitted**: ${plans_count} / ${min_plans}
+
+## What This Means
+The \`init_parallel_reasoning\` tool is **idempotent**: calling it multiple times with the same \`session_id\` returns the existing session instead of creating a new one or throwing an error.
+
+## Next Steps
+${plans_count < min_plans
+  ? `Continue submitting plans using \`submit_reasoning_plan\` (need ${min_plans - plans_count} more).`
+  : status === 'initialized' || status === 'plans_submitted'
+    ? `All plans submitted. Start executing with \`execute_plan_step\`.`
+    : status === 'executing'
+      ? `Continue executing plan steps with \`execute_plan_step\`.`
+      : status === 'finalized'
+        ? `Session already finalized. Use \`list_plan_status\` to view results.`
+        : `Continue with the next phase of the workflow.`
+}
+
+⚠️ Use session_id \`${session_id}\` for all subsequent calls.
+`;
+}
 
 /**
  * Format session initialization success
@@ -20,6 +61,9 @@ export function formatInitSuccess(
   required_axes: DiversityAxis[],
   min_plans: number
 ): string {
+  // Get contextual suggestions based on task
+  const { suggested_axes, rationale } = suggestDiversityAxes(task_description);
+
   return `# ✅ Session Initialized Successfully
 
 **Session ID**: \`${session_id}\`
@@ -34,14 +78,31 @@ ${task_description}
 - **Required diversity axes** (ALL plans must include these):
 ${required_axes.map(axis => `  - \`${axis}\``).join('\n')}
 
-## Available Diversity Axes
-You can use any combination of these axes (must include all required axes above):
-- \`data_sources\` - Different data sources (official stats vs industry reports vs expert interviews)
-- \`analytical_models\` - Different models (regression vs Monte Carlo vs frameworks)
-- \`time_horizons\` - Different time frames (short-term vs long-term)
-- \`quality_metrics\` - Different quality criteria (precision vs recall vs robustness)
-- \`risk_perspectives\` - Different risk lenses (market vs regulatory vs operational)
-- \`stakeholder_views\` - Different stakeholder perspectives (customer vs investor vs regulator)
+## 💡 Suggested Diversity Axes for This Task
+Based on your task description, we recommend considering these axes:
+
+${suggested_axes.map(axis => `- **\`${axis}\`**: ${COMMON_DIVERSITY_AXES[axis as keyof typeof COMMON_DIVERSITY_AXES] || 'Context-specific differentiation'}`).join('\n')}
+
+**Why these axes?** ${rationale}
+
+## 📚 Additional Axes You Can Use
+You can use ANY axis that makes sense for your task. Here are more examples:
+- \`data_sources\` - Different data sources
+- \`analytical_models\` - Different analytical approaches
+- \`time_horizons\` - Different time frames
+- \`quality_metrics\` - Different quality criteria
+- \`risk_perspectives\` - Different risk lenses
+- \`stakeholder_views\` - Different stakeholder perspectives
+- \`geographic_scope\` - Different geographic scopes
+- \`customer_segments\` - Different customer segments
+- \`technology_stacks\` - Different technology approaches
+- \`regulatory_frameworks\` - Different regulatory contexts
+- \`cost_drivers\` - Different cost perspectives
+- \`implementation_approaches\` - Different implementation strategies
+- Or define your own custom axes relevant to your task!
+
+## Key Principle
+**Plans must differ on ≥2 axes** to ensure real diversity, not cosmetic variants.
 
 ## Next Step
 Call \`submit_reasoning_plan\` to submit your first plan.
@@ -52,11 +113,11 @@ Call \`submit_reasoning_plan\` to submit your first plan.
   "session_id": "${session_id}",
   "plan": {
     "plan_id": "plan_A",
-    "description": "Quantitative analysis using official statistics",
-    "diversity_axes": [${required_axes.map(a => `"${a}"`).join(', ')}, "time_horizons"],
-    "capability_chain": ["market_scan", "tam_sam_som_build", "competitor_analysis", "customer_segmentation_clustering", "pricing_analysis_elasticity", "market_sizing_regression", "growth_forecast_arima", "market_share_analysis"],
-    "rationale": "Uses official statistics and quantitative models",
-    "expected_outputs": ["Market size", "Competitive landscape"]
+    "description": "Describe your plan's unique approach",
+    "diversity_axes": [${required_axes.map(a => `"${a}"`).join(', ')}, "${suggested_axes[0] || 'additional_axis'}"],
+    "capability_chain": ["capability_1", "capability_2", "...", "capability_N"],
+    "rationale": "Explain why this plan adds unique value",
+    "expected_outputs": ["Output 1", "Output 2"]
   }
 }
 \`\`\`
@@ -89,20 +150,13 @@ Submit ${min_plans - plans_submitted} more plan(s) to meet minimum requirement.
 
 ⚠️ **Diversity Requirement**: Each new plan must differ from existing plans on at least 2 axes.
 
-**Example for next plan**:
-\`\`\`json
-{
-  "session_id": "${session_id}",
-  "plan": {
-    "plan_id": "plan_B",
-    "description": "Risk-adjusted analysis using Monte Carlo",
-    "diversity_axes": ["data_sources", "analytical_models", "risk_perspectives"],
-    "capability_chain": [...8-32 capabilities...],
-    "rationale": "Uses probabilistic modeling for risk assessment",
-    "expected_outputs": ["Risk-adjusted projections"]
-  }
-}
-\`\`\`
+## Key Principles for Next Plan
+- **Real Diversity**: Choose a genuinely different approach, not a cosmetic variant
+- **Contextual Axes**: Select axes that make sense for your specific task
+- **Complementary Perspective**: Add value by covering aspects the first plan doesn't address
+
+**Do NOT use template approaches** like "Plan A = quantitative, Plan B = qualitative".
+Instead, think about what unique perspective would genuinely improve the analysis.
 ` : `
 ## Next Step
 You have submitted the minimum number of plans (${min_plans}).
@@ -185,7 +239,7 @@ export function formatPlanRejectedTooSimilar(
 ): string {
   return `# ❌ Plan Rejected: ${plan_id}
 
-**Reason**: Diversity axes too similar to existing plans
+**Reason**: Diversity axes too similar to existing plans (must differ on ≥2 axes)
 
 ## Diversity Requirement
 Each plan must differ from ALL existing plans on at least **2 axes**.
@@ -199,31 +253,20 @@ ${existing_plans.map(p => `- **${p.plan_id}**: ${p.axes.join(', ')}`).join('\n')
 ## Problem
 Your plan's axes overlap too much with existing plans. You need at least 2 axes that differ.
 
-## Suggested Fixes
+## How to Fix
+1. **Analyze existing plans**: Look at what axes they use
+2. **Choose genuinely different axes**: Select axes that provide a complementary perspective
+3. **Ensure ≥2 axes differ**: At least 2 of your axes must be different from each existing plan
 
-### Option 1: Change one axis
-\`\`\`json
-{
-  "diversity_axes": [${[...required_axes, 'time_horizons'].map(a => `"${a}"`).join(', ')}]
-}
-\`\`\`
+## Principles for Choosing Different Axes
+- **Don't just swap labels**: "quantitative" vs "qualitative" is often cosmetic
+- **Think about real differences**: Different data sources, time horizons, stakeholder views
+- **Add complementary value**: What perspective is missing from existing plans?
+- **Be contextual**: Choose axes that make sense for your specific task
 
-### Option 2: Use different combination
-\`\`\`json
-{
-  "diversity_axes": [${[...required_axes, 'stakeholder_views'].map(a => `"${a}"`).join(', ')}]
-}
-\`\`\`
-
-### Option 3: Add more axes
-\`\`\`json
-{
-  "diversity_axes": [${[...required_axes, 'quality_metrics', 'risk_perspectives'].map(a => `"${a}"`).join(', ')}]
-}
-\`\`\`
-
-## Available Axes
-- \`data_sources\`, \`analytical_models\`, \`time_horizons\`, \`quality_metrics\`, \`risk_perspectives\`, \`stakeholder_views\`
+## Remember
+You can use ANY axes that make sense for your task, not just predefined ones.
+Examples: \`geographic_scope\`, \`customer_segments\`, \`technology_stacks\`, \`regulatory_frameworks\`, etc.
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
 `;

@@ -155,12 +155,53 @@ export async function handleAnalyzeWithCapabilities(
     response += `**Confidence**: ${(result.overall_confidence * 100).toFixed(1)}%\n\n`;
     
     if (result.artifacts.length > 0) {
-      response += `## Artifacts (${result.artifacts.length})\n\n`;
+      response += `## Capability Perspectives (${result.artifacts.length})\n\n`;
+      response += `*Each capability provides analytical guardrails to guide your reasoning, not deterministic output.*\n\n`;
+
       for (const artifact of result.artifacts) {
         response += `### ${artifact.type}\n`;
         response += `- **Confidence**: ${(artifact.confidence * 100).toFixed(1)}%\n`;
         response += `- **Evidence Quality**: ${(artifact.evidence_quality * 100).toFixed(1)}%\n`;
-        response += `\`\`\`json\n${JSON.stringify(artifact.data, null, 2)}\n\`\`\`\n\n`;
+
+        // Show metadata about guardrails
+        if (artifact.metadata?.has_guardrails) {
+          response += `- **Format**: ✅ Guardrail-based perspectives\n`;
+        } else if (artifact.metadata?.legacy_output_filtered) {
+          response += `- **Format**: ⚠️ Legacy output filtered\n`;
+        }
+
+        // Format guardrails in a readable way (NOT raw JSON)
+        const data = artifact.data;
+
+        if (data.key_questions && data.key_questions.length > 0) {
+          response += `\n**Key Questions**:\n`;
+          data.key_questions.slice(0, 5).forEach((q: string, i: number) => {
+            response += `${i + 1}. ${q}\n`;
+          });
+        }
+
+        if (data.analysis_dimensions && data.analysis_dimensions.length > 0) {
+          response += `\n**Analysis Dimensions**:\n`;
+          data.analysis_dimensions.slice(0, 4).forEach((dim: any) => {
+            response += `- **${dim.dimension}**: ${dim.description}\n`;
+          });
+        }
+
+        if (data.trade_offs && data.trade_offs.length > 0) {
+          response += `\n**Trade-offs**:\n`;
+          data.trade_offs.slice(0, 3).forEach((t: any) => {
+            response += `- ${t.trade_off}: ${t.option_a} vs ${t.option_b}\n`;
+          });
+        }
+
+        if (data.risks_to_monitor && data.risks_to_monitor.length > 0) {
+          response += `\n**Risks**:\n`;
+          data.risks_to_monitor.slice(0, 3).forEach((r: any) => {
+            response += `- [${r.severity.toUpperCase()}] ${r.risk}\n`;
+          });
+        }
+
+        response += `\n`;
       }
     }
     

@@ -1,12 +1,136 @@
 # 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.4.0** | For AI Agents Working on This Repository
+**Version 5.5.0** | For AI Agents Working on This Repository
 
 This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
 
 ---
 
 ## 🔧 Recent Fixes
+
+### v5.5.0 - Complete Architecture Refinement (2025-10-01)
+
+**MAJOR UPDATE**: Complete refactoring to eliminate pre-script behavior and enable truly LLM-centric parallel reasoning.
+
+#### Problem Statement
+
+After initial deployment, three critical issues were identified:
+1. **Session Termination**: Calling `init_parallel_reasoning` with a new `session_id` caused immediate "Session terminated" errors
+2. **Rigid Diversity Axes**: Fixed 6 axes were always suggested, regardless of task context
+3. **Pre-Script Capabilities**: Capabilities returned deterministic output instead of analytical guardrails
+
+#### Solutions Implemented
+
+##### 1. Session Lifecycle Improvements
+
+**Problem**: `initSession()` was not idempotent - calling it twice with same `session_id` would overwrite the existing session.
+
+**Solution**:
+- Made `initSession()` idempotent - returns existing session instead of creating new one
+- Added `terminateSession()` method to explicitly terminate sessions
+- Added `listSessions()` method to inspect all active sessions
+- Added `resetSession()` and `deleteSession()` for recovery
+- Added `'terminated'` status to session state machine
+
+**Files Modified**:
+- `src/workers/parallel-reasoning-mcp.ts` - Session management methods
+- `__tests__/session-lifecycle.test.ts` - NEW: Comprehensive session lifecycle tests
+
+##### 2. Dynamic Diversity Axes
+
+**Problem**: `DiversityAxisSchema` was a fixed enum with only 6 predefined axes.
+
+**Solution**:
+- Changed `DiversityAxisSchema` to `z.string()` to accept any axis
+- Created `COMMON_DIVERSITY_AXES` object with 20+ predefined axes
+- Created `suggestDiversityAxes()` function that analyzes `task_description` and suggests contextually relevant axes
+- Domain-specific logic for: financial, market, technical, regulatory, supply chain, HR, strategy
+
+**Example**:
+```typescript
+// Financial task
+suggestDiversityAxes('DCF valuation for tech startup')
+// Returns: ['analytical_models', 'time_horizons', 'risk_perspectives']
+
+// Market task
+suggestDiversityAxes('Market entry strategy for APAC')
+// Returns: ['data_sources', 'customer_segments', 'competitive_dynamics']
+```
+
+**Files Modified**:
+- `src/workers/parallel-reasoning-mcp.ts` - Dynamic axes logic
+- `__tests__/dynamic-diversity-axes.test.ts` - NEW: Dynamic axes tests
+
+##### 3. Capabilities as Guardrails
+
+**Problem**: Capabilities were returning pre-formatted output (`{market_size: 1000, revenue: 500}`) which:
+- Created "noise" that distracted from analytical reasoning
+- Made ChatGPT rely on deterministic data instead of holistic analysis
+- Violated the LLM-centric principle (ChatGPT should drive analysis, not consume pre-computed results)
+
+**Solution**: Capabilities now return ONLY analytical guardrails:
+- **Key Questions**: Critical questions to explore
+- **Analysis Dimensions**: Dimensions to consider with data sources
+- **Trade-offs**: Key trade-offs to evaluate
+- **Risks to Monitor**: Risks with severity and indicators
+- **Validation Criteria**: How to validate the analysis
+- **Context**: Assumptions, constraints, dependencies
+- **Suggested Next Steps**: Follow-up actions
+
+**Key Principle**: ChatGPT NEVER sees deterministic output. Only analytical perspectives are shown.
+
+**Implementation**:
+1. Created `GuardrailGenerator` that automatically generates guardrails from capability metadata
+2. Modified `CapabilityResult` to make `output` optional (deprecated), `guardrails` optional (will become required)
+3. Modified `CapabilityOrchestrator` to use ONLY guardrails in artifacts, filter out legacy output
+4. Modified `capability-tools.ts` to format guardrails in readable way (NOT raw JSON)
+5. Updated documentation to clarify capabilities = vertical expertise perspectives
+
+**Zero Refactor Approach**: 58 existing capabilities continue to work without modification. Their legacy output is simply filtered out, and guardrails are generated automatically from their metadata.
+
+**Files Modified**:
+- `src/workers/capability-graph.ts` - Modified `CapabilityResult` interface
+- `src/workers/guardrail-generator.ts` - NEW: Automatic guardrail generation
+- `src/workers/guardrail-output.ts` - NEW: Guardrail schema definition
+- `src/workers/capability-orchestrator.ts` - Enrichment and filtering logic
+- `src/workers/capability-tools.ts` - Formatting for ChatGPT
+- `__tests__/capability-guardrails.test.ts` - NEW: Guardrail generation tests
+
+##### 4. Less Prescriptive Guided Responses
+
+**Problem**: `guided-responses.ts` was too prescriptive, suggesting fixed plan templates like "Plan A: quantitative, Plan B: qualitative".
+
+**Solution**:
+- Removed fixed plan templates
+- Provide general principles instead: "Ensure plans differ on ≥2 axes"
+- Emphasize contextual axes selection
+- Warn against cosmetic variants
+
+**Files Modified**:
+- `src/workers/guided-responses.ts` - Less prescriptive responses
+
+#### Testing
+
+Created comprehensive test suites:
+- `__tests__/session-lifecycle.test.ts` - Session management edge cases (8 tests)
+- `__tests__/dynamic-diversity-axes.test.ts` - Dynamic axes suggestion (20+ tests)
+- `__tests__/capability-guardrails.test.ts` - Guardrail generation (15+ tests)
+
+#### Documentation
+
+Updated documentation to reflect changes:
+- `README.md` - Version 5.5.0 section with architecture changes
+- `AGENT.md` - This section
+
+#### Key Architectural Principles
+
+1. **LLM-Centric**: ChatGPT is the sole deliberative agent. Server provides only guardrails and memory.
+2. **Dynamic, Not Fixed**: Diversity axes, plan types, and analytical approaches are context-specific, not pre-defined.
+3. **Guardrails, Not Pre-Script**: Capabilities provide analytical perspectives, not deterministic output.
+4. **Idempotent Operations**: Session operations are safe to retry without side effects.
+5. **Zero Refactor**: Existing capabilities work without modification through automatic guardrail generation.
+
+---
 
 ### v5.4.0 - Session Persistence Fix (2025-02-01)
 
@@ -132,6 +256,14 @@ npm test       # Run all 162 tests (all must pass)
 - ✅ ChatGPT orchestrates entire workflow
 - ✅ MCP provides only guardrails (diversity validation) + persistent memory
 - ❌ DO NOT add server-side intelligence or decision-making
+
+**Capabilities as Guardrails** (v5.5.0+):
+- ✅ Capabilities return analytical perspectives (questions, dimensions, trade-offs, risks)
+- ✅ Guardrails guide ChatGPT's reasoning, NOT replace it
+- ❌ DO NOT return deterministic output (`{market_size: 1000}`)
+- ❌ DO NOT show legacy output to ChatGPT (filter it out)
+- ✅ Use `GuardrailGenerator` to auto-generate guardrails from capability metadata
+- ✅ Capabilities are vertical expertise perspectives, NOT computation engines
 
 **Multi-Path Only** (v5.1.0+):
 - ✅ Only expose 8 parallel reasoning tools to clients

@@ -39,7 +39,7 @@ import * as GuidedResponses from './guided-responses.js';
 export const InitParallelReasoningSchema = z.object({
   session_id: z.string().describe('Unique session identifier'),
   task_description: z.string().describe('Task to analyze with parallel reasoning'),
-  required_diversity_axes: z.array(DiversityAxisSchema).min(2).describe('Axes that must differ between plans (min 2)'),
+  required_diversity_axes: z.array(z.string()).min(2).describe('Axes that must differ between plans (min 2). Can be any contextually relevant axes, not limited to predefined list.'),
   min_plans: z.number().int().min(3).max(32).default(3).describe('Minimum number of parallel plans (3-32, default 3)')
 });
 
@@ -49,14 +49,28 @@ export async function handleInitParallelReasoning(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   console.log(`[handleInitParallelReasoning] Using manager: ${manager === globalParallelReasoningManager ? 'global' : 'durable-object'}`);
   console.log(`[handleInitParallelReasoning] Session ID: ${args.session_id}`);
+
+  // Check if session already exists before calling initSession
+  const existingSession = manager.getSession(args.session_id);
+  const isExisting = !!existingSession;
+
   const session = manager.initSession(args);
 
-  const response = GuidedResponses.formatInitSuccess(
-    session.session_id,
-    session.task_description,
-    session.required_diversity_axes,
-    session.min_plans
-  );
+  // Use different response for existing vs new session
+  const response = isExisting
+    ? GuidedResponses.formatSessionAlreadyExists(
+        session.session_id,
+        session.task_description,
+        session.status,
+        session.plans.size,
+        session.min_plans
+      )
+    : GuidedResponses.formatInitSuccess(
+        session.session_id,
+        session.task_description,
+        session.required_diversity_axes,
+        session.min_plans
+      );
 
   const oldResponse = `# ✅ Parallel Reasoning Session Initialized
 

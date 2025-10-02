@@ -26,17 +26,92 @@ import { z } from 'zod';
 
 /**
  * Diversity axes for plan differentiation
+ * Now accepts any string to allow dynamic, context-specific axes
  */
-export const DiversityAxisSchema = z.enum([
-  'data_sources',        // Different data sources (official stats vs industry reports)
-  'analytical_models',   // Different models (regression vs Monte Carlo vs normative)
-  'time_horizons',       // Different time frames (short-term vs long-term)
-  'quality_metrics',     // Different quality criteria (precision vs recall vs robustness)
-  'risk_perspectives',   // Different risk lenses (market vs regulatory vs operational)
-  'stakeholder_views'    // Different stakeholder perspectives (customer vs investor vs regulator)
-]);
+export const DiversityAxisSchema = z.string().min(1).describe('Diversity axis for plan differentiation');
 
 export type DiversityAxis = z.infer<typeof DiversityAxisSchema>;
+
+/**
+ * Common diversity axes (for reference, not exhaustive)
+ */
+export const COMMON_DIVERSITY_AXES = {
+  // Universal axes (applicable to most tasks)
+  data_sources: 'Different data sources (official stats vs industry reports vs expert interviews)',
+  analytical_models: 'Different analytical approaches (quantitative vs qualitative vs hybrid)',
+  time_horizons: 'Different time frames (short-term vs medium-term vs long-term)',
+  quality_metrics: 'Different quality criteria (precision vs recall vs robustness vs speed)',
+  risk_perspectives: 'Different risk lenses (market vs regulatory vs operational vs reputational)',
+  stakeholder_views: 'Different stakeholder perspectives (customer vs investor vs employee vs regulator)',
+
+  // Domain-specific axes (suggested based on task context)
+  geographic_scope: 'Different geographic scopes (local vs regional vs global)',
+  customer_segments: 'Different customer segments (enterprise vs SMB vs consumer)',
+  technology_stacks: 'Different technology approaches (cloud-native vs hybrid vs on-premise)',
+  regulatory_frameworks: 'Different regulatory contexts (GDPR vs CCPA vs sector-specific)',
+  cost_drivers: 'Different cost perspectives (capex vs opex vs total cost of ownership)',
+  implementation_approaches: 'Different implementation strategies (phased vs big-bang vs pilot)',
+  competitive_dynamics: 'Different competitive lenses (direct vs indirect vs substitute competition)',
+  value_propositions: 'Different value angles (cost savings vs revenue growth vs risk reduction)',
+  organizational_levels: 'Different organizational perspectives (strategic vs tactical vs operational)',
+  measurement_frameworks: 'Different measurement approaches (leading vs lagging vs predictive indicators)'
+} as const;
+
+/**
+ * Suggest diversity axes based on task description
+ * Returns contextually relevant axes for the given task
+ */
+export function suggestDiversityAxes(task_description: string): {
+  suggested_axes: string[];
+  rationale: string;
+} {
+  const taskLower = task_description.toLowerCase();
+  const suggested: string[] = [];
+  let rationale = '';
+
+  // Financial/Investment analysis
+  if (taskLower.match(/\b(financial|investment|valuation|dcf|npv|roi|revenue|profit)\b/)) {
+    suggested.push('analytical_models', 'time_horizons', 'risk_perspectives');
+    rationale = 'Financial analysis benefits from different analytical models (DCF vs multiples), time horizons (short vs long-term), and risk perspectives (optimistic vs conservative).';
+  }
+  // Market analysis
+  else if (taskLower.match(/\b(market|customer|segment|competitive|industry|tam|sam)\b/)) {
+    suggested.push('data_sources', 'customer_segments', 'competitive_dynamics');
+    rationale = 'Market analysis benefits from different data sources (primary vs secondary), customer segments, and competitive lenses.';
+  }
+  // Technology/Architecture
+  else if (taskLower.match(/\b(technology|architecture|cloud|infrastructure|software|platform)\b/)) {
+    suggested.push('technology_stacks', 'implementation_approaches', 'cost_drivers');
+    rationale = 'Technology decisions benefit from different technology approaches, implementation strategies, and cost perspectives.';
+  }
+  // Regulatory/Compliance
+  else if (taskLower.match(/\b(regulatory|compliance|legal|gdpr|privacy|audit)\b/)) {
+    suggested.push('regulatory_frameworks', 'stakeholder_views', 'risk_perspectives');
+    rationale = 'Regulatory analysis benefits from different regulatory contexts, stakeholder perspectives, and risk lenses.';
+  }
+  // Supply Chain/Operations
+  else if (taskLower.match(/\b(supply chain|operations|logistics|procurement|inventory)\b/)) {
+    suggested.push('geographic_scope', 'cost_drivers', 'risk_perspectives');
+    rationale = 'Supply chain analysis benefits from different geographic scopes, cost drivers, and risk perspectives.';
+  }
+  // HR/Organizational
+  else if (taskLower.match(/\b(hr|human resources|talent|organization|culture|workforce)\b/)) {
+    suggested.push('stakeholder_views', 'organizational_levels', 'time_horizons');
+    rationale = 'HR analysis benefits from different stakeholder perspectives, organizational levels, and time horizons.';
+  }
+  // Strategy/Planning
+  else if (taskLower.match(/\b(strategy|strategic|planning|roadmap|vision|transformation)\b/)) {
+    suggested.push('time_horizons', 'stakeholder_views', 'value_propositions');
+    rationale = 'Strategic planning benefits from different time horizons, stakeholder perspectives, and value propositions.';
+  }
+  // Default: Universal axes
+  else {
+    suggested.push('data_sources', 'analytical_models', 'stakeholder_views');
+    rationale = 'General analysis benefits from different data sources, analytical models, and stakeholder perspectives.';
+  }
+
+  return { suggested_axes: suggested, rationale };
+}
 
 /**
  * Reasoning plan submitted by ChatGPT
@@ -110,7 +185,7 @@ export interface ParallelReasoningSession {
   cross_plan_notes: CrossPlanNote[];
   peer_critiques: PeerCritique[];
   mediation_decisions: MediationDecision[];
-  status: 'initialized' | 'plans_submitted' | 'executing' | 'peer_review' | 'mediation' | 'finalized';
+  status: 'initialized' | 'plans_submitted' | 'executing' | 'peer_review' | 'mediation' | 'finalized' | 'terminated';
   created_at: number;
   updated_at: number;
 }
@@ -125,6 +200,7 @@ export class ParallelReasoningSessionManager {
 
   /**
    * Initialize parallel reasoning session
+   * IDEMPOTENT: If session already exists, returns existing session instead of overwriting
    */
   initSession(args: {
     session_id: string;
@@ -132,9 +208,23 @@ export class ParallelReasoningSessionManager {
     required_diversity_axes: DiversityAxis[];
     min_plans: number;
   }): ParallelReasoningSession {
-    console.log(`[ParallelReasoningSessionManager] Creating session: ${args.session_id}`);
+    console.log(`[ParallelReasoningSessionManager] Init request for session: ${args.session_id}`);
     console.log(`[ParallelReasoningSessionManager] Current sessions count: ${this.sessions.size}`);
 
+    // Check if session already exists (IDEMPOTENT BEHAVIOR)
+    const existingSession = this.sessions.get(args.session_id);
+    if (existingSession) {
+      console.log(`[ParallelReasoningSessionManager] Session ${args.session_id} already exists (status: ${existingSession.status})`);
+      console.log(`[ParallelReasoningSessionManager] Returning existing session (idempotent behavior)`);
+
+      // Update timestamp to indicate activity
+      existingSession.updated_at = Date.now();
+
+      return existingSession;
+    }
+
+    // Create new session
+    console.log(`[ParallelReasoningSessionManager] Creating new session: ${args.session_id}`);
     const session: ParallelReasoningSession = {
       session_id: args.session_id,
       task_description: args.task_description,
@@ -570,6 +660,64 @@ export class ParallelReasoningSessionManager {
 
     console.log(`[ParallelReasoningSessionManager] Loaded ${this.sessions.size} sessions from storage`);
     console.log(`[ParallelReasoningSessionManager] Session IDs: ${Array.from(this.sessions.keys()).join(', ')}`);
+  }
+
+  /**
+   * Reset a session to initialized state (recovery mechanism)
+   * Useful when a session is in an inconsistent state
+   */
+  resetSession(session_id: string): boolean {
+    const session = this.sessions.get(session_id);
+    if (!session) {
+      return false;
+    }
+
+    console.log(`[ParallelReasoningSessionManager] Resetting session ${session_id} to initialized state`);
+
+    // Keep session_id, task_description, required_diversity_axes, min_plans
+    // Reset all execution state
+    session.plans.clear();
+    session.plan_results.clear();
+    session.cross_plan_notes = [];
+    session.peer_critiques = [];
+    session.mediation_decisions = [];
+    session.status = 'initialized';
+    session.updated_at = Date.now();
+
+    console.log(`[ParallelReasoningSessionManager] Session ${session_id} reset successfully`);
+    return true;
+  }
+
+  /**
+   * Terminate a session (mark as terminated)
+   */
+  terminateSession(session_id: string): void {
+    const session = this.sessions.get(session_id);
+    if (!session) {
+      throw new Error(`Session ${session_id} not found`);
+    }
+    session.status = 'terminated';
+    session.updated_at = Date.now();
+    console.log(`[ParallelReasoningSessionManager] Session ${session_id} terminated`);
+  }
+
+  /**
+   * List all sessions
+   */
+  listSessions(): ParallelReasoningSession[] {
+    return Array.from(this.sessions.values());
+  }
+
+  /**
+   * Delete a session completely (for cleanup)
+   */
+  deleteSession(session_id: string): boolean {
+    const existed = this.sessions.has(session_id);
+    if (existed) {
+      this.sessions.delete(session_id);
+      console.log(`[ParallelReasoningSessionManager] Session ${session_id} deleted`);
+    }
+    return existed;
   }
 
   /**

@@ -1,14 +1,55 @@
 # 🧠 MCP PTU Server
 
-**Version 5.4.0** | LLM-Centric Parallel Reasoning with Session Persistence
+**Version 5.5.0** | LLM-Centric Parallel Reasoning with Dynamic Guardrails
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-5.4.0-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Version](https://img.shields.io/badge/Version-5.5.0-green)](https://github.com/VFG92/mcp-ptu-server)
 [![Tests](https://img.shields.io/badge/Tests-167%2F167-brightgreen)]()
 [![Session Persistence](https://img.shields.io/badge/Session%20Persistence-3%2B%20minutes-blue)]()
 
 An MCP server that enables **ChatGPT** to orchestrate multi-path business analysis. **You (ChatGPT) are the sole deliberative agent** — the server provides only guardrails (diversity validation) and persistent memory. You generate diverse reasoning plans, cross-contaminate insights, peer review, and mediate final decisions.
+
+---
+
+## 🎯 What's New in v5.5.0 (2025-10-01)
+
+### Architecture Refinement: Truly LLM-Centric
+
+**MAJOR UPDATE**: Complete refactoring to eliminate pre-script behavior and enable dynamic, context-aware reasoning.
+
+#### 1. **Dynamic Diversity Axes** 🎨
+- ❌ **Before**: Fixed 6 axes (data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views)
+- ✅ **Now**: Context-specific axes suggested based on task domain
+  - Financial tasks → `analytical_models`, `time_horizons`, `risk_perspectives`
+  - Market tasks → `data_sources`, `customer_segments`, `competitive_dynamics`
+  - Technical tasks → `technology_stacks`, `implementation_approaches`, `cost_drivers`
+  - 20+ common axes available, custom axes fully supported
+
+#### 2. **Capabilities as Guardrails** 🛡️
+- ❌ **Before**: Pre-formatted output like `{market_size: 1000, revenue: 500}`
+- ✅ **Now**: Analytical perspectives that guide your reasoning
+  - **Key Questions**: Critical questions to explore
+  - **Analysis Dimensions**: Dimensions to consider with data sources
+  - **Trade-Offs**: Key trade-offs to evaluate
+  - **Risks to Monitor**: Risks with severity and indicators
+  - **Validation Criteria**: How to validate the analysis
+  - **Context**: Assumptions, constraints, dependencies
+  - **Suggested Next Steps**: Follow-up actions
+
+**⚠️ IMPORTANT**: You will NEVER see deterministic output. Only analytical perspectives are shown.
+
+#### 3. **Session Lifecycle Improvements** 🔄
+- **Idempotent Initialization**: Calling `init_parallel_reasoning` twice with same `session_id` returns existing session
+- **Robust Error Handling**: Session termination and reset capabilities
+- **Persistence**: Sessions survive Durable Object evictions (serialization/deserialization)
+- **Recovery**: Clear error messages and recovery paths
+
+#### 4. **LLM-Centric Plan Generation** 🧠
+- ❌ **Before**: Prescriptive guidance like "Plan A: quantitative, Plan B: qualitative"
+- ✅ **Now**: You generate plans dynamically based on task context
+- Server only validates diversity (≥2 axes) and persists state
+- No fixed templates or pre-defined plan types
 
 ---
 
@@ -478,7 +519,24 @@ This architecture is based on:
 7. **list_plan_status** - List pending work (passive, helps you see what's incomplete)
 8. **finalize_parallel_reasoning** - Close session (server validates completeness)
 
-### 58 Capabilities (Execution Engine)
+### 58 Capabilities (Vertical Expertise Perspectives)
+
+**ARCHITECTURE PRINCIPLE**: Capabilities are **vertical expertise perspectives**, NOT deterministic computation engines.
+
+They inject analytical guardrails into your reasoning, not pre-formatted data.
+
+Each capability provides:
+- **Key Questions**: Critical questions to explore
+- **Analysis Dimensions**: Dimensions to consider with data sources
+- **Trade-Offs**: Key trade-offs to evaluate
+- **Risks to Monitor**: Risks with severity and indicators
+- **Validation Criteria**: How to validate the analysis
+- **Context**: Assumptions, constraints, dependencies
+- **Suggested Next Steps**: Follow-up actions
+
+**⚠️ IMPORTANT**: You will NEVER see deterministic output like `{market_size: 1000, revenue: 500}`.
+Only analytical perspectives are shown. This ensures you (ChatGPT) drive the analysis holistically,
+while capabilities provide structured expertise from different vertical domains.
 
 Capabilities are invoked through `execute_plan_step`. Scale from 8-32 capabilities per plan based on task complexity.
 
@@ -498,16 +556,25 @@ Capabilities are invoked through `execute_plan_step`. Scale from 8-32 capabiliti
 
 **Advanced Analytics** (6): Monte Carlo, text mining, innovation radar, scenario engine, pricing AI, digital twins
 
-### 6 Diversity Axes (Real Diversification)
+### Dynamic Diversity Axes (Context-Specific)
 
-Plans must differ on ≥2 axes to prevent semantic drift:
+Plans must differ on ≥2 axes to prevent semantic drift. **Axes are suggested dynamically based on your task**, not limited to a fixed list.
 
-1. **data_sources**: Official statistics vs industry reports vs expert interviews
-2. **analytical_models**: Regression vs Monte Carlo vs qualitative analysis
-3. **time_horizons**: 1-year vs 3-year vs 10-year outlook
-4. **quality_metrics**: Precision vs recall vs robustness vs speed
-5. **risk_perspectives**: Optimistic vs base case vs stress scenarios
-6. **stakeholder_views**: Customer vs investor vs regulator vs employee
+**Common axes** (examples, not exhaustive):
+- **data_sources**: Official statistics vs industry reports vs expert interviews
+- **analytical_models**: Quantitative vs qualitative vs hybrid approaches
+- **time_horizons**: Short-term vs medium-term vs long-term outlook
+- **quality_metrics**: Precision vs recall vs robustness vs speed
+- **risk_perspectives**: Optimistic vs base case vs stress scenarios
+- **stakeholder_views**: Customer vs investor vs regulator vs employee
+- **geographic_scope**: Local vs regional vs global
+- **customer_segments**: Enterprise vs SMB vs consumer
+- **technology_stacks**: Cloud-native vs hybrid vs on-premise
+- **regulatory_frameworks**: GDPR vs CCPA vs sector-specific
+- **cost_drivers**: Capex vs opex vs total cost of ownership
+- **implementation_approaches**: Phased vs big-bang vs pilot
+
+**Or define your own custom axes** relevant to your specific task!
 
 ### 20+ Industry Adapters
 

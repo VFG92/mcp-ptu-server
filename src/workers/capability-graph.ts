@@ -70,10 +70,24 @@ export interface Preconditions {
 
 /**
  * Capability execution result
+ *
+ * ARCHITECTURE CHANGE (2025-10-01):
+ * Capabilities are now VERTICAL EXPERTISE PERSPECTIVES, not deterministic computations.
+ * They provide analytical guardrails (questions, dimensions, trade-offs, risks) to guide
+ * LLM reasoning, not pre-formatted output.
+ *
+ * - `guardrails`: PRIMARY OUTPUT - Analytical perspectives to inject into LLM reasoning
+ * - `output`: DEPRECATED - Legacy pre-formatted data, ignored by orchestrator
  */
 export interface CapabilityResult {
   capability_id: string;
-  output: any;                  // Validated against output contract
+
+  // PRIMARY OUTPUT: Analytical guardrails (optional for backward compatibility, will become required)
+  guardrails?: any;             // GuardrailOutput - analytical perspectives for LLM
+
+  // DEPRECATED: Legacy output (optional, ignored by orchestrator when guardrails present)
+  output?: any;                 // @deprecated Use guardrails instead. Will be removed in future version.
+
   evidence: Record<string, Evidence[]>; // Evidence for each claim
   confidence: number;           // Overall confidence (0-1)
   cost_actual: CostEstimate;    // Actual cost incurred
