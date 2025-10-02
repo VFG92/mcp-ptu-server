@@ -17,9 +17,11 @@ import { ExpressRequestAdapter, ExpressResponseAdapter } from './express-adapter
 import { Whiteboard, type Artifact } from './whiteboard-memory.js';
 import { EvidenceLedger } from './evidence-ledger.js';
 import { ParallelReasoningSessionManager, type ParallelReasoningSession } from './parallel-reasoning-mcp.js';
+import { getDurableObjectId } from './index.js';
 
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;
+  SESSION_REGISTRY: DurableObjectNamespace;
 }
 
 function cloneValue<T>(value: T): T {
@@ -139,6 +141,28 @@ export class MCPSession extends DurableObject {
       const parallelReasoningV5PersistCallback = async () => {
         await this.persistParallelReasoningV5Sessions();
       };
+
+      // Session registry callback for mapping custom session IDs to DO IDs
+      const sessionRegistryCallback = async (customSessionId: string, durableObjectId: string) => {
+        try {
+          // Get deterministic registry DO ID
+          const registryId = getDurableObjectId(this.env.SESSION_REGISTRY, 'global-session-registry');
+          const registryStub = this.env.SESSION_REGISTRY.get(registryId);
+
+          // Register the mapping
+          await registryStub.fetch(
+            new Request('http://internal/register', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customSessionId, durableObjectId })
+            })
+          );
+          console.log(`[MCPSession] Registered session mapping: ${customSessionId} → ${durableObjectId.substring(0, 16)}...`);
+        } catch (error) {
+          console.error(`[MCPSession] Failed to register session in registry: ${error}`);
+        }
+      };
+
       console.log(`[MCPSession] Creating server with parallelReasoningV5Manager: ${!!this.parallelReasoningV5Manager}`);
       console.log(`[MCPSession] Manager has ${this.parallelReasoningV5Manager.getAllSessions().size} sessions before createServer`);
       const { server, cleanup, startNotificationIntervals } = createServer(
@@ -149,7 +173,8 @@ export class MCPSession extends DurableObject {
         this.evidenceLedger,
         capabilityPersistCallback,
         this.parallelReasoningV5Manager,
-        parallelReasoningV5PersistCallback
+        parallelReasoningV5PersistCallback,
+        sessionRegistryCallback
       );
       console.log(`[MCPSession] Server created successfully`);
       this.server = server;

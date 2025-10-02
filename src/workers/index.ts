@@ -46,7 +46,7 @@ const isNativeDurableObjectId = (value: string): boolean => {
  * Get Durable Object ID from session ID
  * Supports both native DO IDs (64 hex chars) and custom named IDs
  */
-function getDurableObjectId(
+export function getDurableObjectId(
   namespace: DurableObjectNamespace,
   sessionId: string
 ): DurableObjectId {
@@ -64,7 +64,7 @@ function getDurableObjectId(
     console.log(`[getDurableObjectId] Using idFromName for custom session ID`);
     return (namespace as any).idFromName(sessionId);
   }
-};
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -72,6 +72,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 // Type definitions for Cloudflare Workers environment
 export interface Env {
   MCP_SESSION: DurableObjectNamespace;
+  SESSION_REGISTRY: DurableObjectNamespace;
 }
 
 // Create the main Hono app
@@ -246,7 +247,9 @@ app.post('/mcp', async (c) => {
     console.log(`[Worker] Using session_id from header: ${headerSessionId}`);
   }
 
-  // PRIORITY 2: Fall back to body only if no header (e.g., during initialize)
+  // PRIORITY 2: Check body for custom session_id (parallel reasoning)
+  // If we find a custom session_id in tool arguments, check the registry
+  let customSessionId: string | null = null;
   if (!routedDoId) {
     console.log(`[Worker] No session_id found in header, checking body...`);
 
@@ -258,33 +261,38 @@ app.post('/mcp', async (c) => {
       console.log(`[Worker] Unable to parse request body for session routing: ${error}`);
     }
 
-    const considerCandidate = (value: unknown, source: string) => {
-      if (routedDoId || typeof value !== 'string') {
-        return;
-      }
-      const extracted = extractSessionId(value);
-      if (extracted) {
-        routedDoId = extracted;
-        routedDoIdSource = source;
-        routedDoIdRawValue = value;
-        console.log(`[Worker] Found session_id candidate from ${source}: ${value}`);
-      }
-    };
-
+    // Check if this is a tool call with a custom session_id
     if (isRecord(parsedBody)) {
-      considerCandidate(parsedBody['transport_session_id'], 'body.transport_session_id');
-      considerCandidate(parsedBody['session_id'], 'body.session_id');
-
       const params = isRecord(parsedBody['params']) ? parsedBody['params'] : null;
       if (params) {
-        considerCandidate(params['transport_session_id'], 'body.params.transport_session_id');
-        considerCandidate(params['session_id'], 'body.params.session_id');
-
         const args = isRecord(params['arguments']) ? params['arguments'] : null;
-        if (args) {
-          considerCandidate(args['transport_session_id'], 'body.params.arguments.transport_session_id');
-          // NOTE: Do NOT use args['session_id'] for routing - it's for internal parallel reasoning logic
-          // considerCandidate(args['session_id'], 'body.params.arguments.session_id');
+        if (args && typeof args['session_id'] === 'string') {
+          customSessionId = args['session_id'];
+          console.log(`[Worker] Found custom session_id in tool arguments: ${customSessionId}`);
+
+          // Check registry for existing mapping
+          // Use a deterministic ID for the global registry
+          try {
+            const registryId = getDurableObjectId(c.env.SESSION_REGISTRY, 'global-session-registry');
+            const registryStub = c.env.SESSION_REGISTRY.get(registryId);
+            const registryResponse = await registryStub.fetch(
+              new Request(`http://internal/lookup?session_id=${encodeURIComponent(customSessionId)}`)
+            );
+
+            if (registryResponse.ok) {
+              const data = await registryResponse.json() as { doId: string | null };
+              if (data.doId) {
+                routedDoId = data.doId;
+                routedDoIdSource = 'registry';
+                routedDoIdRawValue = customSessionId;
+                console.log(`[Worker] Found mapping in registry: ${customSessionId} → ${data.doId.substring(0, 16)}...`);
+              } else {
+                console.log(`[Worker] No mapping found in registry for: ${customSessionId}`);
+              }
+            }
+          } catch (error) {
+            console.error(`[Worker] Error checking registry: ${error}`);
+          }
         }
       }
     }
@@ -418,6 +426,6 @@ app.delete('/mcp', async (c) => {
 // Export the app as the default Worker handler
 export default app;
 
-// Export the Durable Object class
+// Export the Durable Object classes
 export { MCPSession } from './session.js';
-
+export { SessionRegistry } from './session-registry.js';

@@ -19,10 +19,19 @@ name = "MCP_SESSION"
 class_name = "MCPSession"
 script_name = "mcp-server"
 
+[[durable_objects.bindings]]
+name = "SESSION_REGISTRY"
+class_name = "SessionRegistry"
+script_name = "mcp-server"
+
 # Migrations for Durable Objects (Free plan requires new_sqlite_classes)
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["MCPSession"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SessionRegistry"]
 
 # Environment variables (optional)
 [vars]

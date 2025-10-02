@@ -147,7 +147,8 @@ export const createServer = (
   capabilityLedger?: EvidenceLedger,
   capabilityPersistCallback?: () => Promise<void>,
   parallelReasoningV5Manager?: ParallelReasoningSessionManager,
-  parallelReasoningV5PersistCallback?: () => Promise<void>
+  parallelReasoningV5PersistCallback?: () => Promise<void>,
+  sessionRegistryCallback?: (customSessionId: string, durableObjectId: string) => Promise<void>
 ) => {
   // Initialize parallel reasoning session store if not provided
   const sessionStore = parallelReasoningSessions || new Map<string, ParallelReasoningSession>();
@@ -561,6 +562,23 @@ Use these 8 tools for multi-path reasoning:
         console.log(`[CallTool] Calling handleInitParallelReasoning with session_id: ${validatedArgs.session_id}`);
         const result = await handleInitParallelReasoning(validatedArgs, parallelReasoningV5Manager);
         console.log(`[CallTool] handleInitParallelReasoning completed. Sessions after init: ${parallelReasoningV5Manager.getAllSessions().size}`);
+
+        // Register session in registry
+        if (sessionRegistryCallback) {
+          const transportSessionId = getTransportSessionId?.();
+          if (transportSessionId) {
+            console.log(`[CallTool] Registering session mapping: ${validatedArgs.session_id} → ${transportSessionId.substring(0, 16)}...`);
+            try {
+              await sessionRegistryCallback(validatedArgs.session_id, transportSessionId);
+              console.log(`[CallTool] Session mapping registered successfully`);
+            } catch (error) {
+              console.error(`[CallTool] Failed to register session mapping: ${error}`);
+            }
+          } else {
+            console.warn(`[CallTool] Cannot register session: transport session ID is not available`);
+          }
+        }
+
         if (parallelReasoningV5PersistCallback) {
           console.log(`[CallTool] Calling persist callback...`);
           await parallelReasoningV5PersistCallback();

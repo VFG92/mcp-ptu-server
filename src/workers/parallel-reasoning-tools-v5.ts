@@ -166,10 +166,14 @@ export async function handleSubmitReasoningPlan(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   console.log(`[handleSubmitReasoningPlan] Using manager: ${manager === globalParallelReasoningManager ? 'global' : 'durable-object'}`);
   console.log(`[handleSubmitReasoningPlan] Session ID: ${args.session_id}`);
+  console.log(`[handleSubmitReasoningPlan] Manager has ${manager.getAllSessions().size} sessions`);
+  console.log(`[handleSubmitReasoningPlan] Available session IDs: ${Array.from(manager.getAllSessions().keys()).join(', ')}`);
 
   // Check if session exists
   const session = manager.getSession(args.session_id);
   if (!session) {
+    console.error(`[handleSubmitReasoningPlan] Session ${args.session_id} NOT FOUND in manager!`);
+    console.error(`[handleSubmitReasoningPlan] This suggests the request was routed to a different Durable Object instance.`);
     const response = GuidedResponses.formatSessionNotFound(args.session_id);
     return { content: [{ type: 'text', text: response }] };
   }
