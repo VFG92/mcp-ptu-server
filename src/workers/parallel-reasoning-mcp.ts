@@ -73,7 +73,7 @@ export function suggestDiversityAxes(task_description: string): {
   let rationale = '';
 
   // Financial/Investment analysis
-  if (taskLower.match(/\b(financial|investment|valuation|dcf|npv|roi|revenue|profit)\b/)) {
+  if (taskLower.match(/\b(financial|investment|valuation|dcf|npv|roi|revenue|profit|portfolio|risk)\b/)) {
     suggested.push('analytical_models', 'time_horizons', 'risk_perspectives');
     rationale = 'Financial analysis benefits from different analytical models (DCF vs multiples), time horizons (short vs long-term), and risk perspectives (optimistic vs conservative).';
   }
@@ -81,6 +81,11 @@ export function suggestDiversityAxes(task_description: string): {
   else if (taskLower.match(/\b(market|customer|segment|competitive|industry|tam|sam)\b/)) {
     suggested.push('data_sources', 'customer_segments', 'competitive_dynamics');
     rationale = 'Market analysis benefits from different data sources (primary vs secondary), customer segments, and competitive lenses.';
+  }
+  // Security/Cybersecurity (check before technology to catch "cybersecurity architecture")
+  else if (taskLower.match(/\b(security|cybersecurity|cyber|threat|vulnerability|zero-trust)\b/)) {
+    suggested.push('risk_perspectives', 'technology_stacks', 'implementation_approaches');
+    rationale = 'Security analysis benefits from different risk perspectives, technology approaches, and implementation strategies.';
   }
   // Technology/Architecture
   else if (taskLower.match(/\b(technology|architecture|cloud|infrastructure|software|platform)\b/)) {
@@ -97,8 +102,8 @@ export function suggestDiversityAxes(task_description: string): {
     suggested.push('geographic_scope', 'cost_drivers', 'risk_perspectives');
     rationale = 'Supply chain analysis benefits from different geographic scopes, cost drivers, and risk perspectives.';
   }
-  // HR/Organizational
-  else if (taskLower.match(/\b(hr|human resources|talent|organization|culture|workforce)\b/)) {
+  // HR/Organizational (check before strategy to catch "organizational transformation")
+  else if (taskLower.match(/\b(hr|human resources|talent|organization|organizational|culture|workforce)\b/)) {
     suggested.push('stakeholder_views', 'organizational_levels', 'time_horizons');
     rationale = 'HR analysis benefits from different stakeholder perspectives, organizational levels, and time horizons.';
   }
