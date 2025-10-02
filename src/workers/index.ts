@@ -237,56 +237,57 @@ app.post('/mcp', async (c) => {
   let routedDoIdSource: string | null = null;
   let routedDoIdRawValue: string | null = null;
 
-  // PRIORITY 1: Check body first (for tool calls with session_id parameter)
-  let parsedBody: unknown = null;
-  try {
-    parsedBody = await rawRequest.clone().json();
-    console.log(`[Worker] Request body for routing: ${JSON.stringify(parsedBody).substring(0, 500)}`);
-  } catch (error) {
-    console.log(`[Worker] Unable to parse request body for session routing: ${error}`);
+  // PRIORITY 1: Check header first (for MCP session routing)
+  // The mcp-session-id header is the authoritative source for Durable Object routing
+  routedDoId = extractSessionId(headerSessionId ?? null);
+  if (routedDoId) {
+    routedDoIdSource = 'header';
+    routedDoIdRawValue = headerSessionId ?? null;
+    console.log(`[Worker] Using session_id from header: ${headerSessionId}`);
   }
 
-  const considerCandidate = (value: unknown, source: string) => {
-    if (routedDoId || typeof value !== 'string') {
-      return;
+  // PRIORITY 2: Fall back to body only if no header (e.g., during initialize)
+  if (!routedDoId) {
+    console.log(`[Worker] No session_id found in header, checking body...`);
+
+    let parsedBody: unknown = null;
+    try {
+      parsedBody = await rawRequest.clone().json();
+      console.log(`[Worker] Request body for routing: ${JSON.stringify(parsedBody).substring(0, 500)}`);
+    } catch (error) {
+      console.log(`[Worker] Unable to parse request body for session routing: ${error}`);
     }
-    const extracted = extractSessionId(value);
-    if (extracted) {
-      routedDoId = extracted;
-      routedDoIdSource = source;
-      routedDoIdRawValue = value;
-      console.log(`[Worker] Found session_id candidate from ${source}: ${value}`);
-    }
-  };
 
-  if (isRecord(parsedBody)) {
-    considerCandidate(parsedBody['transport_session_id'], 'body.transport_session_id');
-    considerCandidate(parsedBody['session_id'], 'body.session_id');
+    const considerCandidate = (value: unknown, source: string) => {
+      if (routedDoId || typeof value !== 'string') {
+        return;
+      }
+      const extracted = extractSessionId(value);
+      if (extracted) {
+        routedDoId = extracted;
+        routedDoIdSource = source;
+        routedDoIdRawValue = value;
+        console.log(`[Worker] Found session_id candidate from ${source}: ${value}`);
+      }
+    };
 
-    const params = isRecord(parsedBody['params']) ? parsedBody['params'] : null;
-    if (params) {
-      considerCandidate(params['transport_session_id'], 'body.params.transport_session_id');
-      considerCandidate(params['session_id'], 'body.params.session_id');
+    if (isRecord(parsedBody)) {
+      considerCandidate(parsedBody['transport_session_id'], 'body.transport_session_id');
+      considerCandidate(parsedBody['session_id'], 'body.session_id');
 
-      const args = isRecord(params['arguments']) ? params['arguments'] : null;
-      if (args) {
-        considerCandidate(args['transport_session_id'], 'body.params.arguments.transport_session_id');
-        considerCandidate(args['session_id'], 'body.params.arguments.session_id');
+      const params = isRecord(parsedBody['params']) ? parsedBody['params'] : null;
+      if (params) {
+        considerCandidate(params['transport_session_id'], 'body.params.transport_session_id');
+        considerCandidate(params['session_id'], 'body.params.session_id');
+
+        const args = isRecord(params['arguments']) ? params['arguments'] : null;
+        if (args) {
+          considerCandidate(args['transport_session_id'], 'body.params.arguments.transport_session_id');
+          // NOTE: Do NOT use args['session_id'] for routing - it's for internal parallel reasoning logic
+          // considerCandidate(args['session_id'], 'body.params.arguments.session_id');
+        }
       }
     }
-  }
-
-  // PRIORITY 2: Fall back to header if no session_id in body
-  if (!routedDoId) {
-    console.log(`[Worker] No session_id found in request body, checking header...`);
-    routedDoId = extractSessionId(headerSessionId ?? null);
-    if (routedDoId) {
-      routedDoIdSource = 'header';
-      routedDoIdRawValue = headerSessionId ?? null;
-      console.log(`[Worker] Using session_id from header: ${headerSessionId}`);
-    }
-  } else {
-    console.log(`[Worker] Using session_id from body (priority over header): ${routedDoIdRawValue}`);
   }
 
   if (!routedDoId) {

@@ -88,9 +88,9 @@ describe('Session Lifecycle Edge Cases', () => {
   });
 
   describe('Init after session terminated', () => {
-    it('should allow creating new session with same ID after termination', () => {
+    it('should automatically reset terminated session on init', () => {
       const sessionId = 'test-session-003';
-      
+
       // Init and terminate
       manager.initSession({
         session_id: sessionId,
@@ -100,19 +100,23 @@ describe('Session Lifecycle Edge Cases', () => {
       });
 
       manager.terminateSession(sessionId);
-      
+
       const terminatedSession = manager.getSession(sessionId);
       expect(terminatedSession?.status).toBe('terminated');
 
-      // Try to init again - should return terminated session (idempotent)
+      // Try to init again - should automatically reset to initialized
       const session2 = manager.initSession({
         session_id: sessionId,
-        task_description: 'Test task',
-        required_diversity_axes: ['data_sources', 'analytical_models'],
-        min_plans: 2
+        task_description: 'New test task',
+        required_diversity_axes: ['data_sources', 'time_horizons'],
+        min_plans: 3
       });
 
-      expect(session2.status).toBe('terminated'); // Still terminated
+      expect(session2.status).toBe('initialized'); // Automatically reset
+      expect(session2.task_description).toBe('New test task'); // Updated with new params
+      expect(session2.required_diversity_axes).toEqual(['data_sources', 'time_horizons']);
+      expect(session2.min_plans).toBe(3);
+      expect(session2.plans.size).toBe(0); // Cleared
     });
 
     it('should allow reset and reinit after termination', () => {

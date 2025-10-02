@@ -201,6 +201,7 @@ export class ParallelReasoningSessionManager {
   /**
    * Initialize parallel reasoning session
    * IDEMPOTENT: If session already exists, returns existing session instead of overwriting
+   * SPECIAL CASE: If session is terminated, resets it to initialized state
    */
   initSession(args: {
     session_id: string;
@@ -215,6 +216,23 @@ export class ParallelReasoningSessionManager {
     const existingSession = this.sessions.get(args.session_id);
     if (existingSession) {
       console.log(`[ParallelReasoningSessionManager] Session ${args.session_id} already exists (status: ${existingSession.status})`);
+
+      // SPECIAL CASE: If session is terminated, reset it to allow reuse
+      if (existingSession.status === 'terminated') {
+        console.log(`[ParallelReasoningSessionManager] Session ${args.session_id} is terminated - resetting to initialized state`);
+        this.resetSession(args.session_id);
+        const resetSession = this.sessions.get(args.session_id);
+        if (resetSession) {
+          // Update with new parameters
+          resetSession.task_description = args.task_description;
+          resetSession.required_diversity_axes = args.required_diversity_axes;
+          resetSession.min_plans = args.min_plans;
+          resetSession.updated_at = Date.now();
+          console.log(`[ParallelReasoningSessionManager] Session ${args.session_id} reset and updated with new parameters`);
+          return resetSession;
+        }
+      }
+
       console.log(`[ParallelReasoningSessionManager] Returning existing session (idempotent behavior)`);
 
       // Update timestamp to indicate activity
@@ -247,10 +265,12 @@ export class ParallelReasoningSessionManager {
 
   /**
    * Submit reasoning plan (ChatGPT-generated)
-   * 
+   *
    * Validates:
    * - Plan has minimum diversity axes
    * - Diversity axes differ from existing plans
+   *
+   * @throws Error if session not found
    */
   submitPlan(session_id: string, plan: ReasoningPlan): {
     accepted: boolean;
@@ -270,17 +290,7 @@ export class ParallelReasoningSessionManager {
     const session = this.sessions.get(session_id);
     if (!session) {
       console.log(`[ParallelReasoningSessionManager] Session not found: ${session_id}`);
-      return {
-        accepted: false,
-        reason: 'Session not found',
-        diversity_validation: {
-          axes_declared: [],
-          axes_unique_to_existing: false,
-          min_axes_met: false,
-          required_axes_satisfied: false,
-          required_axes: []
-        }
-      };
+      throw new Error(`Session ${session_id} not found`);
     }
 
     console.log(`[ParallelReasoningSessionManager] Session found: ${session_id}`);
@@ -399,10 +409,14 @@ export class ParallelReasoningSessionManager {
 
   /**
    * Record capability result for a plan
+   *
+   * @throws Error if session not found
    */
   recordPlanResult(session_id: string, plan_id: string, result: any): void {
     const session = this.sessions.get(session_id);
-    if (!session) return;
+    if (!session) {
+      throw new Error(`Session ${session_id} not found`);
+    }
 
     const results = session.plan_results.get(plan_id);
     if (results) {
@@ -644,18 +658,51 @@ export class ParallelReasoningSessionManager {
   /**
    * Deserialize sessions from Durable Object storage
    * Converts arrays back to Maps
+   *
+   * Handles corrupted/invalid input gracefully by skipping invalid entries
    */
   loadSessions(sessions: Array<[string, any]>): void {
     this.sessions.clear();
 
-    for (const [sessionId, serializedSession] of sessions) {
-      // Convert arrays back to Maps
-      const session: ParallelReasoningSession = {
-        ...serializedSession,
-        plans: new Map(serializedSession.plans || []),
-        plan_results: new Map(serializedSession.plan_results || [])
-      };
-      this.sessions.set(sessionId, session);
+    // Handle null/undefined/non-iterable input gracefully
+    if (!sessions || !Array.isArray(sessions)) {
+      console.log(`[ParallelReasoningSessionManager] Invalid sessions input (not an array), skipping load`);
+      return;
+    }
+
+    for (const entry of sessions) {
+      try {
+        // Validate entry structure
+        if (!Array.isArray(entry) || entry.length !== 2) {
+          console.warn(`[ParallelReasoningSessionManager] Skipping invalid session entry (not a [key, value] pair)`);
+          continue;
+        }
+
+        const [sessionId, serializedSession] = entry;
+
+        // Validate session ID
+        if (typeof sessionId !== 'string') {
+          console.warn(`[ParallelReasoningSessionManager] Skipping session with invalid ID (not a string)`);
+          continue;
+        }
+
+        // Validate serialized session
+        if (!serializedSession || typeof serializedSession !== 'object') {
+          console.warn(`[ParallelReasoningSessionManager] Skipping session ${sessionId} with invalid data`);
+          continue;
+        }
+
+        // Convert arrays back to Maps
+        const session: ParallelReasoningSession = {
+          ...serializedSession,
+          plans: new Map(serializedSession.plans || []),
+          plan_results: new Map(serializedSession.plan_results || [])
+        };
+        this.sessions.set(sessionId, session);
+      } catch (error) {
+        console.error(`[ParallelReasoningSessionManager] Error loading session entry:`, error);
+        // Continue loading other sessions
+      }
     }
 
     console.log(`[ParallelReasoningSessionManager] Loaded ${this.sessions.size} sessions from storage`);
