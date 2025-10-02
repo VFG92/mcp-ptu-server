@@ -11,6 +11,7 @@
 
 import type { DiversityAxis, ReasoningPlan } from './parallel-reasoning-mcp.js';
 import { suggestDiversityAxes, COMMON_DIVERSITY_AXES } from './parallel-reasoning-mcp.js';
+import type { SessionMetrics } from './session-metrics.js';
 
 /**
  * Format session already exists (idempotent behavior)
@@ -416,9 +417,10 @@ Submit additional plans with \`submit_reasoning_plan\`.
 export function formatFinalizationSuccess(
   session_id: string,
   plans_count: number,
-  decisions_count: number
+  decisions_count: number,
+  metrics?: SessionMetrics
 ): string {
-  return `# ✅ Session Finalized Successfully
+  let response = `# ✅ Session Finalized Successfully
 
 **Session ID**: \`${session_id}\`
 
@@ -427,7 +429,53 @@ export function formatFinalizationSuccess(
 - **Mediation decisions**: ${decisions_count}
 - **Status**: Complete
 
-## Results
+`;
+
+  // Add metrics if available
+  if (metrics) {
+    response += `## 📊 Quality Metrics
+
+`;
+
+    response += `- **Confidence**: ${(metrics.confidence * 100).toFixed(1)}% `;
+    response += metrics.confidence >= 0.6 ? '✅' : '⚠️';
+    response += ` (${metrics.details.confidence.unique_evidence_count} evidence, `;
+    response += `${metrics.details.confidence.evidence_low_count} quality issues)\n`;
+
+    response += `- **Coverage**: ${(metrics.coverage * 100).toFixed(1)}% `;
+    response += metrics.coverage >= 0.8 ? '✅' : '⚠️';
+    response += ` (${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} steps)\n`;
+
+    response += `- **Consensus**: ${(metrics.consensus * 100).toFixed(1)}% `;
+    response += metrics.consensus >= 0.5 ? '✅' : '⚠️';
+    response += ` (${metrics.details.consensus.agreements} agreements, `;
+    response += `${metrics.details.consensus.conflicts} conflicts)\n\n`;
+
+    // Add recommendations if metrics are below thresholds
+    const hasLowMetrics = metrics.confidence < 0.6 || metrics.coverage < 0.8 || metrics.consensus < 0.5;
+
+    if (hasLowMetrics) {
+      response += `### 💡 Recommendations\n\n`;
+
+      if (metrics.confidence < 0.6) {
+        const needed = Math.ceil((0.6 - metrics.confidence) / 0.1);
+        response += `- **Improve Confidence**: Add ${needed} more evidence references using \`execute_plan_step\` to strengthen claims\n`;
+      }
+
+      if (metrics.coverage < 0.8) {
+        const needed = Math.ceil((0.8 - metrics.coverage) * metrics.details.coverage.total_declared_steps);
+        response += `- **Improve Coverage**: Execute ${needed} more capability steps to complete declared workflows\n`;
+      }
+
+      if (metrics.consensus < 0.5) {
+        response += `- **Improve Consensus**: Submit additional peer critiques using \`submit_peer_critique\` to resolve conflicts\n`;
+      }
+
+      response += `\n`;
+    }
+  }
+
+  response += `## Results
 The parallel reasoning workflow is complete. All plans have been executed, cross-contaminated, peer-reviewed, and mediated.
 
 You can now use the synthesized insights from the mediation decisions to make your final recommendation.
@@ -436,5 +484,7 @@ You can now use the synthesized insights from the mediation decisions to make yo
 
 **Workflow Complete** 🎉
 `;
+
+  return response;
 }
 

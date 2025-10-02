@@ -25,6 +25,7 @@
 import { z } from 'zod';
 import type { SignalSummary } from './evidence-signals.js';
 import { analyzePlan, analyzeCritique, analyzeMediationDecision, analyzeCrossPlanNote } from './evidence-signals.js';
+import { computeSessionMetrics, type SessionMetrics } from './session-metrics.js';
 
 /**
  * Diversity axes for plan differentiation
@@ -198,15 +199,30 @@ export interface ParallelReasoningSession {
   status: 'initialized' | 'plans_submitted' | 'executing' | 'peer_review' | 'mediation' | 'finalized' | 'terminated';
   created_at: number;
   updated_at: number;
+  // NEW: Computed quality metrics (cached)
+  metrics?: {
+    confidence: number;
+    coverage: number;
+    consensus: number;
+    computed_at: number;
+  };
 }
 
 /**
  * Parallel Reasoning Session Manager
- * 
+ *
  * Pure persistence and structural validation - NO intelligence
  */
 export class ParallelReasoningSessionManager {
   private sessions: Map<string, ParallelReasoningSession> = new Map();
+  private evidenceLedger?: any; // EvidenceLedger instance (optional)
+
+  /**
+   * Set evidence ledger for automatic evidence registration
+   */
+  setEvidenceLedger(ledger: any): void {
+    this.evidenceLedger = ledger;
+  }
 
   /**
    * Initialize parallel reasoning session
@@ -447,6 +463,37 @@ export class ParallelReasoningSessionManager {
       results.push(resultWithEvidence);
       session.updated_at = Date.now();
 
+      // Register evidence in ledger if available
+      if (this.evidenceLedger) {
+        try {
+          // Extract claim from result (use task description or summary)
+          const claim = result.task || result.summary || `Execution result for ${plan_id}`;
+
+          // Create evidence entry with minimal structure
+          const evidence = [{
+            type: 'CALCULATION', // Default type for capability results
+            value: result,
+            confidence: result.confidence || 0.7,
+            source: `Plan ${plan_id} execution`,
+            timestamp: Date.now()
+          }];
+
+          // Register in evidence ledger with custom ID
+          this.evidenceLedger.addEvidence(
+            evidence_id,           // Use evidence_id as artifact_id
+            'capability_result',   // Field path
+            claim,                 // Claim
+            evidence,              // Evidence array
+            evidence_id            // Use evidence_id as entry ID (custom ID)
+          );
+
+          console.log(`[ParallelReasoningSessionManager] Registered evidence ${evidence_id} in ledger`);
+        } catch (error) {
+          // Non-blocking: log error but don't fail the operation
+          console.warn(`[ParallelReasoningSessionManager] Failed to register evidence ${evidence_id}:`, error);
+        }
+      }
+
       return evidence_id;
     }
 
@@ -564,6 +611,7 @@ export class ParallelReasoningSessionManager {
       flagged_artifacts_count: number;
       flagged_artifacts: string[];
     };
+    metrics?: SessionMetrics;
   } {
     const session = this.sessions.get(session_id);
     if (!session) {
@@ -663,6 +711,9 @@ export class ParallelReasoningSessionManager {
       session.updated_at = Date.now();
     }
 
+    // Compute quality metrics
+    const metrics = this.computeMetrics(session_id);
+
     // Compile all warnings
     const warnings: string[] = [];
 
@@ -674,6 +725,34 @@ export class ParallelReasoningSessionManager {
       warnings.push(`⚠️ ${flagged_artifacts.length} artifact(s) flagged with quality concerns:`);
       warnings.push(...quality_warnings.map(w => `   - ${w}`));
       warnings.push(`Review flagged artifacts before finalizing to ensure analysis depth.`);
+    }
+
+    // Add metric warnings (non-blocking)
+    if (metrics.confidence < 0.6) {
+      const needed = Math.ceil((0.6 - metrics.confidence) / 0.1);
+      warnings.push(
+        `⚠️ Low Confidence (${(metrics.confidence * 100).toFixed(1)}%): ` +
+        `Add ${needed} more evidence references or improve quality signals to reach 60% threshold`
+      );
+    }
+
+    if (metrics.coverage < 0.8) {
+      const needed = Math.ceil(
+        (0.8 - metrics.coverage) * metrics.details.coverage.total_declared_steps
+      );
+      warnings.push(
+        `⚠️ Low Coverage (${(metrics.coverage * 100).toFixed(1)}%): ` +
+        `Execute ${needed} more capability steps to reach 80% threshold ` +
+        `(${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} completed)`
+      );
+    }
+
+    if (metrics.consensus < 0.5) {
+      warnings.push(
+        `⚠️ Low Consensus (${(metrics.consensus * 100).toFixed(1)}%): ` +
+        `Resolve conflicts through additional peer reviews or mediation ` +
+        `(${metrics.details.consensus.agreements} agreements, ${metrics.details.consensus.conflicts} conflicts)`
+      );
     }
 
     return {
@@ -691,7 +770,8 @@ export class ParallelReasoningSessionManager {
       quality_summary: {
         flagged_artifacts_count: flagged_artifacts.length,
         flagged_artifacts
-      }
+      },
+      metrics
     };
   }
 
@@ -885,6 +965,30 @@ export class ParallelReasoningSessionManager {
    */
   clearSessions(): void {
     this.sessions.clear();
+  }
+
+  /**
+   * Compute quality metrics for a session
+   * Calculates confidence, coverage, and consensus based on session data
+   */
+  computeMetrics(session_id: string): SessionMetrics {
+    const session = this.sessions.get(session_id);
+    if (!session) {
+      throw new Error(`Session ${session_id} not found`);
+    }
+
+    const metrics = computeSessionMetrics(session);
+
+    // Cache metrics in session
+    session.metrics = {
+      confidence: metrics.confidence,
+      coverage: metrics.coverage,
+      consensus: metrics.consensus,
+      computed_at: metrics.computed_at
+    };
+    session.updated_at = Date.now();
+
+    return metrics;
   }
 }
 

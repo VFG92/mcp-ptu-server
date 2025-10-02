@@ -153,6 +153,12 @@ export const createServer = (
   // Initialize parallel reasoning session store if not provided
   const sessionStore = parallelReasoningSessions || new Map<string, ParallelReasoningSession>();
 
+  // Configure parallel reasoning v5 manager with evidence ledger
+  if (parallelReasoningV5Manager && capabilityLedger) {
+    parallelReasoningV5Manager.setEvidenceLedger(capabilityLedger);
+    console.log('[createServer] Configured parallelReasoningV5Manager with evidence ledger');
+  }
+
   // Store capability system references for tool handlers
   const capabilitySystemRefs = {
     whiteboard: capabilityWhiteboard,

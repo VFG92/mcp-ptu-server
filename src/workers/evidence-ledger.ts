@@ -47,14 +47,16 @@ export class EvidenceLedger {
 
   /**
    * Add evidence for a claim
+   * @param customId Optional custom ID to use instead of auto-generated ID
    */
   addEvidence(
     artifactId: string,
     fieldPath: string,
     claim: string,
-    evidence: Evidence[]
+    evidence: Evidence[],
+    customId?: string
   ): string {
-    const id = this.generateId();
+    const id = customId || this.generateId();
     const entry: EvidenceLedgerEntry = {
       id,
       artifact_id: artifactId,
@@ -388,6 +390,48 @@ export class EvidenceLedger {
 
   private generateId(): string {
     return `evidence_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Serialize the entire ledger for persistence
+   */
+  serialize(): {
+    entries: Array<[string, EvidenceLedgerEntry]>;
+    artifactIndex: Array<[string, string[]]>;
+  } {
+    return {
+      entries: Array.from(this.entries.entries()),
+      artifactIndex: Array.from(this.artifactIndex.entries()).map(([key, set]) => [key, Array.from(set)])
+    };
+  }
+
+  /**
+   * Deserialize and restore ledger state
+   */
+  deserialize(data: {
+    entries: Array<[string, EvidenceLedgerEntry]>;
+    artifactIndex: Array<[string, string[]]>;
+  }): void {
+    this.entries.clear();
+    this.artifactIndex.clear();
+
+    // Restore entries
+    for (const [id, entry] of data.entries) {
+      this.entries.set(id, entry);
+    }
+
+    // Restore artifact index
+    for (const [artifactId, entryIds] of data.artifactIndex) {
+      this.artifactIndex.set(artifactId, new Set(entryIds));
+    }
+  }
+
+  /**
+   * Clear all entries (for testing)
+   */
+  clear(): void {
+    this.entries.clear();
+    this.artifactIndex.clear();
   }
 }
 

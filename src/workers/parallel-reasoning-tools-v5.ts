@@ -553,16 +553,17 @@ export async function handleFinalizeParallelReasoning(
   let response: string;
 
   if (result.finalized) {
-    // Success - use guided response
+    // Success - use guided response with metrics
     response = GuidedResponses.formatFinalizationSuccess(
       args.session_id,
       session.plans.size,
-      session.mediation_decisions.length
+      session.mediation_decisions.length,
+      result.metrics
     );
 
-    // Append warnings if any
+    // Append warnings if any (metrics warnings are already included in formatFinalizationSuccess)
     if (result.warnings && result.warnings.length > 0) {
-      response += `\n\n## ⚠️ Warnings\n\n`;
+      response += `\n\n## ⚠️ Additional Warnings\n\n`;
       response += result.warnings.map(w => `- ${w}`).join('\n') + '\n';
     }
 

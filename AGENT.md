@@ -1,12 +1,115 @@
 # 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.7.0** | For AI Agents Working on This Repository
+**Version 5.8.0** | For AI Agents Working on This Repository
 
 This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
 
 ---
 
 ## 🔧 Recent Fixes
+
+### v5.8.0 - Dynamic Quality Metrics & Evidence Ledger Integration (2025-10-02)
+
+**NEW FEATURES**: Real-time quality metrics calculation and automatic evidence ledger registration.
+
+#### Problem Statement
+
+Users requested:
+1. **Evidence ID Validation Issue**: Mediation decisions were being rejected because automatically generated evidence IDs weren't registered in the evidence ledger
+2. **Placeholder Metrics**: Quality indicators (confidence, coverage, consensus) were cosmetic values that didn't provide actionable feedback or guide workflow behavior
+
+#### Solutions Implemented
+
+##### 1. Evidence Ledger Integration
+
+**Problem**: `recordPlanResult()` generated evidence IDs in format `{session_id}:{plan_id}:step{N}` but didn't register them in the evidence ledger. When mediation decisions referenced these IDs, validation failed because `ledger.getEntry(id)` returned `undefined`.
+
+**Root Cause**:
+```typescript
+// Evidence ID generated but not registered
+const evidence_id = `${session_id}:${plan_id}:step${stepNumber}`;
+// Ledger validation failed
+if (!ledger.getEntry(evidence_id)) {
+  throw new Error('Evidence ID not found');
+}
+```
+
+**Solution**:
+- Added `evidenceLedger` property to `ParallelReasoningSessionManager`
+- Added `setEvidenceLedger()` method to configure the ledger
+- Modified `recordPlanResult()` to automatically register evidence IDs
+- Enhanced `EvidenceLedger.addEvidence()` to accept custom IDs via optional `customId` parameter
+- Configured manager with evidence ledger in `createServer()`
+
+**Files Modified**:
+- `src/workers/parallel-reasoning-mcp.ts` - Added evidence ledger integration
+- `src/workers/evidence-ledger.ts` - Added `customId` parameter to `addEvidence()`
+- `src/workers/everything-workers.ts` - Configure manager with ledger
+- `__tests__/evidence-registration.test.ts` - NEW: Comprehensive test suite (8 tests)
+
+**Result**: Evidence IDs are now automatically registered and validated successfully ✅
+
+##### 2. Dynamic Quality Metrics
+
+**Problem**: Quality indicators were placeholder values that didn't reflect actual session data or provide actionable guidance.
+
+**Solution**: Implemented real-time metric calculation based on session data.
+
+**Architecture**:
+- **New Module**: `src/workers/session-metrics.ts` - Metric calculation functions
+- **Integration**: Metrics computed during finalization
+- **Storage**: Metrics cached in session state
+- **Display**: Shown in finalization with thresholds and recommendations
+
+**Metrics Implemented**:
+
+1. **Confidence** (0-1, threshold: 0.6)
+   ```typescript
+   confidence = base + evidence_bonus - quality_penalty
+   // base: 0.5
+   // evidence_bonus: +0.1 per unique evidence ID (max +0.3)
+   // quality_penalty: -0.2 per evidence_low signal (max -0.4)
+   ```
+
+2. **Coverage** (0-1, threshold: 0.8)
+   ```typescript
+   coverage = executed_steps / total_declared_steps
+   ```
+
+3. **Consensus** (0-1, threshold: 0.5)
+   ```typescript
+   consensus = (agreements - conflicts) / total_interactions
+   // agreements: critiques with agreement_score > 0.7
+   // conflicts: critiques with agreement_score < 0.4
+   // normalized to [0, 1]
+   ```
+
+**Files Modified**:
+- `src/workers/session-metrics.ts` - NEW: Metric calculation module
+- `src/workers/parallel-reasoning-mcp.ts` - Added `metrics` field to session interface, `computeMetrics()` method
+- `src/workers/guided-responses.ts` - Enhanced finalization display with metrics
+- `src/workers/parallel-reasoning-tools-v5.ts` - Pass metrics to guided responses
+- `__tests__/session-metrics.test.ts` - NEW: Comprehensive test suite (15 tests)
+
+**Display Example**:
+```
+📊 Quality Metrics
+- Confidence: 75.0% ✅ (3 evidence, 0 quality issues)
+- Coverage: 87.5% ✅ (14/16 steps)
+- Consensus: 60.0% ✅ (2 agreements, 0 conflicts)
+
+💡 Recommendations
+- Improve Coverage: Execute 2 more capability steps to reach 80% threshold
+```
+
+**Philosophy**: Metrics are **non-blocking recommendations**. They guide improvement without preventing finalization.
+
+**Test Coverage**:
+- Evidence registration: 8 tests (all passing)
+- Quality metrics: 15 tests (all passing)
+- Total: 182 tests passing
+
+---
 
 ### v5.7.0 - Lightweight Quality Analytics (2025-10-02)
 

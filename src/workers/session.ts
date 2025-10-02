@@ -589,17 +589,15 @@ export class MCPSession extends DurableObject {
       history: cloneValue(this.whiteboard.getHistory(id))
     }));
 
-    // Serialize evidence ledger
-    const evidenceData = this.whiteboard.getAllIds().map(id =>
-      this.evidenceLedger.exportEvidence(id)
-    );
+    // Serialize evidence ledger (complete serialization)
+    const evidenceLedgerData = this.evidenceLedger.serialize();
 
     // Use multiple put calls instead of batch
     await this.ctx.storage.put('capability_whiteboard', whiteboardData);
-    await this.ctx.storage.put('capability_evidence', evidenceData);
+    await this.ctx.storage.put('capability_evidence_ledger', evidenceLedgerData);
     await this.ctx.storage.put('capability_execution_history', this.capabilityExecutionHistory);
 
-    console.log(`[MCPSession] Successfully persisted capability state`);
+    console.log(`[MCPSession] Successfully persisted capability state (${evidenceLedgerData.entries.length} evidence entries)`);
   }
 
   /**
@@ -607,7 +605,10 @@ export class MCPSession extends DurableObject {
    */
   async loadCapabilityState(): Promise<void> {
     const whiteboardData = await this.ctx.storage.get<Array<{ id: string; artifact: Artifact | null; history?: Artifact[] }>>('capability_whiteboard');
-    const evidenceData = await this.ctx.storage.get<Array<any>>('capability_evidence');
+    const evidenceLedgerData = await this.ctx.storage.get<{
+      entries: Array<[string, any]>;
+      artifactIndex: Array<[string, string[]]>;
+    }>('capability_evidence_ledger');
     const historyData = await this.ctx.storage.get<Array<any>>('capability_execution_history');
 
     // Restore whiteboard using add() method
@@ -619,8 +620,11 @@ export class MCPSession extends DurableObject {
       }
     }
 
-    // Restore evidence ledger (note: this is simplified, full restoration would need more work)
-    // For now, we just track that evidence exists
+    // Restore evidence ledger (complete restoration)
+    if (evidenceLedgerData) {
+      this.evidenceLedger.deserialize(evidenceLedgerData);
+      console.log(`[MCPSession] Restored ${evidenceLedgerData.entries.length} evidence entries from storage`);
+    }
 
     // Restore execution history
     if (historyData) {

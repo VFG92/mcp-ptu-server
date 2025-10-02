@@ -1,14 +1,61 @@
 # 🧠 MCP PTU Server
 
-**Version 5.7.0** | LLM-Centric Parallel Reasoning with Quality Analytics
+**Version 5.8.0** | LLM-Centric Parallel Reasoning with Dynamic Quality Metrics
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-5.7.0-green)](https://github.com/VFG92/mcp-ptu-server)
-[![Tests](https://img.shields.io/badge/Tests-167%2F167-brightgreen)]()
+[![Version](https://img.shields.io/badge/Version-5.8.0-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Tests](https://img.shields.io/badge/Tests-182%2F182-brightgreen)]()
 [![Session Persistence](https://img.shields.io/badge/Session%20Persistence-3%2B%20minutes-blue)]()
 
 An MCP server that enables **ChatGPT** to orchestrate multi-path business analysis. **You (ChatGPT) are the sole deliberative agent** — the server provides only guardrails (diversity validation, quality signals) and persistent memory. You generate diverse reasoning plans, cross-contaminate insights, peer review, and mediate final decisions.
+
+---
+
+## 🎯 What's New in v5.8.0 (2025-10-02)
+
+### Dynamic Quality Metrics & Evidence Ledger Integration 📊🔗
+
+#### 1. **Evidence Ledger Integration** 🔗
+- **Feature**: Automatic evidence registration in the evidence ledger system
+- **How It Works**:
+  - `execute_plan_step` now automatically registers evidence IDs in the evidence ledger
+  - Evidence IDs are stored with full traceability (claim, evidence array, verification status)
+  - Mediation decisions can now reference registered evidence IDs without validation errors
+- **Format**: Evidence entries include artifact_id, field_path, claim, evidence array, timestamps
+- **Result**: Complete traceability from execution results to mediation decisions ✅
+
+#### 2. **Dynamic Quality Metrics** 📊
+- **Feature**: Real-time calculation of session quality metrics
+- **Metrics Calculated**:
+  - **Confidence** (0-1, threshold: 0.6): Based on evidence density and quality signals
+    - Base: 0.5
+    - Bonus: +0.1 per unique evidence ID (max +0.3)
+    - Penalty: -0.2 per `evidence_low` signal (max -0.4)
+  - **Coverage** (0-1, threshold: 0.8): Ratio of executed vs declared capability steps
+    - Formula: `executed_steps / total_declared_steps`
+  - **Consensus** (0-1, threshold: 0.5): Derived from peer critique agreement scores
+    - Agreements: critiques with `agreement_score > 0.7`
+    - Conflicts: critiques with `agreement_score < 0.4`
+    - Formula: `(agreements - conflicts) / total_interactions`, normalized to [0, 1]
+- **Display**: Metrics shown in finalization with ✅/⚠️ indicators
+- **Warnings**: Actionable recommendations when metrics fall below thresholds
+- **Philosophy**: **Non-blocking** — metrics guide improvement without preventing finalization
+
+#### 3. **Enhanced Finalization Feedback** 💡
+- **Feature**: Finalization now includes detailed quality metrics and recommendations
+- **Metrics Display**:
+  ```
+  📊 Quality Metrics
+  - Confidence: 75.0% ✅ (3 evidence, 0 quality issues)
+  - Coverage: 87.5% ✅ (14/16 steps)
+  - Consensus: 60.0% ✅ (2 agreements, 0 conflicts)
+  ```
+- **Recommendations**: When metrics are below thresholds:
+  - Low Confidence: "Add 2 more evidence references using `execute_plan_step`"
+  - Low Coverage: "Execute 3 more capability steps to reach 80% threshold"
+  - Low Consensus: "Submit additional peer critiques to resolve conflicts"
+- **Result**: Clear, actionable guidance for improving analysis quality
 
 ---
 
