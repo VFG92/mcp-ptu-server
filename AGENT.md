@@ -1,12 +1,73 @@
 # 🤖 MCP PTU Server - Agent Guidelines
 
-**Version 5.6.0** | For AI Agents Working on This Repository
+**Version 5.7.0** | For AI Agents Working on This Repository
 
 This document provides rules, guidelines, and technical context for AI agents (like you) working on this codebase.
 
 ---
 
 ## 🔧 Recent Fixes
+
+### v5.7.0 - Lightweight Quality Analytics (2025-10-02)
+
+**NEW FEATURE**: Non-blocking quality signals for content analysis.
+
+#### Problem Statement
+
+Users requested lightweight analytics to flag "weak" content (low evidence, no quantitative data, too brief) without blocking workflow completion. The system should act as a "process guardian" that guides improvement through warnings rather than hard blocks.
+
+#### Solution Implemented
+
+##### Quality Signals System
+
+**Architecture**:
+- **New Module**: `src/workers/evidence-signals.ts` - Standalone analytics module
+- **Integration**: Signals computed automatically after each artifact submission
+- **Storage**: Signals persisted with artifacts in session state
+- **Display**: Formatted badges shown in tool responses
+
+**Signal Types**:
+```typescript
+type SignalType =
+  | 'evidence_low'        // < 2 unique evidence refs
+  | 'no_quantitative'     // No numbers/metrics
+  | 'too_brief'           // Below min length
+  | 'no_cross_refs'       // No cross-references
+  | 'weak_rationale'      // Rationale too short
+  | 'missing_falsification'; // No falsification test
+```
+
+**Severity Levels**: `info`, `warning`, `critical`
+
+**Soft Thresholds** (non-blocking):
+```typescript
+const SIGNAL_THRESHOLDS = {
+  min_evidence_refs: 2,
+  min_numeric_ratio: 0.05,
+  min_plan_length: 200,
+  min_rationale_length: 50,
+  min_critique_length: 100,
+  min_cross_refs: 1,
+  min_avg_sentence_length: 10,
+  max_avg_sentence_length: 50
+};
+```
+
+**Files Modified**:
+- `src/workers/evidence-signals.ts` - NEW: Quality analysis module
+- `src/workers/parallel-reasoning-mcp.ts` - Added `signals?: SignalSummary` to all artifact types
+- `src/workers/parallel-reasoning-tools-v5.ts` - Display signals in tool responses
+
+**Integration Points**:
+1. `submitPlan()` - Calls `analyzePlan()` and stores signals
+2. `submitCrossPlanNote()` - Calls `analyzeCrossPlanNote()` and stores signals
+3. `submitPeerCritique()` - Calls `analyzeCritique()` and stores signals
+4. `submitMediationDecision()` - Calls `analyzeMediationDecision()` and stores signals
+5. `finalizeSession()` - Aggregates all signals and displays quality summary
+
+**Philosophy**: Signals are **recommendations, not requirements**. They guide improvement without blocking workflow completion.
+
+---
 
 ### v5.6.0 - Evidence System & Registry Priority (2025-10-02)
 

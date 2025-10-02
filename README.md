@@ -1,14 +1,40 @@
 # 🧠 MCP PTU Server
 
-**Version 5.6.0** | LLM-Centric Parallel Reasoning with Dynamic Guardrails
+**Version 5.7.0** | LLM-Centric Parallel Reasoning with Quality Analytics
 
 [![Deployed on Cloudflare Workers](https://img.shields.io/badge/Deployed-Cloudflare%20Workers-orange)](https://mcp-server.vf-ghizzoni.workers.dev)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io/)
-[![Version](https://img.shields.io/badge/Version-5.6.0-green)](https://github.com/VFG92/mcp-ptu-server)
+[![Version](https://img.shields.io/badge/Version-5.7.0-green)](https://github.com/VFG92/mcp-ptu-server)
 [![Tests](https://img.shields.io/badge/Tests-167%2F167-brightgreen)]()
 [![Session Persistence](https://img.shields.io/badge/Session%20Persistence-3%2B%20minutes-blue)]()
 
-An MCP server that enables **ChatGPT** to orchestrate multi-path business analysis. **You (ChatGPT) are the sole deliberative agent** — the server provides only guardrails (diversity validation) and persistent memory. You generate diverse reasoning plans, cross-contaminate insights, peer review, and mediate final decisions.
+An MCP server that enables **ChatGPT** to orchestrate multi-path business analysis. **You (ChatGPT) are the sole deliberative agent** — the server provides only guardrails (diversity validation, quality signals) and persistent memory. You generate diverse reasoning plans, cross-contaminate insights, peer review, and mediate final decisions.
+
+---
+
+## 🎯 What's New in v5.7.0 (2025-10-02)
+
+### Lightweight Quality Analytics 📊
+
+#### **Non-Blocking Quality Signals**
+- **Feature**: Automatic quality analysis on all submitted artifacts (plans, critiques, decisions, notes)
+- **Metrics Calculated**:
+  - Unique evidence count
+  - Numeric/quantitative ratio
+  - Average sentence length
+  - Cross-reference count
+  - Total content length
+- **Signal Types**:
+  - `evidence_low`: Less than 2 unique evidence references
+  - `no_quantitative`: No numbers/metrics in content
+  - `too_brief`: Content below minimum length threshold
+  - `no_cross_refs`: No references to other plans/evidence
+  - `weak_rationale`: Rationale too short or generic
+  - `missing_falsification`: Critique lacks falsification test
+- **Severity Levels**: `info`, `warning`, `critical`
+- **Display**: Quality badges shown immediately after submission
+- **Finalization**: Aggregated quality summary with flagged artifacts count
+- **Philosophy**: **Non-blocking** — signals guide improvement without preventing workflow completion
 
 ---
 
