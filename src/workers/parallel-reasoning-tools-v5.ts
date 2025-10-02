@@ -32,6 +32,7 @@ import {
 } from './parallel-reasoning-mcp.js';
 import { handleAnalyzeWithCapabilities, type CapabilitySystemRefs } from './capability-tools.js';
 import * as GuidedResponses from './guided-responses.js';
+import { formatSignals } from './evidence-signals.js';
 
 /**
  * Tool 1: Initialize Parallel Reasoning Session
@@ -191,6 +192,13 @@ export async function handleSubmitReasoningPlan(
       session.min_plans,
       args.plan.diversity_axes
     );
+
+    // Append quality signals if any
+    const submittedPlan = session.plans.get(args.plan.plan_id);
+    if (submittedPlan?.signals && submittedPlan.signals.signals.length > 0) {
+      response += `\n\n## 📊 Quality Analysis\n`;
+      response += formatSignals(submittedPlan.signals.signals);
+    }
   } else {
     // Plan rejected - determine reason and use appropriate guided response
     if (!result.diversity_validation.required_axes_satisfied) {

@@ -23,6 +23,8 @@
  */
 
 import { z } from 'zod';
+import type { SignalSummary } from './evidence-signals.js';
+import { analyzePlan, analyzeCritique, analyzeMediationDecision, analyzeCrossPlanNote } from './evidence-signals.js';
 
 /**
  * Diversity axes for plan differentiation
@@ -125,7 +127,9 @@ export const ReasoningPlanSchema = z.object({
   expected_outputs: z.array(z.string())
 });
 
-export type ReasoningPlan = z.infer<typeof ReasoningPlanSchema>;
+export type ReasoningPlan = z.infer<typeof ReasoningPlanSchema> & {
+  signals?: SignalSummary; // Quality signals computed after submission
+};
 
 /**
  * Cross-plan note (contamination)
@@ -138,7 +142,9 @@ export const CrossPlanNoteSchema = z.object({
   timestamp: z.number()
 });
 
-export type CrossPlanNote = z.infer<typeof CrossPlanNoteSchema>;
+export type CrossPlanNote = z.infer<typeof CrossPlanNoteSchema> & {
+  signals?: SignalSummary; // Quality signals computed after submission
+};
 
 /**
  * Peer critique (ChatGPT-generated)
@@ -157,7 +163,9 @@ export const PeerCritiqueSchema = z.object({
   timestamp: z.number()
 });
 
-export type PeerCritique = z.infer<typeof PeerCritiqueSchema>;
+export type PeerCritique = z.infer<typeof PeerCritiqueSchema> & {
+  signals?: SignalSummary; // Quality signals computed after submission
+};
 
 /**
  * Mediation decision map
@@ -170,7 +178,9 @@ export const MediationDecisionSchema = z.object({
   confidence: z.number().min(0).max(1)
 });
 
-export type MediationDecision = z.infer<typeof MediationDecisionSchema>;
+export type MediationDecision = z.infer<typeof MediationDecisionSchema> & {
+  signals?: SignalSummary; // Quality signals computed after submission
+};
 
 /**
  * Parallel reasoning session state
@@ -386,8 +396,12 @@ export class ParallelReasoningSessionManager {
       };
     }
 
-    // Accept plan
-    session.plans.set(plan.plan_id, plan);
+    // Compute quality signals for the plan
+    const signals = analyzePlan(plan);
+    const planWithSignals: ReasoningPlan = { ...plan, signals };
+
+    // Accept plan with signals
+    session.plans.set(plan.plan_id, planWithSignals);
     session.plan_results.set(plan.plan_id, []);
     session.updated_at = Date.now();
 
@@ -456,7 +470,11 @@ export class ParallelReasoningSessionManager {
       throw new Error(`Plan ID \`${note.to_plan_id}\` not found in session \`${session_id}\``);
     }
 
-    session.cross_plan_notes.push(note);
+    // Compute quality signals for the note
+    const signals = analyzeCrossPlanNote(note);
+    const noteWithSignals: CrossPlanNote = { ...note, signals };
+
+    session.cross_plan_notes.push(noteWithSignals);
     session.updated_at = Date.now();
   }
 
@@ -477,7 +495,11 @@ export class ParallelReasoningSessionManager {
       throw new Error(`Reviewed plan ID \`${critique.reviewed_plan_id}\` not found in session \`${session_id}\``);
     }
 
-    session.peer_critiques.push(critique);
+    // Compute quality signals for the critique
+    const signals = analyzeCritique(critique);
+    const critiqueWithSignals: PeerCritique = { ...critique, signals };
+
+    session.peer_critiques.push(critiqueWithSignals);
     session.status = 'peer_review';
     session.updated_at = Date.now();
   }
@@ -510,7 +532,11 @@ export class ParallelReasoningSessionManager {
       }
     }
 
-    session.mediation_decisions.push(decision);
+    // Compute quality signals for the decision
+    const signals = analyzeMediationDecision(decision);
+    const decisionWithSignals: MediationDecision = { ...decision, signals };
+
+    session.mediation_decisions.push(decisionWithSignals);
     session.updated_at = Date.now();
   }
 
@@ -534,6 +560,10 @@ export class ParallelReasoningSessionManager {
       decisions_without_evidence: string[];
     };
     warnings?: string[];
+    quality_summary?: {
+      flagged_artifacts_count: number;
+      flagged_artifacts: string[];
+    };
   } {
     const session = this.sessions.get(session_id);
     if (!session) {
@@ -576,13 +606,74 @@ export class ParallelReasoningSessionManager {
     const all_plans_executed = missing_plans.length === 0;
     const all_decisions_have_evidence = decisions_without_evidence.length === 0;
 
+    // Collect quality signals from all artifacts
+    const quality_warnings: string[] = [];
+    const flagged_artifacts: string[] = [];
+
+    // Check plans for quality signals
+    for (const [plan_id, plan] of session.plans) {
+      if (plan.signals && plan.signals.signals.length > 0) {
+        const criticalOrWarning = plan.signals.signals.filter(s => s.severity === 'critical' || s.severity === 'warning');
+        if (criticalOrWarning.length > 0) {
+          flagged_artifacts.push(`plan:${plan_id}`);
+          quality_warnings.push(`Plan "${plan_id}": ${criticalOrWarning.length} quality concern(s)`);
+        }
+      }
+    }
+
+    // Check critiques for quality signals
+    for (const critique of session.peer_critiques) {
+      if (critique.signals && critique.signals.signals.length > 0) {
+        const criticalOrWarning = critique.signals.signals.filter(s => s.severity === 'critical' || s.severity === 'warning');
+        if (criticalOrWarning.length > 0) {
+          flagged_artifacts.push(`critique:${critique.reviewer_plan_id}→${critique.reviewed_plan_id}`);
+          quality_warnings.push(`Critique ${critique.reviewer_plan_id}→${critique.reviewed_plan_id}: ${criticalOrWarning.length} quality concern(s)`);
+        }
+      }
+    }
+
+    // Check decisions for quality signals
+    for (const decision of session.mediation_decisions) {
+      if (decision.signals && decision.signals.signals.length > 0) {
+        const criticalOrWarning = decision.signals.signals.filter(s => s.severity === 'critical' || s.severity === 'warning');
+        if (criticalOrWarning.length > 0) {
+          flagged_artifacts.push(`decision:${decision.decision_point}`);
+          quality_warnings.push(`Decision "${decision.decision_point}": ${criticalOrWarning.length} quality concern(s)`);
+        }
+      }
+    }
+
+    // Check cross-plan notes for quality signals
+    for (const note of session.cross_plan_notes) {
+      if (note.signals && note.signals.signals.length > 0) {
+        const criticalOrWarning = note.signals.signals.filter(s => s.severity === 'critical' || s.severity === 'warning');
+        if (criticalOrWarning.length > 0) {
+          flagged_artifacts.push(`note:${note.from_plan_id}→${note.to_plan_id}`);
+          quality_warnings.push(`Note ${note.from_plan_id}→${note.to_plan_id}: ${criticalOrWarning.length} quality concern(s)`);
+        }
+      }
+    }
+
     // Session is finalized if minimum plans are met and all plans are executed
-    // Evidence IDs are recommended but not required (warning only)
+    // Evidence IDs and quality signals are recommended but not required (warnings only)
     const finalized = min_plans_met && all_plans_executed;
 
     if (finalized) {
       session.status = 'finalized';
       session.updated_at = Date.now();
+    }
+
+    // Compile all warnings
+    const warnings: string[] = [];
+
+    if (decisions_without_evidence.length > 0) {
+      warnings.push(`⚠️ ${decisions_without_evidence.length} mediation decision(s) lack evidence IDs. While not blocking finalization, evidence IDs improve traceability.`);
+    }
+
+    if (quality_warnings.length > 0) {
+      warnings.push(`⚠️ ${flagged_artifacts.length} artifact(s) flagged with quality concerns:`);
+      warnings.push(...quality_warnings.map(w => `   - ${w}`));
+      warnings.push(`Review flagged artifacts before finalizing to ensure analysis depth.`);
     }
 
     return {
@@ -596,9 +687,11 @@ export class ParallelReasoningSessionManager {
         missing_plans,
         decisions_without_evidence
       },
-      warnings: decisions_without_evidence.length > 0 ? [
-        `⚠️ ${decisions_without_evidence.length} mediation decision(s) lack evidence IDs. While not blocking finalization, evidence IDs improve traceability.`
-      ] : []
+      warnings,
+      quality_summary: {
+        flagged_artifacts_count: flagged_artifacts.length,
+        flagged_artifacts
+      }
     };
   }
 
