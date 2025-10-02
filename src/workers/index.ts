@@ -238,28 +238,13 @@ app.post('/mcp', async (c) => {
   let routedDoIdSource: string | null = null;
   let routedDoIdRawValue: string | null = null;
 
-  // PRIORITY 1: Check header first (for MCP session routing)
-  // The mcp-session-id header is the authoritative source for Durable Object routing
-  routedDoId = extractSessionId(headerSessionId ?? null);
-  if (routedDoId) {
-    routedDoIdSource = 'header';
-    routedDoIdRawValue = headerSessionId ?? null;
-    console.log(`[Worker] Using session_id from header: ${headerSessionId}`);
-  }
-
-  // PRIORITY 2: Check body for custom session_id (parallel reasoning)
-  // If we find a custom session_id in tool arguments, check the registry
+  // STEP 1: Parse body to check for custom session_id (parallel reasoning)
+  let parsedBody: unknown = null;
   let customSessionId: string | null = null;
-  if (!routedDoId) {
-    console.log(`[Worker] No session_id found in header, checking body...`);
 
-    let parsedBody: unknown = null;
-    try {
-      parsedBody = await rawRequest.clone().json();
-      console.log(`[Worker] Request body for routing: ${JSON.stringify(parsedBody).substring(0, 500)}`);
-    } catch (error) {
-      console.log(`[Worker] Unable to parse request body for session routing: ${error}`);
-    }
+  try {
+    parsedBody = await rawRequest.clone().json();
+    console.log(`[Worker] Request body for routing: ${JSON.stringify(parsedBody).substring(0, 500)}`);
 
     // Check if this is a tool call with a custom session_id
     if (isRecord(parsedBody)) {
@@ -269,32 +254,48 @@ app.post('/mcp', async (c) => {
         if (args && typeof args['session_id'] === 'string') {
           customSessionId = args['session_id'];
           console.log(`[Worker] Found custom session_id in tool arguments: ${customSessionId}`);
-
-          // Check registry for existing mapping
-          // Use a deterministic ID for the global registry
-          try {
-            const registryId = getDurableObjectId(c.env.SESSION_REGISTRY, 'global-session-registry');
-            const registryStub = c.env.SESSION_REGISTRY.get(registryId);
-            const registryResponse = await registryStub.fetch(
-              new Request(`http://internal/lookup?session_id=${encodeURIComponent(customSessionId)}`)
-            );
-
-            if (registryResponse.ok) {
-              const data = await registryResponse.json() as { doId: string | null };
-              if (data.doId) {
-                routedDoId = data.doId;
-                routedDoIdSource = 'registry';
-                routedDoIdRawValue = customSessionId;
-                console.log(`[Worker] Found mapping in registry: ${customSessionId} → ${data.doId.substring(0, 16)}...`);
-              } else {
-                console.log(`[Worker] No mapping found in registry for: ${customSessionId}`);
-              }
-            }
-          } catch (error) {
-            console.error(`[Worker] Error checking registry: ${error}`);
-          }
         }
       }
+    }
+  } catch (error) {
+    console.log(`[Worker] Unable to parse request body for session routing: ${error}`);
+  }
+
+  // STEP 2: If we have a custom session_id, check registry FIRST (highest priority)
+  if (customSessionId) {
+    console.log(`[Worker] Checking registry for custom session_id: ${customSessionId}`);
+    try {
+      const registryId = getDurableObjectId(c.env.SESSION_REGISTRY, 'global-session-registry');
+      const registryStub = c.env.SESSION_REGISTRY.get(registryId);
+      const registryResponse = await registryStub.fetch(
+        new Request(`http://internal/lookup?session_id=${encodeURIComponent(customSessionId)}`)
+      );
+
+      if (registryResponse.ok) {
+        const data = await registryResponse.json() as { doId: string | null };
+        if (data.doId) {
+          routedDoId = data.doId;
+          routedDoIdSource = 'registry';
+          routedDoIdRawValue = customSessionId;
+          console.log(`[Worker] ✅ Found mapping in registry: ${customSessionId} → ${data.doId.substring(0, 16)}...`);
+        } else {
+          console.log(`[Worker] ⚠️ No mapping found in registry for: ${customSessionId} (will use header or create new)`);
+        }
+      }
+    } catch (error) {
+      console.error(`[Worker] ❌ Error checking registry: ${error}`);
+    }
+  }
+
+  // STEP 3: Fall back to header if no registry mapping found
+  if (!routedDoId) {
+    routedDoId = extractSessionId(headerSessionId ?? null);
+    if (routedDoId) {
+      routedDoIdSource = 'header';
+      routedDoIdRawValue = headerSessionId ?? null;
+      console.log(`[Worker] Using session_id from header: ${headerSessionId}`);
+    } else {
+      console.log(`[Worker] No session_id found in header or registry`);
     }
   }
 
