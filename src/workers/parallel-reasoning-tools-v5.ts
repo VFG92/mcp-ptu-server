@@ -28,11 +28,20 @@ import {
   ReasoningPlanSchema,
   CrossPlanNoteSchema,
   PeerCritiqueSchema,
-  MediationDecisionSchema
+  MediationDecisionSchema,
+  suggestDiversityAxes
 } from './parallel-reasoning-mcp.js';
 import { handleAnalyzeWithCapabilities, type CapabilitySystemRefs } from './capability-tools.js';
 import * as GuidedResponses from './guided-responses.js';
 import { formatSignals } from './evidence-signals.js';
+import {
+  createStructuredContent,
+  type WorkflowInitializedContent,
+  type PlanSubmittedContent,
+  type PlanExecutionContent,
+  type WorkflowStatusContent,
+  type WorkflowFinalizedContent
+} from './ui-structured-content.js';
 
 /**
  * Tool 1: Initialize Parallel Reasoning Session
@@ -47,7 +56,7 @@ export const InitParallelReasoningSchema = z.object({
 export async function handleInitParallelReasoning(
   args: z.infer<typeof InitParallelReasoningSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: WorkflowInitializedContent }> {
   console.log(`[handleInitParallelReasoning] Using manager: ${manager === globalParallelReasoningManager ? 'global' : 'durable-object'}`);
   console.log(`[handleInitParallelReasoning] Session ID: ${args.session_id}`);
 
@@ -56,6 +65,9 @@ export async function handleInitParallelReasoning(
   const isExisting = !!existingSession;
 
   const session = manager.initSession(args);
+
+  // Suggest diversity axes based on task description
+  const suggestedAxesResult = suggestDiversityAxes(session.task_description);
 
   // Use different response for existing vs new session
   const response = isExisting
@@ -72,6 +84,18 @@ export async function handleInitParallelReasoning(
         session.required_diversity_axes,
         session.min_plans
       );
+
+  // Create structured content for UI visualization
+  const structuredContent = createStructuredContent<WorkflowInitializedContent>(
+    'workflow_initialized',
+    session.session_id,
+    {
+      task_description: session.task_description,
+      required_diversity_axes: session.required_diversity_axes,
+      min_plans: session.min_plans,
+      suggested_axes: suggestedAxesResult.suggested_axes
+    }
+  );
 
   const oldResponse = `# ✅ Parallel Reasoning Session Initialized
 
@@ -149,7 +173,8 @@ The server will **reject** plans that:
 **Action Required**: Submit ${session.min_plans} plans now using \`submit_reasoning_plan\``;
 
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: response }],
+    structuredContent
   };
 }
 
@@ -164,7 +189,7 @@ export const SubmitReasoningPlanSchema = z.object({
 export async function handleSubmitReasoningPlan(
   args: z.infer<typeof SubmitReasoningPlanSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: PlanSubmittedContent }> {
   console.log(`[handleSubmitReasoningPlan] Using manager: ${manager === globalParallelReasoningManager ? 'global' : 'durable-object'}`);
   console.log(`[handleSubmitReasoningPlan] Session ID: ${args.session_id}`);
   console.log(`[handleSubmitReasoningPlan] Manager has ${manager.getAllSessions().size} sessions`);
@@ -241,8 +266,41 @@ export async function handleSubmitReasoningPlan(
     response += `**Action Required**: Revise and resubmit this plan with proper diversification.\n`;
   }
 
+  // Calculate axes different from existing plans
+  let axesDifferent = 0;
+  if (session.plans.size > 0) {
+    const existingAxes = Array.from(session.plans.values())
+      .filter(p => p.plan_id !== args.plan.plan_id)
+      .flatMap(p => p.diversity_axes);
+    axesDifferent = args.plan.diversity_axes.filter(axis => !existingAxes.includes(axis)).length;
+  }
+
+  // Create structured content for UI visualization
+  const structuredContent = createStructuredContent<PlanSubmittedContent>(
+    'plan_submitted',
+    args.session_id,
+    {
+      plan: {
+        plan_id: args.plan.plan_id,
+        description: args.plan.description,
+        diversity_axes: args.plan.diversity_axes,
+        capability_chain: args.plan.capability_chain,
+        rationale: args.plan.rationale,
+        expected_outputs: args.plan.expected_outputs
+      },
+      accepted: result.accepted,
+      reason: result.reason,
+      diversity_validation: {
+        axes_different: axesDifferent,
+        required_minimum: 2,
+        compared_with: Array.from(session.plans.keys()).filter(id => id !== args.plan.plan_id)
+      }
+    }
+  );
+
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: response }],
+    structuredContent
   };
 }
 
@@ -266,7 +324,7 @@ export async function handleExecutePlanStep(
   args: z.infer<typeof ExecutePlanStepSchema>,
   refs?: CapabilitySystemRefs,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: PlanExecutionContent }> {
   const session = manager.getSession(args.session_id);
 
   if (!session) {
@@ -323,8 +381,36 @@ export async function handleExecutePlanStep(
   const evidenceNotice = `\n\n**📋 Evidence ID Generated**: \`${evidence_id}\`\n\n**Important**: Use this evidence ID when:\n- Submitting peer critiques (in \`evidence_ids\` field of challenged claims)\n- Submitting mediation decisions (in \`evidence_ids\` field)\n\nThis allows the system to trace decisions back to specific execution results.`;
   const fullResponse = guidedResponse + evidenceNotice + '\n\n---\n\n## Full Capability Result\n\n' + originalText;
 
+  // Get plan info for structured content
+  const plan = session.plans.get(args.plan_id)!;
+  const planResults = session.plan_results.get(args.plan_id) || [];
+  const stepNumber = planResults.length;
+
+  // Create structured content for UI visualization
+  const structuredContent = createStructuredContent<PlanExecutionContent>(
+    'plan_execution',
+    args.session_id,
+    {
+      plan_id: args.plan_id,
+      step_number: stepNumber,
+      total_steps: plan.capability_chain.length,
+      capability_name: args.task,
+      adapter_id: args.adapter_id || 'comprehensive',
+      evidence_id,
+      result: {
+        guardrails: (result as any).guardrails,
+        output: (result as any).output,
+        metadata: {
+          execution_time_ms: Date.now() - Date.now(), // Placeholder
+          tokens_used: 0 // Placeholder
+        }
+      }
+    }
+  );
+
   return {
-    content: [{ type: 'text', text: fullResponse }]
+    content: [{ type: 'text', text: fullResponse }],
+    structuredContent
   };
 }
 
@@ -478,7 +564,7 @@ export const ListPlanStatusSchema = z.object({
 export async function handleListPlanStatus(
   args: z.infer<typeof ListPlanStatusSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: WorkflowStatusContent }> {
   const status = manager.getSessionStatus(args.session_id);
 
   if (!status.session) {
@@ -525,8 +611,51 @@ ${status.pending_frames.length > 0 ? status.pending_frames.map(f => `- ${f}`).jo
 **Created**: ${new Date(session.created_at).toISOString()}
 **Updated**: ${new Date(session.updated_at).toISOString()}`;
 
+  // Create structured content for UI visualization
+  const structuredContent = createStructuredContent<WorkflowStatusContent>(
+    'workflow_status',
+    args.session_id,
+    {
+      status: session.status,
+      task_description: session.task_description,
+      plans: Array.from(session.plans.values()).map(plan => {
+        const executedSteps = session.plan_results.get(plan.plan_id)?.length || 0;
+        const totalSteps = plan.capability_chain.length;
+        return {
+          plan_id: plan.plan_id,
+          description: plan.description,
+          diversity_axes: plan.diversity_axes,
+          capability_chain: plan.capability_chain,
+          executed_steps: executedSteps,
+          total_steps: totalSteps,
+          progress_percentage: totalSteps > 0 ? (executedSteps / totalSteps) * 100 : 0
+        };
+      }),
+      cross_plan_notes: session.cross_plan_notes,
+      peer_critiques: session.peer_critiques.map(c => ({
+        reviewer_plan_id: c.reviewer_plan_id,
+        reviewed_plan_id: c.reviewed_plan_id,
+        agreement_score: c.agreement_score,
+        timestamp: c.timestamp
+      })),
+      mediation_decisions: session.mediation_decisions,
+      metrics: session.metrics,
+      completeness: {
+        min_plans_met: session.plans.size >= session.min_plans,
+        all_plans_executed: Array.from(session.plans.keys()).every(planId => {
+          const plan = session.plans.get(planId)!;
+          const results = session.plan_results.get(planId) || [];
+          return results.length >= plan.capability_chain.length;
+        }),
+        has_peer_reviews: session.peer_critiques.length > 0,
+        has_mediation_decisions: session.mediation_decisions.length > 0
+      }
+    }
+  );
+
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: response }],
+    structuredContent
   };
 }
 
@@ -540,7 +669,7 @@ export const FinalizeParallelReasoningSchema = z.object({
 export async function handleFinalizeParallelReasoning(
   args: z.infer<typeof FinalizeParallelReasoningSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: WorkflowFinalizedContent }> {
   const session = manager.getSession(args.session_id);
 
   if (!session) {
@@ -611,7 +740,55 @@ ${i + 1}. **${d.decision_point}**
     }
   }
 
+  // Count quality signals across all artifacts
+  let totalArtifacts = 0;
+  let flaggedArtifacts = 0;
+  let criticalIssues = 0;
+  let warnings = 0;
+
+  // Count from plans
+  session.plans.forEach(plan => {
+    totalArtifacts++;
+    if (plan.signals && plan.signals.signals.length > 0) {
+      flaggedArtifacts++;
+      plan.signals.signals.forEach(s => {
+        if (s.severity === 'critical') criticalIssues++;
+        if (s.severity === 'warning') warnings++;
+      });
+    }
+  });
+
+  // Create structured content for UI visualization
+  const structuredContent = createStructuredContent<WorkflowFinalizedContent>(
+    'workflow_finalized',
+    args.session_id,
+    {
+      finalized: result.finalized,
+      metrics: result.metrics || {
+        confidence: 0,
+        coverage: 0,
+        consensus: 0,
+        computed_at: Date.now()
+      },
+      quality_summary: {
+        total_artifacts: totalArtifacts,
+        flagged_artifacts: flaggedArtifacts,
+        critical_issues: criticalIssues,
+        warnings: warnings
+      },
+      decision_map: session.mediation_decisions.map(d => ({
+        decision_point: d.decision_point,
+        chosen_from_plan: d.chosen_from_plan,
+        confidence: d.confidence,
+        evidence_count: d.evidence_ids.length
+      })),
+      recommendations: [],
+      warnings: result.warnings
+    }
+  );
+
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: response }],
+    structuredContent
   };
 }

@@ -31,3 +31,38 @@ npm run workers:dev    # launch a local Cloudflare Worker
 
 When deploying, use `npm run workers:deploy` with the appropriate Cloudflare credentials.
 
+## UI visualization layer (ChatGPT Apps SDK)
+
+The server includes an optional **passive visualization layer** that renders interactive UI components inside ChatGPT. All 8 parallel reasoning tools return `structuredContent` alongside text responses.
+
+### Key files
+- `src/ui/src/types.ts` – TypeScript interfaces for structured content
+- `src/ui/src/WorkflowVisualizer.tsx` – main component router
+- `src/ui/src/components/` – timeline, matrix, dashboard components
+- `src/workers/ui-structured-content.ts` – structured content type definitions
+- `src/workers/ui-resources.ts` – UI resource registration for MCP protocol
+
+### Development workflow
+```bash
+cd src/ui
+npm install
+npm run build  # outputs to dist/workflow-visualizer.js
+```
+
+The main `tsconfig.json` excludes `src/ui` to avoid conflicts with React JSX configuration.
+
+### Design principles
+1. **Passive observer** – UI components only visualize data, never control workflow
+2. **Structured content** – all tools return both text and structured data
+3. **Backward compatible** – text responses unchanged, structuredContent is additive
+4. **Zero configuration** – UI resources served automatically via MCP protocol
+5. **Security first** – strict CSP, sandboxed execution, no external requests
+
+### Rules for AI agents
+**When modifying tool responses**:
+- ✅ Always return both `content` (text) and `structuredContent` (data)
+- ✅ Use `createStructuredContent()` helper from `ui-structured-content.ts`
+- ✅ Ensure structured content matches TypeScript interfaces
+- ❌ DO NOT modify UI components without rebuilding (`npm run build` in `src/ui`)
+- ❌ DO NOT change structured content types without updating UI components
+

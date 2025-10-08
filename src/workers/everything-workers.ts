@@ -44,6 +44,9 @@ import {
 // Import parallel reasoning session type
 import type { ParallelReasoningSession } from './parallel-reasoning-mcp.js';
 
+// Import UI resources for ChatGPT Apps SDK
+import { UI_RESOURCES, getUIResource, isUIResource } from './ui-resources.js';
+
 // Legacy parallel reasoning tools (deprecated, kept for backward compatibility)
 // Legacy parallel reasoning tools removed - use v5.0 tools instead
 // import {
@@ -258,7 +261,8 @@ Use these 8 tools for multi-path reasoning:
     }
   };
 
-  const ALL_RESOURCES: Resource[] = Array.from({ length: 100 }, (_, i) => {
+  // Combine UI resources with test resources
+  const TEST_RESOURCES: Resource[] = Array.from({ length: 100 }, (_, i) => {
     const uri = `test://static/resource/${i + 1}`;
     if (i % 2 === 0) {
       return {
@@ -277,6 +281,8 @@ Use these 8 tools for multi-path reasoning:
       };
     }
   });
+
+  const ALL_RESOURCES: Resource[] = [...UI_RESOURCES, ...TEST_RESOURCES];
 
   const PAGE_SIZE = 10;
 
@@ -320,10 +326,23 @@ Use these 8 tools for multi-path reasoning:
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const uri = request.params.uri;
 
+    // Check if it's a UI resource
+    if (isUIResource(uri)) {
+      const resource = getUIResource(uri);
+      if (resource) {
+        return {
+          contents: [resource],
+        };
+      }
+    }
+
+    // Check if it's a test resource
     if (uri.startsWith("test://static/resource/")) {
       const index = parseInt(uri.split("/").pop() ?? "", 10) - 1;
-      if (index >= 0 && index < ALL_RESOURCES.length) {
-        const resource = ALL_RESOURCES[index];
+      const testResourcesStartIndex = UI_RESOURCES.length;
+      const adjustedIndex = testResourcesStartIndex + index;
+      if (adjustedIndex >= testResourcesStartIndex && adjustedIndex < ALL_RESOURCES.length) {
+        const resource = ALL_RESOURCES[adjustedIndex];
         return {
           contents: [resource],
         };
