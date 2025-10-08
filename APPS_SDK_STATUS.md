@@ -2,32 +2,74 @@
 
 ## Current Status (October 2025)
 
-### Availability
-- **Status**: Beta limitata
-- **Accesso**: Solo sviluppatori whitelisted
-- **Utenti Plus EU**: ❌ Non ancora disponibile pubblicamente
-- **Requisiti**: Account OpenAI Platform + whitelist specifica
+### ✅ Apps SDK è Disponibile in Preview!
 
-### Come Verificare l'Accesso
+**Annuncio**: 6 Ottobre 2025 (OpenAI Dev Day)
+**Status**: Preview pubblica - disponibile per tutti gli sviluppatori
+**Documentazione**: https://developers.openai.com/apps-sdk/
 
-1. **Via Platform OpenAI**:
-   - Vai su https://platform.openai.com/settings/organization/apps
-   - Se vedi la sezione "Apps" → hai accesso
-   - Altrimenti → devi richiedere accesso alla beta
+### 🔓 Come Ottenere l'Accesso (AGGIORNATO)
 
-2. **Via ChatGPT**:
-   - Apri ChatGPT in Developer Mode
-   - Chiama un tool MCP che ritorna `structuredContent`
-   - Se vedi componenti UI interattivi → Apps SDK attivo
-   - Se vedi solo testo → Apps SDK non disponibile
+**Requisiti per usare Apps SDK**:
 
-### Richiedere Accesso
+1. **Developer Mode Access** (richiesto):
+   - **Opzione A**: Chiedi al tuo contatto OpenAI partner di aggiungerti all'esperimento "connectors developer"
+   - **Opzione B**: Se hai ChatGPT Enterprise, chiedi al workspace admin di abilitare la creazione di connettori per il tuo account
+   - **Opzione C**: Attiva Developer Mode in ChatGPT: `Settings → Connectors → Advanced → Developer mode`
 
-Per richiedere l'accesso alla beta:
-1. Vai su https://platform.openai.com/
-2. Contatta il supporto OpenAI
-3. Richiedi accesso a "ChatGPT Apps SDK Beta"
-4. Fornisci use case e dettagli del progetto
+2. **Account ChatGPT**:
+   - ChatGPT Plus, Pro, Team o Enterprise
+   - Developer Mode abilitato
+
+3. **Server MCP Pubblico**:
+   - Server raggiungibile via HTTPS
+   - Per sviluppo locale: usa ngrok o simili
+
+### 📋 Verifica se Hai Accesso
+
+1. **Apri ChatGPT** (web o mobile)
+2. **Vai in Settings → Connectors**
+3. **Cerca il pulsante "Create"**:
+   - ✅ Se vedi "Create" → hai accesso!
+   - ❌ Se non lo vedi → segui i passi sopra
+
+### 🚀 Come Connettere il Tuo Server
+
+Una volta che hai Developer Mode attivo:
+
+1. **Assicurati che il server sia pubblico**:
+   ```bash
+   # Il tuo server è già deployato su:
+   https://mcp-server.vf-ghizzoni.workers.dev/mcp
+   ```
+
+2. **Crea un Connector in ChatGPT**:
+   - Vai su `Settings → Connectors → Create`
+   - **Connector name**: "MCP PTU Server"
+   - **Description**: "Multi-path parallel reasoning with diversity enforcement for complex business analysis"
+   - **Connector URL**: `https://mcp-server.vf-ghizzoni.workers.dev/mcp`
+   - Clicca "Create"
+
+3. **Abilita il Connector in una conversazione**:
+   - Apri una nuova chat
+   - Clicca il pulsante `+` vicino al composer
+   - Scegli "Developer mode"
+   - Attiva il tuo connector nella lista
+
+4. **Testa l'integrazione**:
+   ```
+   Use the MCP PTU Server to analyze market trends with 3 diverse reasoning plans
+   ```
+
+### 🎯 Cosa Aspettarsi
+
+Quando l'Apps SDK è attivo:
+- ✅ Vedrai componenti UI interattivi in ChatGPT
+- ✅ Timeline del workflow
+- ✅ Matrice di confronto piani
+- ✅ Dashboard metriche qualità
+- ✅ Tool calls con payload visibili
+- ✅ Conferma manuale per write tools (a meno che non ricordi le approvazioni)
 
 ## Implementazione nel MCP PTU Server
 
