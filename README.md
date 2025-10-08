@@ -53,7 +53,24 @@ Within the MCP session the following tools drive the workflow:
 
 All tools accept a `session_id` parameter. Reuse the same value throughout a workflow to keep state aligned.
 
-### Best practice: Check readiness before finalization
+### Best practices for efficient execution
+
+#### 1. Optimal capability chain length
+- **Recommended**: 3-5 capability steps per plan
+- **Why**: Coverage = executed_steps / total_declared_steps ≥ 0.95
+- **Impact**: Longer chains (7+ steps) require more `execute_plan_step` calls to reach 95% coverage threshold
+- **Example**: 3 plans × 5 steps = 15 total steps → need 14 executed steps (93%) to meet threshold
+
+#### 2. Readiness preview after plan submission
+When all plans are submitted, the system automatically shows a **Readiness Preview** that includes:
+- Total declared steps across all plans
+- Minimum steps needed to reach 95% coverage
+- Evidence requirements for 85% confidence (4+ unique evidence IDs)
+- Peer critique guidance for 80% consensus (3-5 critiques)
+
+This preview acts as an **early stage gate**, helping you plan execution before investing time in capability steps.
+
+#### 3. Check readiness before finalization
 Always call `check_session_readiness` before attempting `finalize_parallel_reasoning`. This tool:
 - Verifies structural requirements (min plans, all plans executed)
 - Checks quality metrics against thresholds (confidence ≥85%, coverage ≥95%, consensus ≥80%)

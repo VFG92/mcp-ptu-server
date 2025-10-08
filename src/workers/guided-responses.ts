@@ -102,8 +102,12 @@ You can use ANY axis that makes sense for your task. Here are more examples:
 - \`implementation_approaches\` - Different implementation strategies
 - Or define your own custom axes relevant to your task!
 
-## Key Principle
-**Plans must differ on ≥2 axes** to ensure real diversity, not cosmetic variants.
+## Key Principles
+- **Plans must differ on ≥2 axes** to ensure real diversity, not cosmetic variants
+- **Optimal capability chain length**: 3-5 steps per plan
+  - Shorter chains = fewer \`execute_plan_step\` calls needed to reach 95% coverage
+  - Longer chains (7+) = more execution time and token usage
+  - Coverage formula: executed_steps / total_declared_steps ≥ 0.95
 
 ## Next Step
 Call \`submit_reasoning_plan\` to submit your first plan.
@@ -116,12 +120,14 @@ Call \`submit_reasoning_plan\` to submit your first plan.
     "plan_id": "plan_A",
     "description": "Describe your plan's unique approach",
     "diversity_axes": [${required_axes.map(a => `"${a}"`).join(', ')}, "${suggested_axes[0] || 'additional_axis'}"],
-    "capability_chain": ["capability_1", "capability_2", "...", "capability_N"],
+    "capability_chain": ["capability_1", "capability_2", "capability_3", "capability_4"],
     "rationale": "Explain why this plan adds unique value",
     "expected_outputs": ["Output 1", "Output 2"]
   }
 }
 \`\`\`
+
+💡 **Tip**: Start with 3-5 capabilities per plan. You can always add more plans if needed.
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
 `;
@@ -135,15 +141,59 @@ export function formatPlanAccepted(
   session_id: string,
   plans_submitted: number,
   min_plans: number,
-  axes_declared: DiversityAxis[]
+  axes_declared: DiversityAxis[],
+  total_declared_steps: number,
+  current_plan_chain_length: number
 ): string {
   const needs_more = plans_submitted < min_plans;
-  
+
+  // Warning if capability chain is too long
+  const chainLengthWarning = current_plan_chain_length > 7 ? `
+
+⚠️ **Capability Chain Length Notice**: This plan declares ${current_plan_chain_length} capability steps.
+Longer chains require more \`execute_plan_step\` calls to reach the 95% coverage threshold.
+**Recommendation**: Consider 3-5 steps per plan for optimal execution efficiency.
+` : '';
+
+  // Readiness preview when all plans submitted
+  const readinessPreview = !needs_more ? `
+
+## 🎯 Readiness Preview - What You Need to Finalize
+
+Before you can call \`finalize_parallel_reasoning\`, you must meet these thresholds:
+
+### 1. Coverage ≥ 95%
+- **Total declared steps**: ${total_declared_steps} (across all ${plans_submitted} plans)
+- **Steps needed**: Execute at least ${Math.ceil(total_declared_steps * 0.95)} steps using \`execute_plan_step\`
+- **Why**: Coverage = executed_steps / total_declared_steps
+
+### 2. Confidence ≥ 85%
+- **Evidence needed**: At least 4 unique evidence IDs from executed steps
+- **Formula**: Base 50% + 10% per evidence ID (max +30%) - quality penalties
+- **How**: Each \`execute_plan_step\` generates an evidence ID automatically
+
+### 3. Consensus ≥ 80%
+- **Peer critiques**: Submit 3-5 peer critiques using \`submit_peer_critique\`
+- **Agreement scores**: Aim for agreement_score > 0.7 to build consensus
+- **Why**: Consensus = (agreements - conflicts) / total_interactions
+
+### 📋 Recommended Execution Strategy
+
+1. **Execute core steps first** (${Math.ceil(total_declared_steps * 0.95)} steps minimum)
+2. **Monitor evidence accumulation** (target: 4+ unique evidence IDs)
+3. **Add peer critiques** (3-5 critiques with high agreement scores)
+4. **Check readiness** using \`check_session_readiness\` before finalizing
+5. **Finalize** using \`finalize_parallel_reasoning\` when ready
+
+⚠️ **Important**: Use \`check_session_readiness\` BEFORE attempting to finalize to avoid rejection.
+` : '';
+
   return `# ✅ Plan Accepted: ${plan_id}
 
 **Session ID**: \`${session_id}\`
 **Plans submitted**: ${plans_submitted}/${min_plans}
 **Diversity axes**: ${axes_declared.join(', ')}
+**Capability steps in this plan**: ${current_plan_chain_length}${chainLengthWarning}
 
 ${needs_more ? `
 ## Next Step
@@ -155,12 +205,14 @@ Submit ${min_plans - plans_submitted} more plan(s) to meet minimum requirement.
 - **Real Diversity**: Choose a genuinely different approach, not a cosmetic variant
 - **Contextual Axes**: Select axes that make sense for your specific task
 - **Complementary Perspective**: Add value by covering aspects the first plan doesn't address
+- **Optimal Length**: Aim for 3-5 capability steps per plan for execution efficiency
 
 **Do NOT use template approaches** like "Plan A = quantitative, Plan B = qualitative".
 Instead, think about what unique perspective would genuinely improve the analysis.
 ` : `
 ## Next Step
 You have submitted the minimum number of plans (${min_plans}).
+${readinessPreview}
 
 You can now:
 1. **Execute capabilities**: Call \`execute_plan_step\` to run analysis for each plan
