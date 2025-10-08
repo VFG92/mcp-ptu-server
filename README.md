@@ -52,6 +52,33 @@ Within the MCP session the following tools drive the workflow:
 
 All tools accept a `session_id` parameter. Reuse the same value throughout a workflow to keep state aligned.
 
+## Semantic diversity validation
+The server uses **semantic validation** for diversity axes, enabling more flexible plan differentiation:
+
+### How it works
+- Axes are parsed as **Key: Value** pairs (e.g., `"Tech Stack: Hybrid"` → `{key: "tech_stack", value: "hybrid"}`)
+- **Required axes**: Plans must include axes with matching **keys** (values can differ)
+- **Inter-plan diversity**: Plans must differ on ≥2 axes semantically (same key + different value = different)
+
+### Example
+```json
+{
+  "required_diversity_axes": ["Tech Stack: Cloud", "Data Sources: Official"],
+  "plan_A": {
+    "diversity_axes": ["Tech Stack: Hybrid", "Data Sources: Primary research"]
+  },
+  "plan_B": {
+    "diversity_axes": ["Tech Stack: On-premise", "Data Sources: Expert interviews"]
+  }
+}
+```
+Both plans satisfy required axes (matching keys) and differ on 2 axes (different values) ✅
+
+### Benefits
+- No need to copy exact strings from `required_diversity_axes`
+- Focus on substantive differences, not syntax
+- Rejected plans are stored for audit and cross-contamination
+
 ## Quality metrics
 During finalization the server reports:
 - **Confidence** – weighted by evidence volume and quality signals.

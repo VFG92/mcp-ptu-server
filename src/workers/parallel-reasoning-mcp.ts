@@ -122,6 +122,134 @@ export function suggestDiversityAxes(task_description: string): {
 }
 
 /**
+ * Parsed diversity axis with key-value structure
+ */
+export interface ParsedAxis {
+  key: string;      // Normalized axis key (e.g., "tech_stack")
+  value: string;    // Axis value (e.g., "hybrid")
+  original: string; // Original string for reference
+}
+
+/**
+ * Parse a diversity axis string into key-value structure
+ *
+ * Supports formats:
+ * - "Key: Value" → {key: "key", value: "value"}
+ * - "Key" → {key: "key", value: ""}
+ * - "Key: Value1 vs Value2 vs Value3" → {key: "key", value: "value1 vs value2 vs value3"}
+ *
+ * Examples:
+ * - "Tech Stack: Hybrid" → {key: "tech_stack", value: "hybrid"}
+ * - "data_sources" → {key: "data_sources", value: ""}
+ * - "Risk: Market vs Operational" → {key: "risk", value: "market vs operational"}
+ */
+export function parseAxisString(axis: string): ParsedAxis {
+  const trimmed = axis.trim();
+
+  // Try to match "Key: Value" pattern
+  const match = trimmed.match(/^([^:]+):\s*(.+)$/);
+
+  if (match) {
+    const key = match[1].trim().toLowerCase().replace(/\s+/g, '_');
+    const value = match[2].trim().toLowerCase();
+    return { key, value, original: trimmed };
+  }
+
+  // No colon found - treat entire string as key
+  const key = trimmed.toLowerCase().replace(/\s+/g, '_');
+  return { key, value: '', original: trimmed };
+}
+
+/**
+ * Compare two diversity axes semantically
+ *
+ * Returns true if axes are semantically different:
+ * - Different keys → different
+ * - Same key, different values → different
+ * - Same key, same value → same
+ * - Same key, one has no value → considered same (key match is sufficient)
+ */
+export function compareAxesSemantically(axis1: string, axis2: string): boolean {
+  const parsed1 = parseAxisString(axis1);
+  const parsed2 = parseAxisString(axis2);
+
+  // Different keys → different axes
+  if (parsed1.key !== parsed2.key) {
+    return true;
+  }
+
+  // Same key, both have values → compare values
+  if (parsed1.value && parsed2.value) {
+    return parsed1.value !== parsed2.value;
+  }
+
+  // Same key, at least one has no value → consider same
+  // (key match is sufficient for required axes validation)
+  return false;
+}
+
+/**
+ * Check if a plan's axes satisfy required axes semantically
+ *
+ * A plan satisfies required axes if for each required axis key,
+ * there exists at least one plan axis with the same key.
+ */
+export function satisfiesRequiredAxes(
+  planAxes: string[],
+  requiredAxes: string[]
+): boolean {
+  const planKeys = new Set(planAxes.map(axis => parseAxisString(axis).key));
+  const requiredKeys = requiredAxes.map(axis => parseAxisString(axis).key);
+
+  return requiredKeys.every(reqKey => planKeys.has(reqKey));
+}
+
+/**
+ * Calculate semantic diversity between two plans
+ *
+ * Returns the number of axes that differ semantically:
+ * - Axes with different keys count as different
+ * - Axes with same key but different values count as different
+ * - Axes with same key and same value (or no value) count as same
+ */
+export function calculateSemanticDiversity(
+  plan1Axes: string[],
+  plan2Axes: string[]
+): number {
+  const parsed1 = plan1Axes.map(parseAxisString);
+  const parsed2 = plan2Axes.map(parseAxisString);
+
+  // Create maps by key for efficient lookup
+  const map1 = new Map(parsed1.map(p => [p.key, p.value]));
+  const map2 = new Map(parsed2.map(p => [p.key, p.value]));
+
+  // Get all unique keys
+  const allKeys = new Set([...map1.keys(), ...map2.keys()]);
+
+  let differenceCount = 0;
+
+  for (const key of allKeys) {
+    const value1 = map1.get(key);
+    const value2 = map2.get(key);
+
+    // Key exists in only one plan → different
+    if (value1 === undefined || value2 === undefined) {
+      differenceCount++;
+      continue;
+    }
+
+    // Both have the key - compare values
+    // If both have values and they differ → different
+    if (value1 && value2 && value1 !== value2) {
+      differenceCount++;
+    }
+    // If same value or at least one has no value → same (don't count)
+  }
+
+  return differenceCount;
+}
+
+/**
  * Reasoning plan submitted by ChatGPT
  */
 export const ReasoningPlanSchema = z.object({
@@ -135,6 +263,8 @@ export const ReasoningPlanSchema = z.object({
 
 export type ReasoningPlan = z.infer<typeof ReasoningPlanSchema> & {
   signals?: SignalSummary; // Quality signals computed after submission
+  status?: 'accepted' | 'rejected'; // Plan acceptance status
+  rejection_reason?: string; // Reason for rejection (if status is 'rejected')
 };
 
 /**
@@ -196,7 +326,8 @@ export interface ParallelReasoningSession {
   task_description: string;
   required_diversity_axes: DiversityAxis[];
   min_plans: number;
-  plans: Map<string, ReasoningPlan>;
+  plans: Map<string, ReasoningPlan>; // Accepted plans
+  rejected_plans: Map<string, ReasoningPlan>; // Rejected plans (for reference and cross-contamination)
   plan_results: Map<string, any[]>; // plan_id -> array of capability results
   cross_plan_notes: CrossPlanNote[];
   peer_critiques: PeerCritique[];
@@ -280,6 +411,7 @@ export class ParallelReasoningSessionManager {
       required_diversity_axes: args.required_diversity_axes,
       min_plans: args.min_plans,
       plans: new Map(),
+      rejected_plans: new Map(),
       plan_results: new Map(),
       cross_plan_notes: [],
       peer_critiques: [],
@@ -336,7 +468,7 @@ export class ParallelReasoningSessionManager {
           axes_declared: plan.diversity_axes,
           axes_unique_to_existing: true,
           min_axes_met: plan.diversity_axes.length >= 2,
-          required_axes_satisfied: session.required_diversity_axes.every(axis => plan.diversity_axes.includes(axis)),
+          required_axes_satisfied: satisfiesRequiredAxes(plan.diversity_axes, session.required_diversity_axes),
           required_axes: [...session.required_diversity_axes]
         }
       };
@@ -344,41 +476,59 @@ export class ParallelReasoningSessionManager {
 
     // Validate minimum axes
     const min_axes_met = plan.diversity_axes.length >= 2;
-    const required_axes_satisfied = session.required_diversity_axes.every(axis =>
-      plan.diversity_axes.includes(axis)
+
+    // Use semantic validation for required axes
+    const required_axes_satisfied = satisfiesRequiredAxes(
+      plan.diversity_axes,
+      session.required_diversity_axes
     );
 
-    // Check if axes differ from existing plans by at least two unique axes overall
+    // Check if axes differ from existing plans by at least two axes semantically
     let axes_unique = true;
-    const newAxesSet = new Set(plan.diversity_axes);
+    let minDiversityCount = Infinity;
+    let mostSimilarPlanId = '';
 
-    for (const [, existing_plan] of session.plans) {
-      const existingAxesSet = new Set(existing_plan.diversity_axes);
+    for (const [existingPlanId, existing_plan] of session.plans) {
+      const diversityCount = calculateSemanticDiversity(
+        plan.diversity_axes,
+        existing_plan.diversity_axes
+      );
 
-      let symmetricDifferenceCount = 0;
+      console.log(`[ParallelReasoningSessionManager] Semantic diversity between ${plan.plan_id} and ${existingPlanId}: ${diversityCount}`);
 
-      for (const axis of newAxesSet) {
-        if (!existingAxesSet.has(axis)) {
-          symmetricDifferenceCount++;
-        }
+      if (diversityCount < minDiversityCount) {
+        minDiversityCount = diversityCount;
+        mostSimilarPlanId = existingPlanId;
       }
 
-      for (const axis of existingAxesSet) {
-        if (!newAxesSet.has(axis)) {
-          symmetricDifferenceCount++;
-        }
-      }
-
-      if (symmetricDifferenceCount < 2) {
+      if (diversityCount < 2) {
         axes_unique = false;
         break;
       }
     }
 
+    if (!axes_unique) {
+      console.log(`[ParallelReasoningSessionManager] Plan ${plan.plan_id} rejected: too similar to ${mostSimilarPlanId} (diversity: ${minDiversityCount})`);
+    }
+
+    // Helper function to store rejected plan
+    const storeRejectedPlan = (reason: string) => {
+      const rejectedPlan: ReasoningPlan = {
+        ...plan,
+        status: 'rejected',
+        rejection_reason: reason
+      };
+      session.rejected_plans.set(plan.plan_id, rejectedPlan);
+      session.updated_at = Date.now();
+      console.log(`[ParallelReasoningSessionManager] Stored rejected plan: ${plan.plan_id}`);
+    };
+
     if (!min_axes_met) {
+      const reason = 'Plan must declare at least 2 diversity axes';
+      storeRejectedPlan(reason);
       return {
         accepted: false,
-        reason: 'Plan must declare at least 2 diversity axes',
+        reason,
         diversity_validation: {
           axes_declared: plan.diversity_axes,
           axes_unique_to_existing: axes_unique,
@@ -390,9 +540,11 @@ export class ParallelReasoningSessionManager {
     }
 
     if (!required_axes_satisfied) {
+      const reason = `Plan must include required diversity axes: ${session.required_diversity_axes.join(', ')}`;
+      storeRejectedPlan(reason);
       return {
         accepted: false,
-        reason: `Plan must include required diversity axes: ${session.required_diversity_axes.join(', ')}`,
+        reason,
         diversity_validation: {
           axes_declared: plan.diversity_axes,
           axes_unique_to_existing: axes_unique,
@@ -404,9 +556,11 @@ export class ParallelReasoningSessionManager {
     }
 
     if (!axes_unique && session.plans.size > 0) {
+      const reason = 'Plan diversity axes too similar to existing plans (at least 2 axes must differ)';
+      storeRejectedPlan(reason);
       return {
         accepted: false,
-        reason: 'Plan diversity axes too similar to existing plans (at least 2 axes must differ)',
+        reason,
         diversity_validation: {
           axes_declared: plan.diversity_axes,
           axes_unique_to_existing: false,
@@ -507,6 +661,7 @@ export class ParallelReasoningSessionManager {
 
   /**
    * Submit cross-plan note (contamination)
+   * Now supports references to rejected plans (with warning)
    */
   submitCrossPlanNote(session_id: string, note: CrossPlanNote): void {
     const session = this.sessions.get(session_id);
@@ -514,12 +669,24 @@ export class ParallelReasoningSessionManager {
       throw new Error('Session not found');
     }
 
-    if (!session.plans.has(note.from_plan_id)) {
-      throw new Error(`Plan ID \`${note.from_plan_id}\` not found in session \`${session_id}\``);
+    // Check if plans exist (in either accepted or rejected)
+    const fromPlanExists = session.plans.has(note.from_plan_id) || session.rejected_plans.has(note.from_plan_id);
+    const toPlanExists = session.plans.has(note.to_plan_id) || session.rejected_plans.has(note.to_plan_id);
+
+    if (!fromPlanExists) {
+      throw new Error(`Plan ID \`${note.from_plan_id}\` not found in session \`${session_id}\` (neither accepted nor rejected)`);
     }
 
-    if (!session.plans.has(note.to_plan_id)) {
-      throw new Error(`Plan ID \`${note.to_plan_id}\` not found in session \`${session_id}\``);
+    if (!toPlanExists) {
+      throw new Error(`Plan ID \`${note.to_plan_id}\` not found in session \`${session_id}\` (neither accepted nor rejected)`);
+    }
+
+    // Log warning if referencing rejected plans
+    const fromRejected = session.rejected_plans.has(note.from_plan_id);
+    const toRejected = session.rejected_plans.has(note.to_plan_id);
+
+    if (fromRejected || toRejected) {
+      console.warn(`[ParallelReasoningSessionManager] Cross-plan note references rejected plan(s): from=${note.from_plan_id} (rejected=${fromRejected}), to=${note.to_plan_id} (rejected=${toRejected})`);
     }
 
     // Compute quality signals for the note
@@ -845,6 +1012,7 @@ export class ParallelReasoningSessionManager {
       const serializedSession = {
         ...session,
         plans: Array.from(session.plans.entries()),
+        rejected_plans: Array.from(session.rejected_plans.entries()),
         plan_results: Array.from(session.plan_results.entries())
       };
       serialized.push([sessionId, serializedSession]);
@@ -894,6 +1062,7 @@ export class ParallelReasoningSessionManager {
         const session: ParallelReasoningSession = {
           ...serializedSession,
           plans: new Map(serializedSession.plans || []),
+          rejected_plans: new Map(serializedSession.rejected_plans || []),
           plan_results: new Map(serializedSession.plan_results || [])
         };
         this.sessions.set(sessionId, session);
@@ -922,6 +1091,7 @@ export class ParallelReasoningSessionManager {
     // Keep session_id, task_description, required_diversity_axes, min_plans
     // Reset all execution state
     session.plans.clear();
+    session.rejected_plans.clear();
     session.plan_results.clear();
     session.cross_plan_notes = [];
     session.peer_critiques = [];

@@ -313,10 +313,10 @@ export const ExecutePlanStepSchema = z.object({
   task: z.string().describe('Task for capability execution'),
   adapter_id: z.enum(['strategy', 'finance', 'commercial', 'risk', 'comprehensive']).optional(),
   budget: z.object({
-    max_tokens_in: z.number().int().positive(),
-    max_tokens_out: z.number().int().positive(),
-    max_cpu_ms: z.number().int().positive(),
-    max_subrequests: z.number().int().positive()
+    max_tokens_in: z.number().int().min(1),
+    max_tokens_out: z.number().int().min(1),
+    max_cpu_ms: z.number().int().min(1),
+    max_subrequests: z.number().int().min(1)
   }).optional()
 });
 

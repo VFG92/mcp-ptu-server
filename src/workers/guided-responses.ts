@@ -190,24 +190,46 @@ export function formatPlanRejectedMissingAxes(
   required_axes: DiversityAxis[],
   declared_axes: DiversityAxis[]
 ): string {
-  const missing = required_axes.filter(axis => !declared_axes.includes(axis));
-  const present = required_axes.filter(axis => declared_axes.includes(axis));
-  
+  // Import parseAxisString for semantic comparison
+  const { parseAxisString } = require('./parallel-reasoning-mcp.js');
+
+  // Check semantic matches
+  const declaredKeys = new Set(declared_axes.map(axis => parseAxisString(axis).key));
+  const requiredParsed = required_axes.map(axis => ({
+    original: axis,
+    parsed: parseAxisString(axis)
+  }));
+
   return `# ❌ Plan Rejected: ${plan_id}
 
-**Reason**: Missing required diversity axes
+**Reason**: Missing required diversity axes (semantic validation)
 
-## Required Axes (must include ALL)
-${required_axes.map(axis => {
-  const has = declared_axes.includes(axis);
-  return `  ${has ? '✓' : '✗'} \`${axis}\`${has ? ' (present)' : ' **← MISSING**'}`;
+## How Semantic Validation Works
+The system checks if your plan includes axes with the **same keys** as required axes.
+- Required axis "Tech Stack: Cloud" → needs any axis with key "tech_stack"
+- Your axis "Tech Stack: Hybrid" → ✓ matches (same key, different value is OK)
+- Your axis "Technology: Hybrid" → ✗ doesn't match (different key)
+
+## Required Axes (must include ALL keys)
+${requiredParsed.map(({ original, parsed }) => {
+  const has = declaredKeys.has(parsed.key);
+  return `  ${has ? '✓' : '✗'} \`${original}\` (key: "${parsed.key}")${has ? ' (present)' : ' **← MISSING**'}`;
 }).join('\n')}
 
 ## Your Plan Declared
-${declared_axes.map(axis => `  - \`${axis}\``).join('\n')}
+${declared_axes.map(axis => {
+  const parsed = parseAxisString(axis);
+  return `  - \`${axis}\` (key: "${parsed.key}")`;
+}).join('\n')}
 
 ## Action Required
-Add the missing axis/axes to your \`diversity_axes\` array and resubmit.
+Add axes with the missing **keys** to your \`diversity_axes\` array. You can use different values.
+
+**Example Fix**:
+If required axis is "Tech Stack: Cloud" and you want a different approach:
+- ✅ Use "Tech Stack: Hybrid" (same key, different value)
+- ✅ Use "Tech Stack: On-premise" (same key, different value)
+- ❌ Don't use "Technology: Hybrid" (different key)
 
 **Fixed Example**:
 \`\`\`json
@@ -240,10 +262,18 @@ export function formatPlanRejectedTooSimilar(
 ): string {
   return `# ❌ Plan Rejected: ${plan_id}
 
-**Reason**: Diversity axes too similar to existing plans (must differ on ≥2 axes)
+**Reason**: Diversity axes too similar to existing plans (must differ on ≥2 axes **semantically**)
 
 ## Diversity Requirement
-Each plan must differ from ALL existing plans on at least **2 axes**.
+Each plan must differ from ALL existing plans on at least **2 axes semantically**.
+
+### What "Semantic Diversity" Means
+The system now uses **semantic comparison** instead of literal string matching:
+- Axes are parsed as **Key: Value** pairs
+- Example: "Tech Stack: Hybrid" → key="tech_stack", value="hybrid"
+- Two axes are **different** if they have:
+  - Different keys (e.g., "Tech Stack" vs "Data Sources"), OR
+  - Same key but different values (e.g., "Tech Stack: Hybrid" vs "Tech Stack: Cloud")
 
 ## Your Plan
 - **Axes**: ${declared_axes.join(', ')}
@@ -252,22 +282,34 @@ Each plan must differ from ALL existing plans on at least **2 axes**.
 ${existing_plans.map(p => `- **${p.plan_id}**: ${p.axes.join(', ')}`).join('\n')}
 
 ## Problem
-Your plan's axes overlap too much with existing plans. You need at least 2 axes that differ.
+Your plan's axes overlap too much with existing plans. You need at least 2 axes that differ **semantically**.
 
 ## How to Fix
-1. **Analyze existing plans**: Look at what axes they use
-2. **Choose genuinely different axes**: Select axes that provide a complementary perspective
-3. **Ensure ≥2 axes differ**: At least 2 of your axes must be different from each existing plan
+1. **Use Key: Value format**: Structure axes as "Category: Specific Value"
+   - Good: "Tech Stack: Hybrid", "Risk Perspective: Market-focused"
+   - Avoid: "hybrid_tech", "market_risk" (harder to parse semantically)
 
-## Principles for Choosing Different Axes
-- **Don't just swap labels**: "quantitative" vs "qualitative" is often cosmetic
+2. **Change values, not just labels**: If an existing plan uses "Tech Stack: Cloud", use:
+   - ✅ "Tech Stack: On-premise" (same key, different value)
+   - ✅ "Data Sources: Primary research" (different key)
+   - ❌ "Technology Stack: Cloud" (same key and value, just rephrased)
+
+3. **Ensure ≥2 semantic differences**: At least 2 of your axes must differ from each existing plan
+
+## Principles for Semantic Diversity
+- **Focus on substance, not syntax**: "Quantitative approach" vs "Qualitative approach" are semantically different
+- **Use consistent key names**: If one plan uses "Tech Stack", use the same key with a different value
 - **Think about real differences**: Different data sources, time horizons, stakeholder views
 - **Add complementary value**: What perspective is missing from existing plans?
-- **Be contextual**: Choose axes that make sense for your specific task
 
-## Remember
-You can use ANY axes that make sense for your task, not just predefined ones.
-Examples: \`geographic_scope\`, \`customer_segments\`, \`technology_stacks\`, \`regulatory_frameworks\`, etc.
+## Examples of Semantic Diversity
+✅ **Good diversity**:
+- Plan A: ["Tech Stack: Cloud", "Risk: Market"]
+- Plan B: ["Tech Stack: Hybrid", "Risk: Operational"] → 2 differences (both values changed)
+
+❌ **Insufficient diversity**:
+- Plan A: ["Tech Stack: Cloud", "Risk: Market"]
+- Plan B: ["Tech Stack: Cloud", "Risk: Market-focused"] → Only 1 difference (risk value slightly different)
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
 `;

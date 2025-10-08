@@ -66,3 +66,49 @@ The main `tsconfig.json` excludes `src/ui` to avoid conflicts with React JSX con
 - ❌ DO NOT modify UI components without rebuilding (`npm run build` in `src/ui`)
 - ❌ DO NOT change structured content types without updating UI components
 
+## Semantic diversity validation
+
+The parallel reasoning system uses **semantic validation** for diversity axes instead of literal string matching. This enables more flexible and intuitive plan differentiation.
+
+### How it works
+Diversity axes are parsed as **Key: Value** pairs:
+- `"Tech Stack: Hybrid"` → `{key: "tech_stack", value: "hybrid"}`
+- `"Data Sources: Primary research"` → `{key: "data_sources", value: "primary research"}`
+
+### Validation rules
+1. **Required axes**: Plans must include axes with the **same keys** as required axes (values can differ)
+   - Required: `"Tech Stack: Cloud"` → Plan can use `"Tech Stack: Hybrid"` ✅
+   - Required: `"Tech Stack: Cloud"` → Plan cannot use `"Technology: Hybrid"` ❌ (different key)
+
+2. **Inter-plan diversity**: Plans must differ from existing plans on **at least 2 axes semantically**
+   - Same key, different values → counts as different
+   - Different keys → counts as different
+   - Same key, same value → counts as same
+
+### Examples
+**Good diversity** (2+ semantic differences):
+```typescript
+Plan A: ["Tech Stack: Cloud", "Risk: Market", "Time: Short-term"]
+Plan B: ["Tech Stack: Hybrid", "Risk: Operational", "Time: Short-term"]
+// Differences: Tech Stack value, Risk value (2 differences) ✅
+```
+
+**Insufficient diversity** (<2 differences):
+```typescript
+Plan A: ["Tech Stack: Cloud", "Risk: Market", "Time: Short-term"]
+Plan B: ["Tech Stack: Cloud", "Risk: Market-focused", "Time: Short-term"]
+// Differences: Only Risk value slightly different (1 difference) ❌
+```
+
+### Best practices for agents
+- Use consistent key names across plans (e.g., always "Tech Stack", not "Technology Stack")
+- Structure axes as "Category: Specific Value" for clarity
+- Focus on substantive differences, not just label variations
+- When a plan is rejected, check the semantic diversity count in logs
+
+### Implementation details
+- Parser: `parseAxisString()` in `src/workers/parallel-reasoning-mcp.ts`
+- Validator: `calculateSemanticDiversity()` compares plans semantically
+- Rejected plans are stored in `session.rejected_plans` for audit and cross-contamination
+- Budget validation now accepts values ≥1 instead of >0
+
