@@ -25,7 +25,15 @@
 import { z } from 'zod';
 import type { SignalSummary } from './evidence-signals.js';
 import { analyzePlan, analyzeCritique, analyzeMediationDecision, analyzeCrossPlanNote } from './evidence-signals.js';
-import { computeSessionMetrics, type SessionMetrics } from './session-metrics.js';
+import {
+  computeSessionMetrics,
+  meetsThresholds,
+  generateMetricWarnings,
+  CONFIDENCE_THRESHOLD,
+  COVERAGE_THRESHOLD,
+  CONSENSUS_THRESHOLD,
+  type SessionMetrics
+} from './session-metrics.js';
 
 /**
  * Diversity axes for plan differentiation
@@ -760,6 +768,127 @@ export class ParallelReasoningSessionManager {
   }
 
   /**
+   * Check if session is ready for finalization
+   *
+   * Validates:
+   * - Minimum plans requirement
+   * - All plans have execution results
+   * - Quality metrics meet thresholds (85% confidence, 95% coverage, 80% consensus)
+   */
+  checkSessionReadiness(session_id: string): {
+    ready: boolean;
+    structural_check: {
+      min_plans_met: boolean;
+      all_plans_executed: boolean;
+      plans_submitted: number;
+      min_plans_required: number;
+      missing_plans: string[];
+    };
+    quality_check: {
+      confidence_met: boolean;
+      coverage_met: boolean;
+      consensus_met: boolean;
+      all_thresholds_met: boolean;
+    };
+    metrics: SessionMetrics;
+    blockers: string[];
+    recommendations: string[];
+  } {
+    const session = this.sessions.get(session_id);
+    if (!session) {
+      return {
+        ready: false,
+        structural_check: {
+          min_plans_met: false,
+          all_plans_executed: false,
+          plans_submitted: 0,
+          min_plans_required: 0,
+          missing_plans: []
+        },
+        quality_check: {
+          confidence_met: false,
+          coverage_met: false,
+          consensus_met: false,
+          all_thresholds_met: false
+        },
+        metrics: {
+          confidence: 0,
+          coverage: 0,
+          consensus: 0,
+          computed_at: Date.now(),
+          details: {
+            confidence: { unique_evidence_count: 0, evidence_low_count: 0, base: 0, bonus: 0, penalty: 0 },
+            coverage: { total_declared_steps: 0, executed_steps: 0 },
+            consensus: { agreements: 0, conflicts: 0, total_interactions: 0 }
+          }
+        },
+        blockers: ['Session not found'],
+        recommendations: []
+      };
+    }
+
+    // Structural checks
+    const plans_submitted = session.plans.size;
+    const min_plans_met = plans_submitted >= session.min_plans;
+
+    const missing_plans: string[] = [];
+    for (const [plan_id, _] of session.plans) {
+      const results = session.plan_results.get(plan_id);
+      if (!results || results.length === 0) {
+        missing_plans.push(plan_id);
+      }
+    }
+    const all_plans_executed = missing_plans.length === 0;
+
+    // Quality checks
+    const metrics = this.computeMetrics(session_id);
+    const thresholds = meetsThresholds(metrics);
+
+    // Compile blockers
+    const blockers: string[] = [];
+    if (!min_plans_met) {
+      blockers.push(`Need ${session.min_plans - plans_submitted} more plan(s) (${plans_submitted}/${session.min_plans} submitted)`);
+    }
+    if (!all_plans_executed) {
+      blockers.push(`${missing_plans.length} plan(s) not executed: ${missing_plans.join(', ')}`);
+    }
+    if (!thresholds.confidence_met) {
+      blockers.push(`Confidence below ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}% threshold (current: ${(metrics.confidence * 100).toFixed(1)}%)`);
+    }
+    if (!thresholds.coverage_met) {
+      blockers.push(`Coverage below ${(COVERAGE_THRESHOLD * 100).toFixed(0)}% threshold (current: ${(metrics.coverage * 100).toFixed(1)}%)`);
+    }
+    if (!thresholds.consensus_met) {
+      blockers.push(`Consensus below ${(CONSENSUS_THRESHOLD * 100).toFixed(0)}% threshold (current: ${(metrics.consensus * 100).toFixed(1)}%)`);
+    }
+
+    // Generate recommendations
+    const recommendations = generateMetricWarnings(metrics);
+
+    const ready = min_plans_met && all_plans_executed && thresholds.ready;
+
+    return {
+      ready,
+      structural_check: {
+        min_plans_met,
+        all_plans_executed,
+        plans_submitted,
+        min_plans_required: session.min_plans,
+        missing_plans
+      },
+      quality_check: {
+        confidence_met: thresholds.confidence_met,
+        coverage_met: thresholds.coverage_met,
+        consensus_met: thresholds.consensus_met,
+        all_thresholds_met: thresholds.ready
+      },
+      metrics,
+      blockers,
+      recommendations
+    };
+  }
+
+  /**
    * Finalize session
    *
    * Validates completeness (structural only):
@@ -874,21 +1003,59 @@ export class ParallelReasoningSessionManager {
       }
     }
 
-    // Session is finalized if minimum plans are met and all plans are executed
-    // Evidence IDs and quality signals are recommended but not required (warnings only)
-    const finalized = min_plans_met && all_plans_executed;
+    // Compute quality metrics
+    const metrics = this.computeMetrics(session_id);
+    const thresholds = meetsThresholds(metrics);
+
+    // Session is finalized if:
+    // 1. Minimum plans are met
+    // 2. All plans are executed
+    // 3. Quality metrics meet thresholds (BLOCKING)
+    const finalized = min_plans_met && all_plans_executed && thresholds.ready;
+
+    // Compile all warnings
+    const warnings: string[] = [];
+
+    // BLOCKING: Quality metrics below thresholds
+    if (!thresholds.ready) {
+      warnings.push(`🚫 **FINALIZATION BLOCKED**: Quality metrics below required thresholds`);
+      warnings.push(``);
+
+      if (!thresholds.confidence_met) {
+        const needed = Math.ceil((CONFIDENCE_THRESHOLD - metrics.confidence) / 0.1);
+        warnings.push(
+          `❌ **Confidence**: ${(metrics.confidence * 100).toFixed(1)}% (need ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}%) - ` +
+          `Add ${needed} more evidence references using \`execute_plan_step\``
+        );
+      }
+
+      if (!thresholds.coverage_met) {
+        const needed = Math.ceil(
+          (COVERAGE_THRESHOLD - metrics.coverage) * metrics.details.coverage.total_declared_steps
+        );
+        warnings.push(
+          `❌ **Coverage**: ${(metrics.coverage * 100).toFixed(1)}% (need ${(COVERAGE_THRESHOLD * 100).toFixed(0)}%) - ` +
+          `Execute ${needed} more capability steps (${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} completed)`
+        );
+      }
+
+      if (!thresholds.consensus_met) {
+        warnings.push(
+          `❌ **Consensus**: ${(metrics.consensus * 100).toFixed(1)}% (need ${(CONSENSUS_THRESHOLD * 100).toFixed(0)}%) - ` +
+          `Submit more peer critiques using \`submit_peer_critique\` (${metrics.details.consensus.agreements} agreements, ${metrics.details.consensus.conflicts} conflicts)`
+        );
+      }
+
+      warnings.push(``);
+      warnings.push(`💡 **Next steps**: Use \`check_session_readiness\` to verify progress before attempting finalization again`);
+    }
 
     if (finalized) {
       session.status = 'finalized';
       session.updated_at = Date.now();
     }
 
-    // Compute quality metrics
-    const metrics = this.computeMetrics(session_id);
-
-    // Compile all warnings
-    const warnings: string[] = [];
-
+    // Non-blocking warnings
     if (decisions_without_evidence.length > 0) {
       warnings.push(`⚠️ ${decisions_without_evidence.length} mediation decision(s) lack evidence IDs. While not blocking finalization, evidence IDs improve traceability.`);
     }
@@ -897,34 +1064,6 @@ export class ParallelReasoningSessionManager {
       warnings.push(`⚠️ ${flagged_artifacts.length} artifact(s) flagged with quality concerns:`);
       warnings.push(...quality_warnings.map(w => `   - ${w}`));
       warnings.push(`Review flagged artifacts before finalizing to ensure analysis depth.`);
-    }
-
-    // Add metric warnings (non-blocking)
-    if (metrics.confidence < 0.6) {
-      const needed = Math.ceil((0.6 - metrics.confidence) / 0.1);
-      warnings.push(
-        `⚠️ Low Confidence (${(metrics.confidence * 100).toFixed(1)}%): ` +
-        `Add ${needed} more evidence references or improve quality signals to reach 60% threshold`
-      );
-    }
-
-    if (metrics.coverage < 0.8) {
-      const needed = Math.ceil(
-        (0.8 - metrics.coverage) * metrics.details.coverage.total_declared_steps
-      );
-      warnings.push(
-        `⚠️ Low Coverage (${(metrics.coverage * 100).toFixed(1)}%): ` +
-        `Execute ${needed} more capability steps to reach 80% threshold ` +
-        `(${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} completed)`
-      );
-    }
-
-    if (metrics.consensus < 0.5) {
-      warnings.push(
-        `⚠️ Low Consensus (${(metrics.consensus * 100).toFixed(1)}%): ` +
-        `Resolve conflicts through additional peer reviews or mediation ` +
-        `(${metrics.details.consensus.agreements} agreements, ${metrics.details.consensus.conflicts} conflicts)`
-      );
     }
 
     return {

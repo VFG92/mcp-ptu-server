@@ -19,7 +19,9 @@ Use the following prompt to exercise the server end-to-end:
 
 > Start a parallel reasoning session on this issue, invoke every endpoint at the right moment, and use reasoning to drive a workflow that ends with closing the session. Use **all** MCP endpoints and activate native capabilities whenever calculations or retrieval of real evidence is required.
 >
-> Finalization is blocked unless the quality metrics returned by the endpoints report **Confidence ≥ 85%**, **Coverage ≥ 95%** (essential steps complete, no fluff), **Consensus ≥ 80%**, and every material figure is backed by at least two independent sources or one primary source plus a reconstruction workpaper.
+> **IMPORTANT**: Always call `check_session_readiness` before attempting `finalize_parallel_reasoning`. Finalization is **automatically blocked** unless the quality metrics report **Confidence ≥ 85%**, **Coverage ≥ 95%** (essential steps complete, no fluff), **Consensus ≥ 80%**, and every material figure is backed by at least two independent sources or one primary source plus a reconstruction workpaper.
+>
+> If readiness check shows metrics below thresholds, follow the recommendations provided (e.g., execute more capability steps, add more evidence, conduct peer reviews) before attempting finalization.
 
 ## Useful commands
 ```bash
@@ -111,4 +113,49 @@ Plan B: ["Tech Stack: Cloud", "Risk: Market-focused", "Time: Short-term"]
 - Validator: `calculateSemanticDiversity()` compares plans semantically
 - Rejected plans are stored in `session.rejected_plans` for audit and cross-contamination
 - Budget validation now accepts values ≥1 instead of >0
+
+## Quality thresholds and finalization blocking
+
+The server enforces strict quality thresholds to prevent premature finalization of parallel reasoning sessions.
+
+### Quality metrics and thresholds
+| Metric | Threshold | Formula |
+|--------|-----------|---------|
+| **Confidence** | ≥85% | Base (50%) + Evidence bonus (max +30%) - Quality penalty (max -40%) |
+| **Coverage** | ≥95% | Executed steps / Declared capability chain steps |
+| **Consensus** | ≥80% | Normalized from peer critique agreement scores |
+
+### Workflow enforcement
+1. **Pre-finalization check**: Always call `check_session_readiness` before `finalize_parallel_reasoning`
+   - Returns structural check (min plans, all executed)
+   - Returns quality check (which thresholds are met/unmet)
+   - Provides actionable recommendations if not ready
+   - Lists specific blockers preventing finalization
+
+2. **Finalization blocking**: `finalize_parallel_reasoning` will **block** if:
+   - Structural requirements not met (min plans, execution incomplete)
+   - **OR** any quality metric below threshold
+   - Returns `finalized: false` with detailed warnings
+   - Explains which metrics need improvement
+   - Provides next steps to reach thresholds
+
+### Best practices for agents
+- ✅ Always call `check_session_readiness` before attempting finalization
+- ✅ If not ready, follow the recommendations (execute more steps, add evidence, conduct reviews)
+- ✅ Re-check readiness after improvements
+- ✅ Only attempt finalization when `ready: true`
+- ❌ DO NOT repeatedly call `finalize_parallel_reasoning` if blocked
+- ❌ DO NOT skip `check_session_readiness` to "save time"
+
+### Implementation details
+- Thresholds: `CONFIDENCE_THRESHOLD`, `COVERAGE_THRESHOLD`, `CONSENSUS_THRESHOLD` in `src/workers/session-metrics.ts`
+- Readiness check: `checkSessionReadiness()` in `src/workers/parallel-reasoning-mcp.ts`
+- Blocking logic: `finalizeSession()` checks `meetsThresholds()` before allowing finalization
+- New MCP tool: `check_session_readiness` registered in `src/workers/everything-workers.ts`
+
+### Test coverage
+- `__tests__/session-readiness.test.ts`: 4 tests covering readiness checks and blocking behavior
+- `__tests__/session-metrics.test.ts`: Updated to reflect blocking finalization
+- `__tests__/parallel-reasoning-v5.test.ts`: Updated to reflect quality threshold enforcement
+- All 266 tests passing ✅
 

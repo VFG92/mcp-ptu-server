@@ -1,6 +1,6 @@
 /**
  * Session Quality Metrics
- * 
+ *
  * Calculates dynamic quality metrics for parallel reasoning sessions:
  * - Confidence: Based on evidence density and quality signals
  * - Coverage: Ratio of executed vs declared capability steps
@@ -9,10 +9,18 @@
 
 import type { ParallelReasoningSession } from './parallel-reasoning-mcp.js';
 
+/**
+ * Quality thresholds for session readiness
+ * These are the minimum values required for a session to be considered ready for finalization
+ */
+export const CONFIDENCE_THRESHOLD = 0.85;  // 85%
+export const COVERAGE_THRESHOLD = 0.95;    // 95%
+export const CONSENSUS_THRESHOLD = 0.80;   // 80%
+
 export interface SessionMetrics {
-  confidence: number;  // 0-1, threshold: 0.6
-  coverage: number;    // 0-1, threshold: 0.8
-  consensus: number;   // 0-1, threshold: 0.5
+  confidence: number;  // 0-1, threshold: 0.85
+  coverage: number;    // 0-1, threshold: 0.95
+  consensus: number;   // 0-1, threshold: 0.80
   computed_at: number;
   details: {
     confidence: {
@@ -224,38 +232,57 @@ export function computeSessionMetrics(session: ParallelReasoningSession): Sessio
 }
 
 /**
+ * Check if metrics meet all thresholds for session readiness
+ */
+export function meetsThresholds(metrics: SessionMetrics): {
+  ready: boolean;
+  confidence_met: boolean;
+  coverage_met: boolean;
+  consensus_met: boolean;
+} {
+  return {
+    ready: metrics.confidence >= CONFIDENCE_THRESHOLD &&
+           metrics.coverage >= COVERAGE_THRESHOLD &&
+           metrics.consensus >= CONSENSUS_THRESHOLD,
+    confidence_met: metrics.confidence >= CONFIDENCE_THRESHOLD,
+    coverage_met: metrics.coverage >= COVERAGE_THRESHOLD,
+    consensus_met: metrics.consensus >= CONSENSUS_THRESHOLD
+  };
+}
+
+/**
  * Generate metric warnings for values below thresholds
  */
 export function generateMetricWarnings(metrics: SessionMetrics): string[] {
   const warnings: string[] = [];
-  
-  if (metrics.confidence < 0.6) {
-    const needed = Math.ceil((0.6 - metrics.confidence) / 0.1);
+
+  if (metrics.confidence < CONFIDENCE_THRESHOLD) {
+    const needed = Math.ceil((CONFIDENCE_THRESHOLD - metrics.confidence) / 0.1);
     warnings.push(
       `⚠️ Low Confidence (${(metrics.confidence * 100).toFixed(1)}%): ` +
-      `Add ${needed} more evidence references or improve quality signals to reach 60% threshold`
+      `Add ${needed} more evidence references or improve quality signals to reach ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}% threshold`
     );
   }
-  
-  if (metrics.coverage < 0.8) {
+
+  if (metrics.coverage < COVERAGE_THRESHOLD) {
     const needed = Math.ceil(
-      (0.8 - metrics.coverage) * metrics.details.coverage.total_declared_steps
+      (COVERAGE_THRESHOLD - metrics.coverage) * metrics.details.coverage.total_declared_steps
     );
     warnings.push(
       `⚠️ Low Coverage (${(metrics.coverage * 100).toFixed(1)}%): ` +
-      `Execute ${needed} more capability steps to reach 80% threshold ` +
+      `Execute ${needed} more capability steps to reach ${(COVERAGE_THRESHOLD * 100).toFixed(0)}% threshold ` +
       `(${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} completed)`
     );
   }
-  
-  if (metrics.consensus < 0.5) {
+
+  if (metrics.consensus < CONSENSUS_THRESHOLD) {
     warnings.push(
       `⚠️ Low Consensus (${(metrics.consensus * 100).toFixed(1)}%): ` +
-      `Resolve conflicts through additional peer reviews or mediation ` +
+      `Resolve conflicts through additional peer reviews or mediation to reach ${(CONSENSUS_THRESHOLD * 100).toFixed(0)}% threshold ` +
       `(${metrics.details.consensus.agreements} agreements, ${metrics.details.consensus.conflicts} conflicts)`
     );
   }
-  
+
   return warnings;
 }
 
@@ -264,21 +291,24 @@ export function generateMetricWarnings(metrics: SessionMetrics): string[] {
  */
 export function formatMetrics(metrics: SessionMetrics): string {
   let output = '## 📊 Quality Metrics\n\n';
-  
+
   output += `- **Confidence**: ${(metrics.confidence * 100).toFixed(1)}% `;
-  output += metrics.confidence >= 0.6 ? '✅' : '⚠️';
-  output += ` (${metrics.details.confidence.unique_evidence_count} evidence, `;
+  output += metrics.confidence >= CONFIDENCE_THRESHOLD ? '✅' : '⚠️';
+  output += ` (target: ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}%, `;
+  output += `${metrics.details.confidence.unique_evidence_count} evidence, `;
   output += `${metrics.details.confidence.evidence_low_count} quality issues)\n`;
-  
+
   output += `- **Coverage**: ${(metrics.coverage * 100).toFixed(1)}% `;
-  output += metrics.coverage >= 0.8 ? '✅' : '⚠️';
-  output += ` (${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} steps)\n`;
-  
+  output += metrics.coverage >= COVERAGE_THRESHOLD ? '✅' : '⚠️';
+  output += ` (target: ${(COVERAGE_THRESHOLD * 100).toFixed(0)}%, `;
+  output += `${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} steps)\n`;
+
   output += `- **Consensus**: ${(metrics.consensus * 100).toFixed(1)}% `;
-  output += metrics.consensus >= 0.5 ? '✅' : '⚠️';
-  output += ` (${metrics.details.consensus.agreements} agreements, `;
+  output += metrics.consensus >= CONSENSUS_THRESHOLD ? '✅' : '⚠️';
+  output += ` (target: ${(CONSENSUS_THRESHOLD * 100).toFixed(0)}%, `;
+  output += `${metrics.details.consensus.agreements} agreements, `;
   output += `${metrics.details.consensus.conflicts} conflicts)\n`;
-  
+
   return output;
 }
 

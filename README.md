@@ -48,9 +48,19 @@ Within the MCP session the following tools drive the workflow:
 - `execute_plan_step` – perform capability steps and automatically log evidence IDs.
 - `submit_peer_review` – critique other plans and update consensus tallies.
 - `record_plan_result` – save outcomes and evidence references for a plan.
+- `check_session_readiness` – verify if session meets quality thresholds before finalization (recommended).
 - `finalize_parallel_reasoning` – close the session, returning quality metrics and a consolidated recommendation.
 
 All tools accept a `session_id` parameter. Reuse the same value throughout a workflow to keep state aligned.
+
+### Best practice: Check readiness before finalization
+Always call `check_session_readiness` before attempting `finalize_parallel_reasoning`. This tool:
+- Verifies structural requirements (min plans, all plans executed)
+- Checks quality metrics against thresholds (confidence ≥85%, coverage ≥95%, consensus ≥80%)
+- Provides actionable recommendations if not ready
+- Prevents premature finalization attempts
+
+If `finalize_parallel_reasoning` is called when quality metrics are below thresholds, it will **block finalization** and return detailed warnings explaining which metrics need improvement.
 
 ## Semantic diversity validation
 The server uses **semantic validation** for diversity axes, enabling more flexible plan differentiation:
@@ -79,13 +89,20 @@ Both plans satisfy required axes (matching keys) and differ on 2 axes (different
 - Focus on substantive differences, not syntax
 - Rejected plans are stored for audit and cross-contamination
 
-## Quality metrics
-During finalization the server reports:
-- **Confidence** – weighted by evidence volume and quality signals.
-- **Coverage** – ratio of executed capability steps to the plan commitments.
-- **Consensus** – balance of positive vs. conflicting peer reviews.
+## Quality metrics and thresholds
+The server enforces quality thresholds to prevent premature finalization:
 
-Clients should treat the recommended thresholds (≥85% confidence, ≥95% coverage, ≥80% consensus) as gating criteria when determining whether a session is ready to close.
+| Metric | Threshold | Description |
+|--------|-----------|-------------|
+| **Confidence** | ≥85% | Weighted by evidence volume and quality signals |
+| **Coverage** | ≥95% | Ratio of executed capability steps to plan commitments |
+| **Consensus** | ≥80% | Balance of positive vs. conflicting peer reviews |
+
+### Enforcement behavior
+- `check_session_readiness` reports which thresholds are met/unmet
+- `finalize_parallel_reasoning` **blocks finalization** if any threshold is unmet
+- Blocking warnings explain which metrics need improvement and provide actionable next steps
+- Sessions can only finalize when all structural requirements AND quality thresholds are satisfied
 
 ## Troubleshooting quick wins
 - **400 "Server not initialized"** – call `initialize` before using `tools/call`, or let `/proxy` perform the handshake automatically.

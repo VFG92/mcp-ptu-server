@@ -262,7 +262,7 @@ describe('Session Quality Metrics', () => {
   });
 
   describe('Metrics in finalization', () => {
-    it('should include metrics in finalization result', () => {
+    it('should include metrics in finalization result (blocked due to thresholds)', () => {
       // Execute all steps
       for (let i = 1; i <= 8; i++) {
         manager.recordPlanResult(sessionId, 'plan-a', { task: `Task A${i}` });
@@ -271,25 +271,31 @@ describe('Session Quality Metrics', () => {
 
       const result = manager.finalizeSession(sessionId);
 
-      expect(result.finalized).toBe(true);
+      // Note: Finalization will be blocked because confidence is below 85% threshold
+      // (confidence formula caps at ~80% with current evidence)
+      expect(result.finalized).toBe(false);
       expect(result.metrics).toBeDefined();
       expect(result.metrics?.confidence).toBeGreaterThanOrEqual(0);
       expect(result.metrics?.coverage).toBe(1.0); // 100% coverage
       expect(result.metrics?.consensus).toBeGreaterThanOrEqual(0);
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings!.some(w => w.includes('FINALIZATION BLOCKED'))).toBe(true);
     });
 
-    it('should generate warnings for low metrics', () => {
+    it('should generate warnings and block finalization for low metrics', () => {
       // Execute only 2 steps (low coverage)
       manager.recordPlanResult(sessionId, 'plan-a', { task: 'Task 1' });
       manager.recordPlanResult(sessionId, 'plan-b', { task: 'Task 2' });
 
       const result = manager.finalizeSession(sessionId);
 
-      expect(result.finalized).toBe(true);
+      // Finalization should be blocked due to low coverage and confidence
+      expect(result.finalized).toBe(false);
       expect(result.warnings).toBeDefined();
-      
-      // Should have warnings for low coverage and low confidence
+
+      // Should have blocking warnings for low coverage and low confidence
       const warningText = result.warnings?.join(' ') || '';
+      expect(warningText).toContain('FINALIZATION BLOCKED');
       expect(warningText).toContain('Coverage');
       expect(warningText).toContain('Confidence');
     });

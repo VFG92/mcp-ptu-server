@@ -10,7 +10,7 @@
  */
 
 import type { DiversityAxis, ReasoningPlan } from './parallel-reasoning-mcp.js';
-import { suggestDiversityAxes, COMMON_DIVERSITY_AXES } from './parallel-reasoning-mcp.js';
+import { suggestDiversityAxes, COMMON_DIVERSITY_AXES, parseAxisString } from './parallel-reasoning-mcp.js';
 import type { SessionMetrics } from './session-metrics.js';
 
 /**
@@ -190,10 +190,7 @@ export function formatPlanRejectedMissingAxes(
   required_axes: DiversityAxis[],
   declared_axes: DiversityAxis[]
 ): string {
-  // Import parseAxisString for semantic comparison
-  const { parseAxisString } = require('./parallel-reasoning-mcp.js');
-
-  // Check semantic matches
+  // Check semantic matches using parseAxisString (imported at top)
   const declaredKeys = new Set(declared_axes.map(axis => parseAxisString(axis).key));
   const requiredParsed = required_axes.map(axis => ({
     original: axis,
@@ -480,36 +477,36 @@ export function formatFinalizationSuccess(
 `;
 
     response += `- **Confidence**: ${(metrics.confidence * 100).toFixed(1)}% `;
-    response += metrics.confidence >= 0.6 ? '✅' : '⚠️';
-    response += ` (${metrics.details.confidence.unique_evidence_count} evidence, `;
+    response += metrics.confidence >= 0.85 ? '✅' : '⚠️';
+    response += ` (target: 85%, ${metrics.details.confidence.unique_evidence_count} evidence, `;
     response += `${metrics.details.confidence.evidence_low_count} quality issues)\n`;
 
     response += `- **Coverage**: ${(metrics.coverage * 100).toFixed(1)}% `;
-    response += metrics.coverage >= 0.8 ? '✅' : '⚠️';
-    response += ` (${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} steps)\n`;
+    response += metrics.coverage >= 0.95 ? '✅' : '⚠️';
+    response += ` (target: 95%, ${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} steps)\n`;
 
     response += `- **Consensus**: ${(metrics.consensus * 100).toFixed(1)}% `;
-    response += metrics.consensus >= 0.5 ? '✅' : '⚠️';
-    response += ` (${metrics.details.consensus.agreements} agreements, `;
+    response += metrics.consensus >= 0.80 ? '✅' : '⚠️';
+    response += ` (target: 80%, ${metrics.details.consensus.agreements} agreements, `;
     response += `${metrics.details.consensus.conflicts} conflicts)\n\n`;
 
     // Add recommendations if metrics are below thresholds
-    const hasLowMetrics = metrics.confidence < 0.6 || metrics.coverage < 0.8 || metrics.consensus < 0.5;
+    const hasLowMetrics = metrics.confidence < 0.85 || metrics.coverage < 0.95 || metrics.consensus < 0.80;
 
     if (hasLowMetrics) {
       response += `### 💡 Recommendations\n\n`;
 
-      if (metrics.confidence < 0.6) {
-        const needed = Math.ceil((0.6 - metrics.confidence) / 0.1);
+      if (metrics.confidence < 0.85) {
+        const needed = Math.ceil((0.85 - metrics.confidence) / 0.1);
         response += `- **Improve Confidence**: Add ${needed} more evidence references using \`execute_plan_step\` to strengthen claims\n`;
       }
 
-      if (metrics.coverage < 0.8) {
-        const needed = Math.ceil((0.8 - metrics.coverage) * metrics.details.coverage.total_declared_steps);
+      if (metrics.coverage < 0.95) {
+        const needed = Math.ceil((0.95 - metrics.coverage) * metrics.details.coverage.total_declared_steps);
         response += `- **Improve Coverage**: Execute ${needed} more capability steps to complete declared workflows\n`;
       }
 
-      if (metrics.consensus < 0.5) {
+      if (metrics.consensus < 0.80) {
         response += `- **Improve Consensus**: Submit additional peer critiques using \`submit_peer_critique\` to resolve conflicts\n`;
       }
 

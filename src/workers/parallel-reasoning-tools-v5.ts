@@ -660,7 +660,97 @@ ${status.pending_frames.length > 0 ? status.pending_frames.map(f => `- ${f}`).jo
 }
 
 /**
- * Tool 8: Finalize Parallel Reasoning
+ * Tool 8: Check Session Readiness
+ *
+ * Verifies if session is ready for finalization by checking:
+ * - Structural requirements (min plans, all executed)
+ * - Quality metrics (confidence ≥85%, coverage ≥95%, consensus ≥80%)
+ *
+ * Use this BEFORE calling finalize_parallel_reasoning to avoid rejection
+ */
+export const CheckSessionReadinessSchema = z.object({
+  session_id: z.string().describe('Session ID to check readiness for')
+});
+
+export async function handleCheckSessionReadiness(
+  args: z.infer<typeof CheckSessionReadinessSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const readiness = manager.checkSessionReadiness(args.session_id);
+
+  let response = `# 🔍 Session Readiness Check\n\n`;
+  response += `**Session ID**: \`${args.session_id}\`\n\n`;
+
+  if (readiness.ready) {
+    response += `## ✅ Session Ready for Finalization\n\n`;
+    response += `All structural and quality requirements are met. You can now call \`finalize_parallel_reasoning\`.\n\n`;
+  } else {
+    response += `## ⚠️ Session Not Ready for Finalization\n\n`;
+    response += `**Blockers** (${readiness.blockers.length}):\n`;
+    for (const blocker of readiness.blockers) {
+      response += `- ${blocker}\n`;
+    }
+    response += `\n`;
+  }
+
+  // Structural check details
+  response += `### 📋 Structural Requirements\n\n`;
+  response += `- **Minimum plans**: ${readiness.structural_check.min_plans_met ? '✅' : '❌'} `;
+  response += `(${readiness.structural_check.plans_submitted}/${readiness.structural_check.min_plans_required})\n`;
+  response += `- **All plans executed**: ${readiness.structural_check.all_plans_executed ? '✅' : '❌'}`;
+  if (readiness.structural_check.missing_plans.length > 0) {
+    response += ` (missing: ${readiness.structural_check.missing_plans.join(', ')})`;
+  }
+  response += `\n\n`;
+
+  // Quality metrics
+  response += `### 📊 Quality Metrics\n\n`;
+  response += `- **Confidence**: ${(readiness.metrics.confidence * 100).toFixed(1)}% `;
+  response += readiness.quality_check.confidence_met ? '✅' : '❌';
+  response += ` (target: 85%, ${readiness.metrics.details.confidence.unique_evidence_count} evidence)\n`;
+
+  response += `- **Coverage**: ${(readiness.metrics.coverage * 100).toFixed(1)}% `;
+  response += readiness.quality_check.coverage_met ? '✅' : '❌';
+  response += ` (target: 95%, ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps)\n`;
+
+  response += `- **Consensus**: ${(readiness.metrics.consensus * 100).toFixed(1)}% `;
+  response += readiness.quality_check.consensus_met ? '✅' : '❌';
+  response += ` (target: 80%, ${readiness.metrics.details.consensus.agreements} agreements, ${readiness.metrics.details.consensus.conflicts} conflicts)\n\n`;
+
+  // Recommendations
+  if (readiness.recommendations.length > 0) {
+    response += `### 💡 Recommendations\n\n`;
+    for (const rec of readiness.recommendations) {
+      response += `${rec}\n`;
+    }
+    response += `\n`;
+  }
+
+  // Next steps
+  if (!readiness.ready) {
+    response += `### 🎯 Next Steps\n\n`;
+    if (!readiness.quality_check.coverage_met) {
+      response += `1. **Execute remaining capability steps** using \`execute_plan_step\` to complete declared workflows\n`;
+    }
+    if (!readiness.quality_check.confidence_met) {
+      response += `2. **Add more evidence** by executing plan steps with detailed analysis\n`;
+    }
+    if (!readiness.quality_check.consensus_met) {
+      response += `3. **Submit peer critiques** using \`submit_peer_critique\` to build consensus\n`;
+    }
+    response += `4. **Re-check readiness** using \`check_session_readiness\` before attempting finalization\n`;
+  } else {
+    response += `### 🎯 Next Step\n\n`;
+    response += `Call \`finalize_parallel_reasoning\` to complete the session.\n`;
+  }
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+
+/**
+ * Tool 9: Finalize Parallel Reasoning
  */
 export const FinalizeParallelReasoningSchema = z.object({
   session_id: z.string()

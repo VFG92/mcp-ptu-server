@@ -30,6 +30,7 @@ import {
   SubmitPeerCritiqueSchema,
   SubmitMediationDecisionSchema,
   ListPlanStatusSchema,
+  CheckSessionReadinessSchema,
   FinalizeParallelReasoningSchema,
   handleInitParallelReasoning,
   handleSubmitReasoningPlan,
@@ -38,6 +39,7 @@ import {
   handleSubmitPeerCritique,
   handleSubmitMediationDecision,
   handleListPlanStatus,
+  handleCheckSessionReadiness,
   handleFinalizeParallelReasoning
 } from './parallel-reasoning-tools-v5.js';
 
@@ -127,6 +129,7 @@ enum ParallelReasoningV5ToolName {
   SUBMIT_PEER_CRITIQUE = 'submit_peer_critique',
   SUBMIT_MEDIATION_DECISION = 'submit_mediation_decision',
   LIST_PLAN_STATUS = 'list_plan_status',
+  CHECK_SESSION_READINESS = 'check_session_readiness',
   FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning'
 }
 
@@ -199,9 +202,12 @@ Use these 8 tools for multi-path reasoning:
 - submit_peer_critique: Peer review (ChatGPT-generated)
 - submit_mediation_decision: Final mediation with evidence
 - list_plan_status: List pending frames
-- finalize_parallel_reasoning: Validate completeness
+- check_session_readiness: Verify session meets quality thresholds before finalization
+- finalize_parallel_reasoning: Validate completeness and finalize session
 
 **Diversity Axes**: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views
+
+**Quality Thresholds**: Confidence ≥85%, Coverage ≥95%, Consensus ≥80%
 `
     }
   );
@@ -531,9 +537,15 @@ Use these 8 tools for multi-path reasoning:
         inputSchema: zodToJsonSchema(ListPlanStatusSchema) as ToolInput,
       },
       {
+        name: ParallelReasoningV5ToolName.CHECK_SESSION_READINESS,
+        description:
+          "Check if session is ready for finalization. Verifies structural requirements (min plans, all executed) and quality metrics (confidence ≥85%, coverage ≥95%, consensus ≥80%). Use this BEFORE calling finalize_parallel_reasoning to avoid rejection.",
+        inputSchema: zodToJsonSchema(CheckSessionReadinessSchema) as ToolInput,
+      },
+      {
         name: ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING,
         description:
-          "Finalize parallel reasoning session. Validates completeness (all plans executed, all decisions have evidence). Returns decision map showing mediated result.",
+          "Finalize parallel reasoning session. BLOCKS if quality metrics are below thresholds (confidence <85%, coverage <95%, consensus <80%). Use check_session_readiness first to verify readiness.",
         inputSchema: zodToJsonSchema(FinalizeParallelReasoningSchema) as ToolInput,
       },
 
@@ -724,6 +736,23 @@ Use these 8 tools for multi-path reasoning:
         }
         const validatedArgs = ListPlanStatusSchema.parse(args);
         const result = await handleListPlanStatus(validatedArgs, parallelReasoningV5Manager);
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.CHECK_SESSION_READINESS) {
+        console.log(`[CallTool] Handling check_session_readiness (v5)`);
+        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
+        const validatedArgs = CheckSessionReadinessSchema.parse(args);
+        const result = await handleCheckSessionReadiness(validatedArgs, parallelReasoningV5Manager);
         return result;
       }
 
