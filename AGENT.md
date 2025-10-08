@@ -37,6 +37,9 @@ When deploying, use `npm run workers:deploy` with the appropriate Cloudflare cre
 
 The server includes an optional **passive visualization layer** that renders interactive UI components inside ChatGPT. All 8 parallel reasoning tools return `structuredContent` alongside text responses.
 
+**Apps SDK Compatibility Status**: ~70% compatible
+**Required Changes**: Adapt tool response format to include `_meta.openai/outputTemplate` metadata instead of custom `structuredContent` field. See [`APPS_SDK_COMPATIBILITY_ANALYSIS.md`](./APPS_SDK_COMPATIBILITY_ANALYSIS.md) for details.
+
 ### Key files
 - `src/ui/src/types.ts` – TypeScript interfaces for structured content
 - `src/ui/src/WorkflowVisualizer.tsx` – main component router

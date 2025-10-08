@@ -109,8 +109,20 @@ The server enforces quality thresholds to prevent premature finalization:
 - **406 "Client must accept..."** – include `Accept: application/json, text/event-stream` in every MCP request.
 - **"Session not found"** – ensure the same `session_id` is passed to all parallel reasoning tools in the workflow.
 
+## OpenAI Apps SDK Compatibility
+
+This server is **architecturally compatible** with [OpenAI Apps SDK](https://developers.openai.com/apps-sdk) for building ChatGPT apps. The MCP protocol implementation, tool system, and UI layer align with Apps SDK requirements.
+
+**Current Status**: ~70% compatible
+**Required Changes**: Adapt tool response format to include `_meta.openai/outputTemplate` metadata
+
+See [`APPS_SDK_COMPATIBILITY_ANALYSIS.md`](./APPS_SDK_COMPATIBILITY_ANALYSIS.md) for detailed compatibility analysis and implementation roadmap.
+
 ## Additional resources
 - [Model Context Protocol](https://modelcontextprotocol.io/)
+- [OpenAI Apps SDK](https://developers.openai.com/apps-sdk)
+- [Apps SDK Examples](https://github.com/openai/openai-apps-sdk-examples)
 - [`SESSION_ID_EXPLAINED.md`](./SESSION_ID_EXPLAINED.md) – detailed guidance on the two types of session identifiers.
 - [`IMPLEMENTATION_SUMMARY.md`](./IMPLEMENTATION_SUMMARY.md) – subsystem overview for maintainers.
+- [`APPS_SDK_COMPATIBILITY_ANALYSIS.md`](./APPS_SDK_COMPATIBILITY_ANALYSIS.md) – Apps SDK compatibility analysis and roadmap.
 
