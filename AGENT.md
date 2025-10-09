@@ -19,15 +19,7 @@ Use the following prompt to exercise the server end-to-end:
 
 > Start a parallel reasoning session on this issue, invoke every endpoint at the right moment, and use reasoning to drive a workflow that ends with closing the session. Use **all** MCP endpoints and activate native capabilities whenever calculations or retrieval of real evidence is required.
 >
-> **IMPORTANT WORKFLOW GUIDELINES**:
-> 1. **Optimal plan design**: Use 3-5 capability steps per plan (not 7+) to minimize execution overhead
-> 2. **Readiness preview**: After submitting all plans, review the automatic Readiness Preview to understand execution requirements
-> 3. **Coverage formula**: Coverage = executed_steps / total_declared_steps ≥ 0.95
-> 4. **Check before finalize**: Always call `check_session_readiness` before attempting `finalize_parallel_reasoning`
-> 5. **Quality thresholds**: Finalization is **automatically blocked** unless metrics report:
->    - **Confidence ≥ 85%** (4+ unique evidence IDs)
->    - **Coverage ≥ 95%** (execute at least 95% of declared steps)
->    - **Consensus ≥ 80%** (3-5 peer critiques with high agreement)
+> **IMPORTANT**: Always call `check_session_readiness` before attempting `finalize_parallel_reasoning`. Finalization is **automatically blocked** unless the quality metrics report **Confidence ≥ 85%**, **Coverage ≥ 95%** (essential steps complete, no fluff), **Consensus ≥ 80%**, and every material figure is backed by at least two independent sources or one primary source plus a reconstruction workpaper.
 >
 > If readiness check shows metrics below thresholds, follow the recommendations provided (e.g., execute more capability steps, add more evidence, conduct peer reviews) before attempting finalization.
 
@@ -151,35 +143,12 @@ The server enforces strict quality thresholds to prevent premature finalization 
    - Provides next steps to reach thresholds
 
 ### Best practices for agents
-
-#### Plan design (avoid long execution cycles)
-- ✅ Use **3-5 capability steps per plan** (optimal for ChatGPT execution)
-- ✅ Review the **Readiness Preview** shown after all plans are submitted
-- ✅ Calculate execution requirements: 3 plans × 5 steps = 15 total → need 14 executed (93%)
-- ❌ DO NOT declare 7+ steps per plan unless absolutely necessary
-- ❌ DO NOT ignore the capability chain length warning in plan acceptance responses
-
-**Why this matters**: Coverage = executed_steps / total_declared_steps ≥ 0.95
-- Longer chains → more `execute_plan_step` calls → longer execution time
-- Example: 3 plans × 10 steps = 30 total → need 29 executed steps (97%)
-- Example: 3 plans × 5 steps = 15 total → need 14 executed steps (93%)
-
-#### Readiness checking (avoid premature finalization)
 - ✅ Always call `check_session_readiness` before attempting finalization
 - ✅ If not ready, follow the recommendations (execute more steps, add evidence, conduct reviews)
 - ✅ Re-check readiness after improvements
 - ✅ Only attempt finalization when `ready: true`
 - ❌ DO NOT repeatedly call `finalize_parallel_reasoning` if blocked
 - ❌ DO NOT skip `check_session_readiness` to "save time"
-
-#### Early stage gate (use the Readiness Preview)
-After submitting all plans, the system shows a **Readiness Preview** with:
-- Total declared steps across all plans
-- Minimum steps needed for 95% coverage
-- Evidence requirements for 85% confidence (4+ unique evidence IDs)
-- Peer critique guidance for 80% consensus (3-5 critiques)
-
-**Use this preview to plan your execution strategy BEFORE starting `execute_plan_step` calls.**
 
 ### Implementation details
 - Thresholds: `CONFIDENCE_THRESHOLD`, `COVERAGE_THRESHOLD`, `CONSENSUS_THRESHOLD` in `src/workers/session-metrics.ts`

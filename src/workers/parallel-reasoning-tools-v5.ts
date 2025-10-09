@@ -209,21 +209,13 @@ export async function handleSubmitReasoningPlan(
   let response: string;
 
   if (result.accepted) {
-    // Calculate total declared steps across all plans
-    let total_declared_steps = 0;
-    for (const plan of session.plans.values()) {
-      total_declared_steps += plan.capability_chain.length;
-    }
-
-    // Plan accepted - use guided response with readiness preview
+    // Plan accepted - use guided response
     response = GuidedResponses.formatPlanAccepted(
       args.plan.plan_id,
       args.session_id,
       session.plans.size,
       session.min_plans,
-      args.plan.diversity_axes,
-      total_declared_steps,
-      args.plan.capability_chain.length
+      args.plan.diversity_axes
     );
 
     // Append quality signals if any
