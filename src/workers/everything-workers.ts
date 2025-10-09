@@ -523,13 +523,13 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.INIT_PARALLEL_REASONING,
         description:
-          "Initialize a parallel reasoning session where ChatGPT generates multiple diverse reasoning plans. MCP provides guardrails (diversity validation) and persistent memory. ChatGPT is the sole deliberative agent.",
+          "STEP 1: Initialize parallel reasoning session. Define task and diversity axes (min 2). Returns session_id. Next: submit 3-4 plans with submit_reasoning_plan.",
         inputSchema: zodToJsonSchema(InitParallelReasoningSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.SUBMIT_REASONING_PLAN,
         description:
-          "Submit a reasoning plan with diversity axes. Server validates that plans differ on at least 2 axes (real diversification, not cosmetic variants). ChatGPT generates plans, server validates structure.",
+          "STEP 2: Submit reasoning plans (min 3-4). Each must differ on ≥2 diversity axes. Include plan_id, description, diversity_axes, capability_chain (3-5 steps), rationale, expected_outputs. After all plans: execute_reasoning_manifest.",
         inputSchema: zodToJsonSchema(SubmitReasoningPlanSchema) as ToolInput,
       },
       // REMOVED: execute_plan_step (deprecated - use manifest-based workflow)
@@ -537,37 +537,37 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE,
         description:
-          "Submit peer critique where one plan reviews another. ChatGPT generates critiques (claims challenged, falsification tests, residual risks). Server stores for consensus analysis.",
+          "STEP 7: Submit peer critiques AFTER registering results. Each plan reviews others with claims_challenged (evidence_ids, falsification_test), residual_risks, agreement_score. After all critiques: submit_mediation_decision.",
         inputSchema: zodToJsonSchema(SubmitPeerCritiqueSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.SUBMIT_MEDIATION_DECISION,
         description:
-          "Submit mediation decision for a decision point. ChatGPT chooses which plan's approach to use and provides rationale with evidence IDs. Server validates completeness (formal only).",
+          "STEP 8: Mediate disagreements AFTER peer critiques. For each decision_point, choose best approach (chosen_from_plan) with rationale, evidence_ids, confidence. After all decisions: generate_meta_reflection.",
         inputSchema: zodToJsonSchema(SubmitMediationDecisionSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.LIST_PLAN_STATUS,
         description:
-          "Get readiness preview and session status. PRIMARY tool for tracking progress toward finalization. Shows: current coverage/confidence/consensus %, specific gaps that need filling, actionable next steps. Call this FREQUENTLY to understand what needs to be done.",
+          "Check session status: coverage/confidence/consensus %, gaps, next steps. Call FREQUENTLY after each major step to track progress.",
         inputSchema: zodToJsonSchema(ListPlanStatusSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.CHECK_SESSION_READINESS,
         description:
-          "Check if session is ready for finalization. Verifies structural requirements (min plans, all executed) and quality metrics (confidence ≥85%, coverage ≥95%, consensus ≥80%). Use this BEFORE calling finalize_parallel_reasoning to avoid rejection.",
+          "STEP 9: Check readiness BEFORE finalize. Verifies: all plans executed, critiques submitted, decisions made, quality metrics (confidence≥85%, coverage≥95%, consensus≥80%). Shows what's missing if not ready.",
         inputSchema: zodToJsonSchema(CheckSessionReadinessSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.GENERATE_META_REFLECTION,
         description:
-          "Generate meta-reflection analysis after mediation. Analyzes patterns in disagreements, identifies residual uncertainty, evaluates decision confidence distribution, and suggests further analysis. Call this AFTER mediation decisions but BEFORE finalization to ensure comprehensive analysis.",
+          "STEP 9: Generate meta-reflection AFTER mediation, BEFORE check_readiness. Analyzes disagreement patterns, residual uncertainty, decision confidence. Provides synthesis insights.",
         inputSchema: zodToJsonSchema(GenerateMetaReflectionSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING,
         description:
-          "Finalize parallel reasoning session. BLOCKS if quality metrics are below thresholds (confidence <85%, coverage <95%, consensus <80%). Use check_session_readiness first to verify readiness.",
+          "STEP 10 (FINAL): Finalize session. REQUIREMENTS: all plans executed, all critiques submitted, all decisions made, meta-reflection generated, quality≥thresholds. ALWAYS call check_session_readiness first. Returns synthesis report.",
         inputSchema: zodToJsonSchema(FinalizeParallelReasoningSchema) as ToolInput,
       },
 
@@ -575,19 +575,19 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.EXECUTE_REASONING_MANIFEST,
         description:
-          "Generate execution manifest for all plans. ChatGPT executes ALL steps using native reasoning and tools (web search, Python, code interpreter), then registers results in batch. This REPLACES multiple execute_plan_step calls. Returns manifest with execution token and detailed guidance.",
+          "STEP 5: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions. ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter), then call register_execution_results with the token and findings. Each token can only be used ONCE - if you need to register more results, call execute_reasoning_manifest again to get a new token.",
         inputSchema: zodToJsonSchema(ExecuteReasoningManifestSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
         description:
-          "Register execution results in batch after completing manifest execution. For each step, include: findings (required), evidence_refs (optional but recommended: URLs, citations, data sources), and workpapers (optional but recommended: datasets, calculations, comparisons). Evidence and workpapers improve quality scoring. System calculates quality signals and generates saliency report.",
+          "STEP 6: Register execution results after completing manifest execution. Include findings (required), evidence_refs (URLs, citations, data sources), and workpapers (datasets, calculations, comparisons) for each step. IMPORTANT: Each execution token can only be used ONCE. If registration fails with 'token already used', call execute_reasoning_manifest to get a new token. After successful registration, proceed to peer critique (submit_peer_critique) and mediation (submit_mediation_decision).",
         inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.REGENERATE_EXECUTION_TOKEN,
         description:
-          "Regenerate execution token when previous token has expired. Useful for long-running analysis workflows that exceed the 7-day token validity period. Preserves existing execution results by default. Returns new token valid for 7 days.",
+          "Regenerate execution token when previous token has expired (after 7 days). Useful for long-running analysis workflows. Preserves existing execution results by default. Returns new token valid for 7 days.",
         inputSchema: zodToJsonSchema(RegenerateExecutionTokenSchema) as ToolInput,
       },
 
