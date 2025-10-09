@@ -76,14 +76,47 @@ The main `tsconfig.json` excludes `src/ui` to avoid conflicts with React JSX con
 The parallel reasoning system uses **semantic validation** for diversity axes instead of literal string matching. This enables more flexible and intuitive plan differentiation.
 
 ### How it works
-Diversity axes are parsed as **Key: Value** pairs:
+Diversity axes are parsed as **Key: Value** pairs with intelligent key extraction:
 - `"Tech Stack: Hybrid"` → `{key: "tech_stack", value: "hybrid"}`
 - `"Data Sources: Primary research"` → `{key: "data_sources", value: "primary research"}`
+- `"Postura verso l'AGCM (accettazione vs contestazione)"` → `{key: "postura_agcm", value: ""}`
+- `"Grado di apertura dei dati"` → `{key: "grado_apertura_dati", value: ""}`
+
+### Flexible naming with partial matching
+The system supports **both long descriptive forms and short abbreviated forms**:
+
+**Long form** (in `init_parallel_reasoning`):
+```json
+"required_diversity_axes": [
+  "Postura verso l'AGCM (accettazione vs contestazione)",
+  "Ampiezza del rimedio economico ai clienti",
+  "Grado di apertura dei dati (trasparenza radicale vs disclosure minima)"
+]
+```
+
+**Short form** (in `submit_reasoning_plan`):
+```json
+"diversity_axes": [
+  "Postura: accettazione piena",
+  "Rimedio: ampio e proattivo",
+  "Apertura: trasparenza radicale"
+]
+```
+
+**Matching logic**:
+- Extracts significant words from both forms
+- "Postura verso l'AGCM" → `postura_agcm`
+- "Postura: accettazione" → `postura`
+- Match: `postura` is contained in `postura_agcm` ✓
+- "Grado di apertura dei dati" → `grado_apertura_dati`
+- "Apertura: radicale" → `apertura`
+- Match: `apertura` is contained in `grado_apertura_dati` ✓
 
 ### Validation rules
-1. **Required axes**: Plans must include axes with the **same keys** as required axes (values can differ)
+1. **Required axes**: Plans must include axes with **matching keys** (exact or partial match)
    - Required: `"Tech Stack: Cloud"` → Plan can use `"Tech Stack: Hybrid"` ✅
    - Required: `"Tech Stack: Cloud"` → Plan cannot use `"Technology: Hybrid"` ❌ (different key)
+   - Required: `"Grado di apertura dei dati"` → Plan can use `"Apertura: radicale"` ✅ (partial match)
 
 2. **Inter-plan diversity**: Plans must differ from existing plans on **at least 2 axes semantically**
    - Same key, different values → counts as different
@@ -106,9 +139,11 @@ Plan B: ["Tech Stack: Cloud", "Risk: Market-focused", "Time: Short-term"]
 ```
 
 ### Best practices for agents
-- Use consistent key names across plans (e.g., always "Tech Stack", not "Technology Stack")
-- Structure axes as "Category: Specific Value" for clarity
-- Focus on substantive differences, not just label variations
+- **Long descriptive forms in init**: Use detailed, self-documenting axis names in `init_parallel_reasoning`
+- **Short abbreviated forms in plans**: Use concise "Key: Value" format in `submit_reasoning_plan`
+- **Partial matching**: The system will match abbreviated keys with longer descriptive keys automatically
+- **Multi-language support**: Works with English, Italian, and other languages with similar preposition patterns
+- **Focus on substance**: Emphasize substantive differences, not just label variations
 - When a plan is rejected, check the semantic diversity count in logs
 
 ### Implementation details

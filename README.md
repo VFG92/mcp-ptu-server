@@ -69,8 +69,9 @@ The server uses **semantic validation** for diversity axes, enabling more flexib
 - Axes are parsed as **Key: Value** pairs (e.g., `"Tech Stack: Hybrid"` → `{key: "tech_stack", value: "hybrid"}`)
 - **Required axes**: Plans must include axes with matching **keys** (values can differ)
 - **Inter-plan diversity**: Plans must differ on ≥2 axes semantically (same key + different value = different)
+- **Flexible naming**: Supports both long descriptive forms and short abbreviated forms with **partial key matching**
 
-### Example
+### Example: Basic semantic matching
 ```json
 {
   "required_diversity_axes": ["Tech Stack: Cloud", "Data Sources: Official"],
@@ -84,9 +85,36 @@ The server uses **semantic validation** for diversity axes, enabling more flexib
 ```
 Both plans satisfy required axes (matching keys) and differ on 2 axes (different values) ✅
 
+### Example: Flexible naming with partial matching
+```json
+{
+  "required_diversity_axes": [
+    "Postura verso l'AGCM (accettazione vs contestazione)",
+    "Ampiezza del rimedio economico ai clienti",
+    "Grado di apertura dei dati (trasparenza radicale vs disclosure minima)"
+  ],
+  "plan": {
+    "diversity_axes": [
+      "Postura: accettazione piena",
+      "Rimedio: ampio e proattivo",
+      "Apertura: trasparenza radicale"
+    ]
+  }
+}
+```
+**How matching works**:
+- "Postura verso l'AGCM..." → key: `postura_agcm`
+- "Postura: accettazione" → key: `postura`
+- Match: `postura` is contained in `postura_agcm` ✓
+- "Grado di apertura dei dati" → key: `grado_apertura_dati`
+- "Apertura: radicale" → key: `apertura`
+- Match: `apertura` is contained in `grado_apertura_dati` ✓
+
 ### Benefits
 - No need to copy exact strings from `required_diversity_axes`
+- Use long descriptive forms in `init`, short forms in plans
 - Focus on substantive differences, not syntax
+- Supports multiple languages (English, Italian, etc.)
 - Rejected plans are stored for audit and cross-contamination
 
 ## Quality metrics and thresholds
