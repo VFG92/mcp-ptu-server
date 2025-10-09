@@ -31,6 +31,7 @@ import {
   SubmitMediationDecisionSchema,
   ListPlanStatusSchema,
   CheckSessionReadinessSchema,
+  GenerateMetaReflectionSchema,
   FinalizeParallelReasoningSchema,
   handleInitParallelReasoning,
   handleSubmitReasoningPlan,
@@ -40,8 +41,17 @@ import {
   handleSubmitMediationDecision,
   handleListPlanStatus,
   handleCheckSessionReadiness,
+  handleGenerateMetaReflection,
   handleFinalizeParallelReasoning
 } from './parallel-reasoning-tools-v5.js';
+
+// Import manifest-based execution tools
+import {
+  ExecuteReasoningManifestSchema,
+  RegisterExecutionResultsSchema,
+  handleExecuteReasoningManifest,
+  handleRegisterExecutionResults
+} from './manifest-execution.js';
 
 // Import parallel reasoning session type
 import type { ParallelReasoningSession } from './parallel-reasoning-mcp.js';
@@ -130,6 +140,7 @@ enum ParallelReasoningV5ToolName {
   SUBMIT_MEDIATION_DECISION = 'submit_mediation_decision',
   LIST_PLAN_STATUS = 'list_plan_status',
   CHECK_SESSION_READINESS = 'check_session_readiness',
+  GENERATE_META_REFLECTION = 'generate_meta_reflection',
   FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning',
   // NEW: Manifest-based execution
   EXECUTE_REASONING_MANIFEST = 'execute_reasoning_manifest',
@@ -546,10 +557,30 @@ Use these 8 tools for multi-path reasoning:
         inputSchema: zodToJsonSchema(CheckSessionReadinessSchema) as ToolInput,
       },
       {
+        name: ParallelReasoningV5ToolName.GENERATE_META_REFLECTION,
+        description:
+          "Generate meta-reflection analysis after mediation. Analyzes patterns in disagreements, identifies residual uncertainty, evaluates decision confidence distribution, and suggests further analysis. Call this AFTER mediation decisions but BEFORE finalization to ensure comprehensive analysis.",
+        inputSchema: zodToJsonSchema(GenerateMetaReflectionSchema) as ToolInput,
+      },
+      {
         name: ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING,
         description:
           "Finalize parallel reasoning session. BLOCKS if quality metrics are below thresholds (confidence <85%, coverage <95%, consensus <80%). Use check_session_readiness first to verify readiness.",
         inputSchema: zodToJsonSchema(FinalizeParallelReasoningSchema) as ToolInput,
+      },
+
+      // NEW: Manifest-based execution tools
+      {
+        name: ParallelReasoningV5ToolName.EXECUTE_REASONING_MANIFEST,
+        description:
+          "Generate execution manifest for all plans. ChatGPT executes ALL steps using native reasoning and tools (web search, Python, code interpreter), then registers results in batch. This REPLACES multiple execute_plan_step calls. Returns manifest with execution token and detailed guidance.",
+        inputSchema: zodToJsonSchema(ExecuteReasoningManifestSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
+        description:
+          "Register execution results in batch after completing manifest execution. Include findings, evidence refs (URLs, citations, data sources), and workpapers (datasets, calculations, comparisons) for each step. System calculates quality signals and generates saliency report.",
+        inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
       },
 
       // Legacy parallel reasoning tools are still handled by CallToolRequestSchema
@@ -759,6 +790,22 @@ Use these 8 tools for multi-path reasoning:
         return result;
       }
 
+      if (name === ParallelReasoningV5ToolName.GENERATE_META_REFLECTION) {
+        console.log(`[CallTool] Handling generate_meta_reflection`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined!`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
+            }]
+          };
+        }
+        const validatedArgs = GenerateMetaReflectionSchema.parse(args);
+        const result = await handleGenerateMetaReflection(validatedArgs, parallelReasoningV5Manager);
+        return result;
+      }
+
       if (name === ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING) {
         console.log(`[CallTool] Handling finalize_parallel_reasoning (v5)`);
         console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
@@ -773,6 +820,40 @@ Use these 8 tools for multi-path reasoning:
         }
         const validatedArgs = FinalizeParallelReasoningSchema.parse(args);
         const result = await handleFinalizeParallelReasoning(validatedArgs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+        return result;
+      }
+
+      // NEW: Manifest-based execution handlers
+      if (name === ParallelReasoningV5ToolName.EXECUTE_REASONING_MANIFEST) {
+        console.log(`[CallTool] Handling execute_reasoning_manifest`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined!`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized.'
+            }]
+          };
+        }
+        const validatedArgs = ExecuteReasoningManifestSchema.parse(args);
+        const result = await handleExecuteReasoningManifest(validatedArgs, parallelReasoningV5Manager);
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS) {
+        console.log(`[CallTool] Handling register_execution_results`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined!`);
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized.'
+            }]
+          };
+        }
+        const validatedArgs = RegisterExecutionResultsSchema.parse(args);
+        const result = await handleRegisterExecutionResults(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
         return result;
       }

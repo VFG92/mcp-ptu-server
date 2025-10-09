@@ -143,6 +143,7 @@ export const TOOL_WIDGET_MAPPING = {
   submit_mediation_decision: WidgetTypes.WORKFLOW_VISUALIZER,
   list_plan_status: WidgetTypes.DIVERSITY_MATRIX,
   check_session_readiness: WidgetTypes.METRICS_DASHBOARD,
+  generate_meta_reflection: WidgetTypes.METRICS_DASHBOARD,
   finalize_parallel_reasoning: WidgetTypes.METRICS_DASHBOARD
 } as const;
 

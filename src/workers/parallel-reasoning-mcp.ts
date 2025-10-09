@@ -466,6 +466,8 @@ export interface ParallelReasoningSession {
     expires_at: number;
     used: boolean;
   }>;
+  // NEW: Saliency report for evidence quality guidance
+  saliency_report?: any; // SaliencyReport from manifest-execution
 }
 
 /**

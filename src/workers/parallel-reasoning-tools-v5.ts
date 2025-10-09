@@ -717,6 +717,35 @@ You can now call \`finalize_parallel_reasoning\` to complete the session.
 ` : ''}
 ---
 
+${session.saliency_report ? `
+## 🔍 Evidence Quality Report
+
+**Overall Quality Score**: ${(session.saliency_report.overall_quality_score * 100).toFixed(1)}% ${session.saliency_report.overall_quality_score >= 0.7 ? '✅' : '⚠️'}
+
+${session.saliency_report.missing_evidence_types.length > 0 ? `
+### ❌ Missing Evidence Types
+
+${session.saliency_report.missing_evidence_types.map((missing: any) => `
+#### ${missing.priority === 'critical' ? '🔴' : '🟡'} ${missing.type.replace(/_/g, ' ').toUpperCase()}
+
+**Description**: ${missing.description}
+
+**Examples of what to add**:
+${missing.examples.map((ex: string) => `- ${ex}`).join('\n')}
+
+**Priority**: ${missing.priority}
+`).join('\n')}
+` : ''}
+
+${session.saliency_report.recommendations.length > 0 ? `
+### 💡 Recommendations
+
+${session.saliency_report.recommendations.map((rec: string) => `- ${rec}`).join('\n')}
+` : ''}
+
+---
+
+` : ''}
 ## 📋 Detailed Plan Status
 
 ${Array.from(session.plans.values()).map(plan => {
@@ -887,7 +916,237 @@ export async function handleCheckSessionReadiness(
 }
 
 /**
- * Tool 9: Finalize Parallel Reasoning
+ * Tool 9: Generate Meta-Reflection
+ *
+ * Guides ChatGPT to produce a reflective synthesis after mediation.
+ * Analyzes patterns in disagreements, identifies residual uncertainty,
+ * and suggests further analysis.
+ *
+ * Should be called AFTER mediation decisions but BEFORE finalization.
+ */
+export const GenerateMetaReflectionSchema = z.object({
+  session_id: z.string().describe('Session ID to generate meta-reflection for')
+});
+
+export async function handleGenerateMetaReflection(
+  args: z.infer<typeof GenerateMetaReflectionSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const session = manager.getSession(args.session_id);
+
+  if (!session) {
+    throw new Error(`Session ${args.session_id} not found`);
+  }
+
+  let response = `# 🔮 Meta-Reflection Analysis\n\n`;
+  response += `**Session ID**: \`${args.session_id}\`\n`;
+  response += `**Task**: ${session.task_description}\n\n`;
+
+  // 1. Analyze mediation decisions
+  response += `## 📊 Mediation Decision Patterns\n\n`;
+
+  if (session.mediation_decisions.length === 0) {
+    response += `⚠️ **No mediation decisions yet**. Submit mediation decisions using \`submit_mediation_decision\` before generating meta-reflection.\n\n`;
+  } else {
+    response += `**Total Decisions**: ${session.mediation_decisions.length}\n\n`;
+
+    // Group decisions by chosen plan
+    const decisionsByPlan = new Map<string, number>();
+    for (const decision of session.mediation_decisions) {
+      const count = decisionsByPlan.get(decision.chosen_from_plan) || 0;
+      decisionsByPlan.set(decision.chosen_from_plan, count + 1);
+    }
+
+    response += `### Decision Distribution\n\n`;
+    for (const [planId, count] of decisionsByPlan.entries()) {
+      const percentage = (count / session.mediation_decisions.length * 100).toFixed(1);
+      response += `- **${planId}**: ${count} decisions (${percentage}%)\n`;
+    }
+    response += `\n`;
+
+    // Analyze confidence levels
+    const avgConfidence = session.mediation_decisions.reduce((sum, d) => sum + d.confidence, 0) / session.mediation_decisions.length;
+    const lowConfidenceDecisions = session.mediation_decisions.filter(d => d.confidence < 0.7);
+
+    response += `### Confidence Analysis\n\n`;
+    response += `- **Average Confidence**: ${(avgConfidence * 100).toFixed(1)}%\n`;
+    response += `- **Low Confidence Decisions** (<70%): ${lowConfidenceDecisions.length}\n\n`;
+
+    if (lowConfidenceDecisions.length > 0) {
+      response += `#### ⚠️ Low Confidence Decision Points\n\n`;
+      for (const decision of lowConfidenceDecisions.slice(0, 5)) {
+        response += `- **${decision.decision_point}** (${(decision.confidence * 100).toFixed(1)}% confidence)\n`;
+        response += `  - Chosen from: ${decision.chosen_from_plan}\n`;
+        response += `  - Rationale: ${decision.rationale.substring(0, 100)}...\n\n`;
+      }
+    }
+  }
+
+  // 2. Analyze disagreement patterns
+  response += `## 🔍 Disagreement Pattern Analysis\n\n`;
+
+  if (session.peer_critiques.length === 0) {
+    response += `⚠️ **No peer critiques yet**. Peer review is essential for identifying disagreement patterns.\n\n`;
+  } else {
+    const lowAgreementCritiques = session.peer_critiques.filter(c => c.agreement_score < 0.5);
+    const constructiveDisagreements = session.peer_critiques.filter(c =>
+      c.agreement_score < 0.5 &&
+      c.claims_challenged &&
+      c.claims_challenged.length > 0 &&
+      c.claims_challenged.some(claim => claim.falsification_test)
+    );
+
+    response += `- **Total Critiques**: ${session.peer_critiques.length}\n`;
+    response += `- **Disagreements** (agreement < 50%): ${lowAgreementCritiques.length}\n`;
+    response += `- **Constructive Disagreements** (with falsification tests): ${constructiveDisagreements.length}\n\n`;
+
+    // Identify most challenged claims
+    const claimChallenges = new Map<string, number>();
+    for (const critique of session.peer_critiques) {
+      if (critique.claims_challenged) {
+        for (const claim of critique.claims_challenged) {
+          const key = claim.claim.substring(0, 50);
+          claimChallenges.set(key, (claimChallenges.get(key) || 0) + 1);
+        }
+      }
+    }
+
+    if (claimChallenges.size > 0) {
+      response += `### Most Challenged Claims\n\n`;
+      const sortedClaims = Array.from(claimChallenges.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      for (const [claim, count] of sortedClaims) {
+        response += `- **"${claim}..."** (challenged ${count} times)\n`;
+      }
+      response += `\n`;
+    }
+  }
+
+  // 3. Identify residual uncertainty
+  response += `## ⚠️ Residual Uncertainty & Risks\n\n`;
+
+  const allResidualRisks = new Set<string>();
+  for (const critique of session.peer_critiques) {
+    if (critique.residual_risks) {
+      for (const risk of critique.residual_risks) {
+        allResidualRisks.add(risk);
+      }
+    }
+  }
+
+  if (allResidualRisks.size === 0) {
+    response += `✅ **No residual risks identified** in peer critiques.\n\n`;
+  } else {
+    response += `**Total Unique Risks Identified**: ${allResidualRisks.size}\n\n`;
+
+    const riskArray = Array.from(allResidualRisks).slice(0, 10);
+    for (const risk of riskArray) {
+      response += `- ${risk}\n`;
+    }
+
+    if (allResidualRisks.size > 10) {
+      response += `\n... and ${allResidualRisks.size - 10} more\n`;
+    }
+    response += `\n`;
+  }
+
+  // 4. Suggest further analysis
+  response += `## 🎯 Recommendations for Further Analysis\n\n`;
+
+  const recommendations: string[] = [];
+
+  // Check for low confidence decisions
+  if (session.mediation_decisions.length > 0) {
+    const lowConfCount = session.mediation_decisions.filter(d => d.confidence < 0.7).length;
+    if (lowConfCount > 0) {
+      recommendations.push(`**Re-examine ${lowConfCount} low-confidence decisions** - Consider gathering additional evidence or running sensitivity analysis`);
+    }
+  }
+
+  // Check for unbalanced decision distribution
+  if (session.mediation_decisions.length > 0 && session.plans.size > 1) {
+    const decisionsByPlan = new Map<string, number>();
+    for (const decision of session.mediation_decisions) {
+      decisionsByPlan.set(decision.chosen_from_plan, (decisionsByPlan.get(decision.chosen_from_plan) || 0) + 1);
+    }
+
+    const maxDecisions = Math.max(...Array.from(decisionsByPlan.values()));
+    const minDecisions = Math.min(...Array.from(decisionsByPlan.values()));
+
+    if (maxDecisions > minDecisions * 3) {
+      recommendations.push(`**Investigate decision imbalance** - One plan dominates (${maxDecisions} vs ${minDecisions} decisions). Verify this reflects genuine quality differences, not bias`);
+    }
+  }
+
+  // Check for high-frequency challenged claims
+  if (session.peer_critiques.length > 0) {
+    const claimChallenges = new Map<string, number>();
+    for (const critique of session.peer_critiques) {
+      if (critique.claims_challenged) {
+        for (const claim of critique.claims_challenged) {
+          const key = claim.claim.substring(0, 50);
+          claimChallenges.set(key, (claimChallenges.get(key) || 0) + 1);
+        }
+      }
+    }
+
+    const maxChallenges = Math.max(...Array.from(claimChallenges.values()), 0);
+    if (maxChallenges >= 2) {
+      recommendations.push(`**Deep-dive on repeatedly challenged claims** - Some claims were challenged ${maxChallenges} times. These may represent fundamental uncertainties requiring additional research`);
+    }
+  }
+
+  // Check for residual risks
+  if (allResidualRisks.size > 5) {
+    recommendations.push(`**Risk mitigation analysis** - ${allResidualRisks.size} residual risks identified. Consider developing mitigation strategies or contingency plans`);
+  }
+
+  // Check for missing falsification tests
+  if (session.peer_critiques.length > 0) {
+    const critiquesWithoutTests = session.peer_critiques.filter(c =>
+      c.claims_challenged &&
+      c.claims_challenged.length > 0 &&
+      !c.claims_challenged.some(claim => claim.falsification_test)
+    );
+
+    if (critiquesWithoutTests.length > 0) {
+      recommendations.push(`**Add falsification tests** - ${critiquesWithoutTests.length} critiques lack falsification tests. These would strengthen the analysis`);
+    }
+  }
+
+  if (recommendations.length === 0) {
+    response += `✅ **Analysis appears comprehensive** - No major gaps identified.\n\n`;
+  } else {
+    for (let i = 0; i < recommendations.length; i++) {
+      response += `${i + 1}. ${recommendations[i]}\n\n`;
+    }
+  }
+
+  // 5. Next steps
+  response += `## 🚀 Next Steps\n\n`;
+
+  if (session.mediation_decisions.length === 0) {
+    response += `1. **Submit mediation decisions** using \`submit_mediation_decision\` for key decision points\n`;
+    response += `2. **Re-run meta-reflection** to analyze decision patterns\n`;
+  } else if (recommendations.length > 0) {
+    response += `1. **Address recommendations above** to strengthen the analysis\n`;
+    response += `2. **Re-run meta-reflection** to verify improvements\n`;
+    response += `3. **Check session readiness** using \`check_session_readiness\`\n`;
+    response += `4. **Finalize** using \`finalize_parallel_reasoning\` when ready\n`;
+  } else {
+    response += `1. **Check session readiness** using \`check_session_readiness\`\n`;
+    response += `2. **Finalize** using \`finalize_parallel_reasoning\` when ready\n`;
+  }
+
+  return {
+    content: [{ type: 'text', text: response }]
+  };
+}
+
+/**
+ * Tool 10: Finalize Parallel Reasoning
  */
 export const FinalizeParallelReasoningSchema = z.object({
   session_id: z.string()

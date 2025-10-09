@@ -308,7 +308,7 @@ export async function handleRegisterExecutionResults(
     }
 
     // Mark token as used
-    const token = session.execution_tokens?.find(t => t.token === args.execution_token);
+    const token = session.execution_tokens?.find((t: ExecutionToken) => t.token === args.execution_token);
     if (!token) {
       throw new Error('Execution token not found');
     }
@@ -356,6 +356,10 @@ export async function handleRegisterExecutionResults(
 
     // Generate saliency report
     const saliency_report = generateSaliencyReport(session, quality_signals);
+
+    // Save saliency report to session
+    session.saliency_report = saliency_report;
+    session.updated_at = Date.now();
 
     // Update metrics
     const metrics = manager.computeMetrics(session.session_id);

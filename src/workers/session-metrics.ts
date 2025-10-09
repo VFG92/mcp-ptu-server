@@ -149,12 +149,18 @@ export function calculateCoverage(session: ParallelReasoningSession): {
 
 /**
  * Calculate consensus metric from peer critique agreement scores
- * 
- * Formula: consensus = (agreements - conflicts) / total_interactions
- * - agreements: critiques with agreement_score > 0.7
- * - conflicts: critiques with agreement_score < 0.4
- * - total_interactions: peer_critiques + cross_plan_notes
- * - Normalized to [0, 1]
+ *
+ * ENHANCED FORMULA: Rewards constructive disagreement
+ *
+ * Instead of penalizing disagreement, we reward:
+ * 1. High-quality agreements (agreement_score > 0.7)
+ * 2. Constructive disagreements with:
+ *    - Claims challenged with evidence
+ *    - Falsification tests proposed
+ *    - Residual risks identified
+ *
+ * Shallow agreement (high score but no substance) is worth less than
+ * deep disagreement (low score but rich argumentation).
  */
 export function calculateConsensus(session: ParallelReasoningSession): {
   score: number;
@@ -170,20 +176,54 @@ export function calculateConsensus(session: ParallelReasoningSession): {
       }
     };
   }
-  
+
+  let qualityPoints = 0;
   let agreements = 0;
   let conflicts = 0;
-  
+
   for (const critique of session.peer_critiques) {
-    if (critique.agreement_score > 0.7) {
+    const isAgreement = critique.agreement_score > 0.7;
+    const isConflict = critique.agreement_score < 0.4;
+
+    if (isAgreement) {
       agreements++;
-    } else if (critique.agreement_score < 0.4) {
+    } else if (isConflict) {
       conflicts++;
     }
+
+    // Calculate quality of this critique
+    const hasClaimsChallenged = critique.claims_challenged && critique.claims_challenged.length > 0;
+    const hasFalsificationTests = critique.claims_challenged?.some(c => c.falsification_test) || false;
+    const hasResidualRisks = critique.residual_risks && critique.residual_risks.length > 0;
+    const hasEvidence = critique.claims_challenged?.some(c => c.evidence_ids && c.evidence_ids.length > 0) || false;
+
+    // Base points from agreement score
+    let critiquePoints = critique.agreement_score;
+
+    // Bonus for constructive disagreement (low agreement but high quality argumentation)
+    if (critique.agreement_score < 0.6) {
+      // This is a disagreement - reward quality argumentation
+      let disagreementQualityBonus = 0;
+
+      if (hasClaimsChallenged) disagreementQualityBonus += 0.20;
+      if (hasFalsificationTests) disagreementQualityBonus += 0.25; // Falsification tests are very valuable
+      if (hasResidualRisks) disagreementQualityBonus += 0.15;
+      if (hasEvidence) disagreementQualityBonus += 0.20;
+
+      // A well-argued disagreement can be worth more than shallow agreement
+      critiquePoints = Math.min(1.0, critique.agreement_score + disagreementQualityBonus);
+    } else {
+      // This is an agreement - small bonus for having substance
+      if (hasClaimsChallenged || hasResidualRisks) {
+        critiquePoints = Math.min(1.0, critique.agreement_score + 0.05);
+      }
+    }
+
+    qualityPoints += critiquePoints;
   }
-  
+
   const totalInteractions = session.peer_critiques.length + session.cross_plan_notes.length;
-  
+
   if (totalInteractions === 0) {
     return {
       score: 0.5,
@@ -194,12 +234,15 @@ export function calculateConsensus(session: ParallelReasoningSession): {
       }
     };
   }
-  
-  const rawScore = (agreements - conflicts) / totalInteractions;
-  
-  // Normalize to [0, 1]
-  const score = Math.max(0, Math.min(1, (rawScore + 1) / 2));
-  
+
+  // Average quality points across all critiques
+  const avgQuality = qualityPoints / session.peer_critiques.length;
+
+  // Bonus for having diverse interactions (both notes and critiques)
+  const diversityBonus = session.cross_plan_notes.length > 0 && session.peer_critiques.length > 0 ? 0.05 : 0;
+
+  const score = Math.max(0, Math.min(1, avgQuality + diversityBonus));
+
   return {
     score,
     details: {

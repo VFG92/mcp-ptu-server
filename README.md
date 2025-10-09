@@ -2,6 +2,22 @@
 
 An MCP-compliant Cloudflare Worker that helps ChatGPT coordinate structured, multi-path reasoning sessions. The server keeps session state in a Durable Object, enforces diversity across plans, records evidence, and reports real-time quality metrics so the model can self-regulate its workflow.
 
+## 🆕 What's New (January 2025)
+
+### Enhanced Evidence Quality Guidance
+- **Saliency Report Integration**: `list_plan_status` now shows exactly what evidence is missing (external sources, quantitative data, workpapers) with concrete examples
+- **Batch Evidence Registration**: New manifest-based workflow for efficient evidence registration
+
+### Constructive Disagreement Rewarded
+- **Enhanced Consensus Metrics**: Consensus calculation now values well-argued disagreement over shallow agreement
+- Disagreements with falsification tests can score higher than superficial agreements
+- Quality bonuses for: claims_challenged (+0.20), falsification_tests (+0.25), residual_risks (+0.15), evidence (+0.20)
+
+### Meta-Reflection Analysis
+- **New Tool**: `generate_meta_reflection` analyzes patterns in disagreements and suggests further analysis
+- Identifies low-confidence decisions, decision imbalances, repeatedly challenged claims
+- Provides actionable recommendations before finalization
+
 ## Key capabilities
 - **Parallel reasoning orchestration** – create, execute, critique, and finalize reasoning plans through dedicated MCP tools.
 - **Evidence ledger** – every piece of evidence recorded during plan execution is registered automatically with traceable IDs.
@@ -45,9 +61,13 @@ The server implements the standard MCP transport plus a convenience proxy:
 Within the MCP session the following tools drive the workflow:
 - `init_parallel_reasoning` – declare a new reasoning workflow and expected diversity axes.
 - `submit_reasoning_plan` – register a plan path.
-- **`list_plan_status`** – **PRIMARY tool for tracking progress**. Shows current coverage/confidence/consensus %, specific gaps, and actionable next steps. **Call this frequently!**
+- **`list_plan_status`** – **PRIMARY tool for tracking progress**. Shows current coverage/confidence/consensus %, specific gaps, evidence quality report, and actionable next steps. **Call this frequently!**
 - `execute_plan_step` – perform REAL ANALYSIS with reasoning and tool use. Use detailed task descriptions to trigger deep reasoning.
-- `submit_peer_critique` – critique other plans and update consensus tallies.
+- `execute_reasoning_manifest` – **NEW**: Generate execution manifest for batch execution of all steps.
+- `register_execution_results` – **NEW**: Batch register execution results with evidence and workpapers.
+- `submit_peer_critique` – critique other plans with falsification tests and update consensus tallies.
+- `submit_mediation_decision` – make mediation decisions between conflicting plans.
+- **`generate_meta_reflection`** – **NEW**: Analyze patterns in disagreements, identify residual uncertainty, suggest further analysis.
 - `check_session_readiness` – verify if session meets quality thresholds before finalization (recommended).
 - `finalize_parallel_reasoning` – close the session, returning quality metrics and a consolidated recommendation.
 

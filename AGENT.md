@@ -247,3 +247,126 @@ The server enforces strict quality thresholds to prevent premature finalization 
 - `__tests__/parallel-reasoning-v5.test.ts`: Updated to reflect quality threshold enforcement
 - All 266 tests passing ✅
 
+---
+
+## 🆕 Recent Enhancements (2025-01)
+
+### Fase 4: Saliency Report Integration
+**Status**: ✅ Complete
+
+The saliency report now provides ChatGPT with precise guidance on missing evidence types:
+
+- **What**: Integrated saliency report into `list_plan_status` output
+- **Why**: ChatGPT needs to know exactly what evidence is missing (external sources, quantitative data, workpapers)
+- **How**: After batch evidence registration, a saliency report is generated and displayed in status
+- **Example output**:
+  ```markdown
+  ## 🔍 Evidence Quality Report
+
+  **Overall Quality Score**: 45.2% ⚠️
+
+  ### ❌ Missing Evidence Types
+
+  #### 🔴 EXTERNAL SOURCES
+  **Description**: Citations from authoritative external sources
+  **Examples of what to add**:
+  - Industry reports with URLs (e.g., Gartner, Forrester)
+  - Company financial data from public sources
+  - Academic research papers with DOIs
+  ```
+
+**Files modified**:
+- `src/workers/parallel-reasoning-mcp.ts`: Added `saliency_report` field to session
+- `src/workers/manifest-execution.ts`: Save saliency report after batch registration
+- `src/workers/parallel-reasoning-tools-v5.ts`: Display saliency report in `list_plan_status`
+
+**Tests**: `__tests__/saliency-report-integration.test.ts` (8 tests, all passing)
+
+### Fase 5: Enhanced Consensus Metrics
+**Status**: ✅ Complete
+
+Consensus calculation now **rewards constructive disagreement** instead of penalizing it:
+
+- **What**: Modified consensus formula to value well-argued disagreement over shallow agreement
+- **Why**: A disagreement with falsification tests is more valuable than superficial agreement
+- **How**:
+  - Disagreements with claims_challenged + falsification_tests + evidence get quality bonuses
+  - Shallow agreements (high score but no substance) score lower
+  - Formula: `avgQuality = sum(critiquePoints) / critiques.length`
+
+**Quality bonuses for disagreements** (agreement_score < 0.6):
+- Has claims_challenged: +0.20
+- Has falsification_tests: +0.25 (most valuable)
+- Has residual_risks: +0.15
+- Has evidence: +0.20
+
+**Example**: A disagreement (score 0.3) with all quality signals can reach 1.0, beating a shallow agreement (score 0.9) with no substance.
+
+**Files modified**:
+- `src/workers/session-metrics.ts`: Enhanced `calculateConsensus()` function
+
+**Tests**: `__tests__/enhanced-consensus.test.ts` (9 tests, all passing)
+
+### Fase 6: Meta-Reflection Tool
+**Status**: ✅ Complete
+
+New tool `generate_meta_reflection` for post-mediation analysis:
+
+- **What**: Analyzes patterns in disagreements, identifies residual uncertainty, suggests further analysis
+- **When**: Call AFTER mediation decisions but BEFORE finalization
+- **Output includes**:
+  - Mediation decision patterns (distribution, confidence analysis)
+  - Disagreement pattern analysis (most challenged claims)
+  - Residual uncertainty & risks
+  - Recommendations for further analysis
+  - Next steps
+
+**Example recommendations**:
+- "Re-examine 3 low-confidence decisions - Consider gathering additional evidence"
+- "Investigate decision imbalance - One plan dominates (5 vs 1 decisions)"
+- "Deep-dive on repeatedly challenged claims - Some claims were challenged 3 times"
+- "Add falsification tests - 2 critiques lack falsification tests"
+
+**Files modified**:
+- `src/workers/parallel-reasoning-tools-v5.ts`: Added `handleGenerateMetaReflection()`
+- `src/workers/everything-workers.ts`: Registered new tool
+- `src/workers/apps-sdk-metadata.ts`: Added widget mapping
+
+**Tests**: `__tests__/meta-reflection.test.ts` (10 tests, all passing)
+
+### Fase 7: Session Persistence
+**Status**: ✅ Already Implemented
+
+Session persistence is already implemented through Cloudflare Durable Objects architecture:
+- Sessions are automatically persisted
+- Can be resumed at any time using session_id
+- No additional checkpoint/resume mechanism needed
+
+### Updated Workflow
+
+The recommended workflow now includes:
+
+1. `init_parallel_reasoning` - Start session
+2. `submit_reasoning_plan` (3+ plans) - Submit diverse plans
+3. `execute_reasoning_manifest` - Generate manifest with execution token
+4. Execute ALL steps using native tools (web search, Python, etc.)
+5. `register_execution_results` - Batch register all results
+6. `list_plan_status` - Check evidence quality report and gaps
+7. `submit_peer_critique` - Peer review with falsification tests
+8. `submit_mediation_decision` - Make mediation decisions
+9. **`generate_meta_reflection`** - Analyze patterns and identify gaps (NEW)
+10. `check_session_readiness` - Verify readiness
+11. `finalize_parallel_reasoning` - Complete session
+
+### Key Metrics
+
+All quality metrics are now enhanced:
+- **Confidence**: Based on evidence density and quality signals
+- **Coverage**: Ratio of executed vs declared capability steps
+- **Consensus**: Rewards constructive disagreement with falsification tests
+
+**Thresholds** (enforced at finalization):
+- Confidence ≥ 85%
+- Coverage ≥ 95%
+- Consensus ≥ 80%
+
