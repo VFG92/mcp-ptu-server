@@ -80,7 +80,7 @@ export function createAppsSDKMetadata(
   return {
     "openai/outputTemplate": {
       type: componentType,
-      props: structuredContent as Record<string, unknown>
+      props: structuredContent as unknown as Record<string, unknown>
     }
   };
 }
