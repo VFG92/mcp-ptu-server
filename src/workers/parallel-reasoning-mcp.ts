@@ -491,8 +491,8 @@ export class ParallelReasoningSessionManager {
 
   /**
    * Initialize parallel reasoning session
-   * IDEMPOTENT: If session already exists, returns existing session instead of overwriting
-   * SPECIAL CASE: If session is terminated, resets it to initialized state
+   * BEHAVIOR: Always creates a new session or resets existing one
+   * This allows ChatGPT to start fresh workflows even if a session_id was previously used
    */
   initSession(args: {
     session_id: string;
@@ -503,36 +503,26 @@ export class ParallelReasoningSessionManager {
     console.log(`[ParallelReasoningSessionManager] Init request for session: ${args.session_id}`);
     console.log(`[ParallelReasoningSessionManager] Current sessions count: ${this.sessions.size}`);
 
-    // Check if session already exists (IDEMPOTENT BEHAVIOR)
+    // Check if session already exists
     const existingSession = this.sessions.get(args.session_id);
     if (existingSession) {
       console.log(`[ParallelReasoningSessionManager] Session ${args.session_id} already exists (status: ${existingSession.status})`);
+      console.log(`[ParallelReasoningSessionManager] Resetting session to allow new workflow initialization`);
 
-      // SPECIAL CASE: If session is terminated, reset it to allow reuse
-      if (existingSession.status === 'terminated') {
-        console.log(`[ParallelReasoningSessionManager] Session ${args.session_id} is terminated - resetting to initialized state`);
-        this.resetSession(args.session_id);
-        const resetSession = this.sessions.get(args.session_id);
-        if (resetSession) {
-          // Update with new parameters
-          resetSession.task_description = args.task_description;
-          resetSession.required_diversity_axes = args.required_diversity_axes;
-          resetSession.min_plans = args.min_plans;
-          resetSession.updated_at = Date.now();
-          console.log(`[ParallelReasoningSessionManager] Session ${args.session_id} reset and updated with new parameters`);
-          return resetSession;
-        }
+      // Always reset to allow ChatGPT to start a new workflow
+      this.resetSession(args.session_id);
+      const resetSession = this.sessions.get(args.session_id);
+      if (resetSession) {
+        // Update with new parameters
+        resetSession.task_description = args.task_description;
+        resetSession.required_diversity_axes = args.required_diversity_axes;
+        resetSession.min_plans = args.min_plans;
+        resetSession.updated_at = Date.now();
+        console.log(`[ParallelReasoningSessionManager] Session ${args.session_id} reset and updated with new parameters`);
+        return resetSession;
       }
-
-      console.log(`[ParallelReasoningSessionManager] Returning existing session (idempotent behavior)`);
-
-      // Update timestamp to indicate activity
-      existingSession.updated_at = Date.now();
-
-      return existingSession;
     }
 
-    // Create new session
     console.log(`[ParallelReasoningSessionManager] Creating new session: ${args.session_id}`);
     const session: ParallelReasoningSession = {
       session_id: args.session_id,

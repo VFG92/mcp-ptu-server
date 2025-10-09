@@ -258,11 +258,15 @@ export class MCPSession extends DurableObject {
     const expressRes = new ExpressResponseAdapter();
 
     const requestMethod = this.getJsonRpcMethod(expressReq.body);
+    console.log(`[MCPSession] Request method: ${requestMethod}, transportInitialized: ${this.transportInitialized}, transport exists: ${!!this.transport}`);
+
     if (!this.transportInitialized && requestMethod !== 'initialize') {
+      console.log(`[MCPSession] Auto-initializing transport before handling ${requestMethod}...`);
       await this.autoInitializeTransport(request.url);
+      console.log(`[MCPSession] Auto-initialization completed, transportInitialized: ${this.transportInitialized}`);
     }
 
-    console.log(`[MCPSession] Calling transport.handleRequest`);
+    console.log(`[MCPSession] Calling transport.handleRequest for method: ${requestMethod}`);
     await this.transport!.handleRequest(expressReq as any, expressRes as any, expressReq.body);
     console.log(`[MCPSession] transport.handleRequest completed`);
     if (requestMethod === 'initialize') {
