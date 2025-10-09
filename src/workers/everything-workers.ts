@@ -48,8 +48,10 @@ import {
 // Import manifest-based execution tools
 import {
   ExecuteReasoningManifestSchema,
+  RegenerateExecutionTokenSchema,
   RegisterExecutionResultsSchema,
   handleExecuteReasoningManifest,
+  handleRegenerateExecutionToken,
   handleRegisterExecutionResults
 } from './manifest-execution.js';
 
@@ -144,7 +146,8 @@ enum ParallelReasoningV5ToolName {
   FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning',
   // Manifest-based execution (NEW - replaces execute_plan_step)
   EXECUTE_REASONING_MANIFEST = 'execute_reasoning_manifest',
-  REGISTER_EXECUTION_RESULTS = 'register_execution_results'
+  REGISTER_EXECUTION_RESULTS = 'register_execution_results',
+  REGENERATE_EXECUTION_TOKEN = 'regenerate_execution_token'
 }
 
 // Example completion values
@@ -211,7 +214,7 @@ This server supports parallel reasoning with diversity enforcement for complex a
 **RECOMMENDED WORKFLOW** (Manifest-based - NEW):
 1. init_parallel_reasoning: Initialize session with diversity requirements
 2. submit_reasoning_plan: Submit 3+ plans with diversity validation
-3. execute_reasoning_manifest: Generate manifest for ALL steps (returns execution token)
+3. execute_reasoning_manifest: Generate manifest for ALL steps (returns execution token valid for 7 days)
 4. Execute ALL steps using native ChatGPT tools (web search, Python, code interpreter)
 5. register_execution_results: Batch register all results with evidence
 6. list_plan_status: Check evidence quality report & gaps (call FREQUENTLY)
@@ -220,6 +223,9 @@ This server supports parallel reasoning with diversity enforcement for complex a
 9. generate_meta_reflection: Analyze patterns & identify gaps (NEW)
 10. check_session_readiness: Verify quality thresholds
 11. finalize_parallel_reasoning: Complete session
+
+**Recovery Tool** (if execution token expires):
+- regenerate_execution_token: Generate new token while preserving existing results (NEW)
 
 **Removed tools** (no longer available):
 - execute_plan_step: Use execute_reasoning_manifest + register_execution_results instead
@@ -575,8 +581,14 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
         description:
-          "Register execution results in batch after completing manifest execution. Include findings, evidence refs (URLs, citations, data sources), and workpapers (datasets, calculations, comparisons) for each step. System calculates quality signals and generates saliency report.",
+          "Register execution results in batch after completing manifest execution. For each step, include: findings (required), evidence_refs (optional but recommended: URLs, citations, data sources), and workpapers (optional but recommended: datasets, calculations, comparisons). Evidence and workpapers improve quality scoring. System calculates quality signals and generates saliency report.",
         inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.REGENERATE_EXECUTION_TOKEN,
+        description:
+          "Regenerate execution token when previous token has expired. Useful for long-running analysis workflows that exceed the 7-day token validity period. Preserves existing execution results by default. Returns new token valid for 7 days.",
+        inputSchema: zodToJsonSchema(RegenerateExecutionTokenSchema) as ToolInput,
       },
 
       // Legacy parallel reasoning tools are still handled by CallToolRequestSchema
@@ -801,6 +813,20 @@ This server supports parallel reasoning with diversity enforcement for complex a
         }
         const validatedArgs = ExecuteReasoningManifestSchema.parse(args);
         const result = await handleExecuteReasoningManifest(validatedArgs, parallelReasoningV5Manager);
+        return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.REGENERATE_EXECUTION_TOKEN) {
+        console.log(`[CallTool] Handling regenerate_execution_token`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined!`);
+          return {
+            content: [{ type: 'text', text: 'Error: Parallel Reasoning V5 manager not initialized' }],
+          };
+        }
+        const validatedArgs = RegenerateExecutionTokenSchema.parse(args);
+        const result = await handleRegenerateExecutionToken(validatedArgs, parallelReasoningV5Manager);
+        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
         return result;
       }
 

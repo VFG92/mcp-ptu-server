@@ -21,14 +21,25 @@ import type {
 
 /**
  * Generate execution token
+ *
+ * Token expires after 7 days to allow for complex analysis workflows
+ * that may require multiple sessions or extended research time.
  */
 function generateExecutionToken(session_id: string): ExecutionToken {
-  const token = `exec_${session_id}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  const now = Date.now();
+  const expires_at = now + 7 * 24 * 60 * 60 * 1000; // 7 days
+  const token = `exec_${session_id}_${now}_${Math.random().toString(36).substring(7)}`;
+
+  console.log(`[Token Generation] Creating token for session: ${session_id}`);
+  console.log(`[Token Generation] Current time: ${now} (${new Date(now).toISOString()})`);
+  console.log(`[Token Generation] Expires at: ${expires_at} (${new Date(expires_at).toISOString()})`);
+  console.log(`[Token Generation] Validity period: 7 days (${7 * 24} hours)`);
+
   return {
     token,
     session_id,
-    created_at: Date.now(),
-    expires_at: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+    created_at: now,
+    expires_at: expires_at,
     used: false
   };
 }
@@ -181,6 +192,14 @@ export const ExecuteReasoningManifestSchema = z.object({
 });
 
 /**
+ * Schema for regenerate_execution_token tool
+ */
+export const RegenerateExecutionTokenSchema = z.object({
+  session_id: z.string().describe('Session ID to regenerate token for'),
+  preserve_results: z.boolean().optional().default(true).describe('If true, preserves existing execution results (default: true)')
+});
+
+/**
  * Handler for execute_reasoning_manifest tool
  */
 export async function handleExecuteReasoningManifest(
@@ -189,10 +208,10 @@ export async function handleExecuteReasoningManifest(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   try {
     const manifest = generateExecutionManifest(args.session_id, manager);
-    
+
     // Format manifest as readable text
     const manifestText = formatManifest(manifest);
-    
+
     return {
       content: [{
         type: 'text',
@@ -204,6 +223,84 @@ export async function handleExecuteReasoningManifest(
       content: [{
         type: 'text',
         text: `Error generating execution manifest: ${error instanceof Error ? error.message : String(error)}`
+      }]
+    };
+  }
+}
+
+/**
+ * Handler for regenerate_execution_token tool
+ *
+ * Regenerates execution token when the previous one has expired.
+ * Useful for long-running analysis workflows that exceed the token validity period.
+ */
+export async function handleRegenerateExecutionToken(
+  args: z.infer<typeof RegenerateExecutionTokenSchema>,
+  manager: ParallelReasoningSessionManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const session = manager.getSession(args.session_id);
+    if (!session) {
+      throw new Error(`Session ${args.session_id} not found`);
+    }
+
+    // Count existing results if preserving
+    let existing_results_count = 0;
+    if (args.preserve_results) {
+      for (const results of session.plan_results.values()) {
+        existing_results_count += results.length;
+      }
+    }
+
+    // Generate new token
+    const new_token = generateExecutionToken(args.session_id);
+
+    // Add to session
+    if (!session.execution_tokens) {
+      session.execution_tokens = [];
+    }
+    session.execution_tokens.push(new_token);
+
+    // Mark old tokens as expired (but keep them for audit trail)
+    for (const token of session.execution_tokens) {
+      if (token.token !== new_token.token && !token.used) {
+        token.expires_at = Date.now() - 1; // Mark as expired
+      }
+    }
+
+    session.updated_at = Date.now();
+
+    let output = '# 🔄 Execution Token Regenerated\n\n';
+    output += `**Session ID**: \`${args.session_id}\`\n`;
+    output += `**New Execution Token**: \`${new_token.token}\`\n`;
+    output += `**Valid Until**: ${new Date(new_token.expires_at).toISOString()}\n`;
+    output += `**Validity Period**: 7 days\n\n`;
+
+    if (args.preserve_results && existing_results_count > 0) {
+      output += `## ✅ Preserved Existing Results\n\n`;
+      output += `${existing_results_count} execution results have been preserved.\n\n`;
+      output += `You can continue registering additional results using the new token.\n\n`;
+    }
+
+    output += `## 📋 Next Steps\n\n`;
+    output += `1. Continue executing remaining steps from your manifest\n`;
+    output += `2. Call \`register_execution_results\` with the new token when ready\n`;
+    output += `3. The new token is valid for 7 days from now\n\n`;
+
+    output += `**Important**: Use the new token for registration:\n`;
+    output += `\`\`\`\n${new_token.token}\n\`\`\`\n`;
+
+    return {
+      content: [{
+        type: 'text',
+        text: output
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error regenerating execution token: ${error instanceof Error ? error.message : String(error)}`
       }]
     };
   }
@@ -281,14 +378,14 @@ export const RegisterExecutionResultsSchema = z.object({
       source: z.string(),
       description: z.string(),
       reliability_score: z.number().min(0).max(1).optional()
-    })),
+    })).optional().default([]).describe('Evidence references (URLs, citations, data sources). Optional but recommended for quality scoring.'),
     workpapers: z.array(z.object({
       type: z.enum(['dataset', 'calculation', 'comparison', 'analysis', 'visualization']),
       title: z.string(),
       content: z.string(),
       format: z.enum(['markdown', 'json', 'csv', 'python']),
       metadata: z.record(z.any()).optional()
-    })),
+    })).optional().default([]).describe('Supporting workpapers (datasets, calculations, analyses). Optional but recommended for quality scoring.'),
     reasoning_trace: z.string().optional()
   }))
 });
@@ -304,19 +401,56 @@ export async function handleRegisterExecutionResults(
     // Validate execution token
     const session = findSessionByExecutionToken(args.execution_token, manager);
     if (!session) {
-      throw new Error('Invalid or expired execution token');
+      throw new Error(
+        'Invalid or expired execution token. ' +
+        'The token may have been deleted or the session may have been terminated. ' +
+        'Generate a new manifest with `execute_reasoning_manifest` to continue.'
+      );
     }
 
     // Mark token as used
     const token = session.execution_tokens?.find((t: ExecutionToken) => t.token === args.execution_token);
     if (!token) {
-      throw new Error('Execution token not found');
+      throw new Error(
+        'Execution token not found in session. ' +
+        'This may indicate a session state issue. ' +
+        'Generate a new manifest with `execute_reasoning_manifest` to continue.'
+      );
     }
     if (token.used) {
-      throw new Error('Execution token already used');
+      throw new Error(
+        'Execution token already used. Each token can only be used once. ' +
+        'If you need to register additional results, generate a new manifest with `execute_reasoning_manifest`.'
+      );
     }
-    if (token.expires_at < Date.now()) {
-      throw new Error('Execution token expired');
+
+    // Detailed expiration check with diagnostic info
+    const now = Date.now();
+    const age_ms = now - token.created_at;
+    const age_minutes = Math.floor(age_ms / (60 * 1000));
+    const age_hours = Math.floor(age_ms / (60 * 60 * 1000));
+    const validity_period_ms = token.expires_at - token.created_at;
+    const validity_period_hours = Math.floor(validity_period_ms / (60 * 60 * 1000));
+    const time_until_expiry_ms = token.expires_at - now;
+    const time_until_expiry_hours = Math.floor(time_until_expiry_ms / (60 * 60 * 1000));
+
+    console.log(`[Token Validation] Current time: ${now} (${new Date(now).toISOString()})`);
+    console.log(`[Token Validation] Token created: ${token.created_at} (${new Date(token.created_at).toISOString()})`);
+    console.log(`[Token Validation] Token expires: ${token.expires_at} (${new Date(token.expires_at).toISOString()})`);
+    console.log(`[Token Validation] Token age: ${age_minutes} minutes (${age_hours} hours)`);
+    console.log(`[Token Validation] Validity period: ${validity_period_hours} hours`);
+    console.log(`[Token Validation] Time until expiry: ${time_until_expiry_hours} hours`);
+    console.log(`[Token Validation] Is expired? ${token.expires_at < now}`);
+
+    if (token.expires_at < now) {
+      throw new Error(
+        `Execution token expired. ` +
+        `Token was created ${age_hours} hours ago (${age_minutes} minutes) and was valid for ${validity_period_hours} hours. ` +
+        `Current time: ${new Date(now).toISOString()}, ` +
+        `Token created: ${new Date(token.created_at).toISOString()}, ` +
+        `Token expired: ${new Date(token.expires_at).toISOString()}. ` +
+        `Use 'regenerate_execution_token' to generate a new token while preserving existing results.`
+      );
     }
     token.used = true;
 
@@ -421,8 +555,9 @@ function calculateQualitySignals(session: any, results: any[]): QualitySignals {
   let citation_count = 0;
 
   for (const result of results) {
-    // Count evidence types
-    for (const ref of result.evidence_refs) {
+    // Count evidence types (handle optional arrays)
+    const evidence_refs = result.evidence_refs || [];
+    for (const ref of evidence_refs) {
       if (ref.type === 'url' || ref.type === 'citation') {
         external_source_count++;
         if (ref.type === 'citation') citation_count++;
@@ -432,8 +567,9 @@ function calculateQualitySignals(session: any, results: any[]): QualitySignals {
       if (ref.type === 'comparison') comparison_count++;
     }
 
-    // Count workpapers
-    workpaper_count += result.workpapers.length;
+    // Count workpapers (handle optional array)
+    const workpapers = result.workpapers || [];
+    workpaper_count += workpapers.length;
   }
 
   const has_external_sources = external_source_count > 0;
