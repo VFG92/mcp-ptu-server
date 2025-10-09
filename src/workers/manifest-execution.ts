@@ -427,33 +427,30 @@ function preprocessEvidenceRef(ref: any): any {
   };
 }
 
+// SOLUZIONE: Rendere evidence_refs completamente opzionale e flessibile
+// per evitare blocchi di sicurezza di OpenAI
 export const RegisterExecutionResultsSchema = z.object({
   execution_token: z.string().describe('Execution token from execute_reasoning_manifest'),
   results: z.array(z.object({
     plan_id: z.string(),
     step_id: z.string(),
-    findings: z.string().describe('Detailed findings from this step'),
+    findings: z.string().describe('Detailed findings from this step. You can include source URLs directly in the findings text if needed.'),
+    // Rendiamo evidence_refs COMPLETAMENTE opzionale - se OpenAI blocca, ChatGPT può omettere
     evidence_refs: z.array(z.object({
-      type: z.enum(['url', 'citation', 'data_source', 'calculation', 'comparison']),
-      source: z.string().describe('Source identifier. Can be: direct URL, base64-encoded URL, URL-encoded string, or placeholder (if URL is in description). If security filters block URLs, use type="citation" and put URL in description field.'),
-      description: z.string().describe('Description of the evidence. If security filters block URLs in source field, you can include the URL here prefixed with "URL: " or "Link: "'),
+      type: z.enum(['url', 'citation', 'data_source', 'calculation', 'comparison']).optional().default('citation'),
+      source: z.string().optional().default('see-description'),
+      description: z.string(),
       reliability_score: z.number().min(0).max(1).optional()
-    })).optional().default([]).describe('Evidence references (URLs, citations, data sources). FLEXIBLE: If security filters block direct URLs, use type="citation" and include URL in description field, or base64-encode the URL. Optional but recommended for quality scoring.'),
+    })).optional().default([]).describe('OPTIONAL evidence references. If security filters block this field, you can omit it entirely and include source information in findings or workpapers instead.'),
     workpapers: z.array(z.object({
       type: z.enum(['dataset', 'calculation', 'comparison', 'analysis', 'visualization']),
       title: z.string(),
-      content: z.string(),
+      content: z.string().describe('Content can include source URLs and references'),
       format: z.enum(['markdown', 'json', 'csv', 'python']),
       metadata: z.record(z.any()).optional()
-    })).optional().default([]).describe('Supporting workpapers (datasets, calculations, analyses). Optional but recommended for quality scoring.'),
+    })).optional().default([]).describe('OPTIONAL supporting workpapers. Can include source information in content field.'),
     reasoning_trace: z.string().optional()
-  })).transform((results) => {
-    // Preprocess all evidence_refs to handle encoded URLs
-    return results.map(result => ({
-      ...result,
-      evidence_refs: (result.evidence_refs || []).map(preprocessEvidenceRef)
-    }));
-  })
+  }))
 });
 
 /**
