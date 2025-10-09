@@ -251,9 +251,24 @@ app.post('/mcp', async (c) => {
       const params = isRecord(parsedBody['params']) ? parsedBody['params'] : null;
       if (params) {
         const args = isRecord(params['arguments']) ? params['arguments'] : null;
+        const toolName = typeof params['name'] === 'string' ? params['name'] : null;
+
+        // Direct session_id in arguments (most tools)
         if (args && typeof args['session_id'] === 'string') {
           customSessionId = args['session_id'];
           console.log(`[Worker] Found custom session_id in tool arguments: ${customSessionId}`);
+        }
+        // Extract session_id from execution_token for register_execution_results
+        else if (toolName === 'register_execution_results' && args && typeof args['execution_token'] === 'string') {
+          const token = args['execution_token'];
+          // Token format: exec_${session_id}_${timestamp}_${random}
+          const match = token.match(/^exec_([^_]+(?:_[^_]+)*?)_\d+_[a-z0-9]+$/);
+          if (match && match[1]) {
+            customSessionId = match[1];
+            console.log(`[Worker] Extracted session_id from execution_token: ${customSessionId}`);
+          } else {
+            console.log(`[Worker] ⚠️ Unable to extract session_id from execution_token: ${token.substring(0, 50)}...`);
+          }
         }
       }
     }
