@@ -87,6 +87,10 @@ export class MCPSession extends DurableObject {
     const method = request.method;
     const pathname = url.pathname;
 
+    // CRITICAL LOGGING: Log every request that arrives at the DO
+    const sessionHeader = request.headers.get('mcp-session-id');
+    console.log(`[MCPSession] fetch() called: ${method} ${pathname}, session header: ${sessionHeader}, DO ID: ${this.sessionId}`);
+
     // Handle heartbeat endpoint - lightweight keep-alive
     if (method === 'POST' && pathname === '/heartbeat') {
       return this.handleHeartbeat(request);
@@ -94,6 +98,7 @@ export class MCPSession extends DurableObject {
 
     // Handle POST requests (initialization and tool calls)
     if (method === 'POST') {
+      console.log(`[MCPSession] Routing to handlePost for ${pathname}`);
       return this.handlePost(request);
     }
 
