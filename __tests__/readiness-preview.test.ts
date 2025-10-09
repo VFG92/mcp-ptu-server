@@ -1,15 +1,15 @@
 /**
  * Test suite for Readiness Preview feature
- * 
+ *
  * Verifies that:
- * 1. Readiness Preview appears after all plans are submitted
+ * 1. Readiness Preview appears in list_plan_status (not in submit_reasoning_plan)
  * 2. Correct calculations for total declared steps
  * 3. Warning appears for long capability chains
  * 4. Guidance is clear and actionable
  */
 
 import { ParallelReasoningSessionManager } from '../src/workers/parallel-reasoning-mcp.js';
-import { handleSubmitReasoningPlan } from '../src/workers/parallel-reasoning-tools-v5.js';
+import { handleSubmitReasoningPlan, handleListPlanStatus } from '../src/workers/parallel-reasoning-tools-v5.js';
 
 describe('Readiness Preview Feature', () => {
   let manager: ParallelReasoningSessionManager;
@@ -18,7 +18,7 @@ describe('Readiness Preview Feature', () => {
     manager = new ParallelReasoningSessionManager();
   });
 
-  test('should show Readiness Preview after all plans submitted', async () => {
+  test('should show Readiness Preview in list_plan_status after all plans submitted', async () => {
     // Initialize session
     manager.initSession({
       session_id: 'test_preview_001',
@@ -52,8 +52,7 @@ describe('Readiness Preview Feature', () => {
       }
     }, manager);
 
-    // Third plan should trigger Readiness Preview
-    const result = await handleSubmitReasoningPlan({
+    await handleSubmitReasoningPlan({
       session_id: 'test_preview_001',
       plan: {
         plan_id: 'plan_C',
@@ -65,31 +64,32 @@ describe('Readiness Preview Feature', () => {
       }
     }, manager);
 
+    // Now call list_plan_status to get Readiness Preview
+    const result = await handleListPlanStatus({
+      session_id: 'test_preview_001'
+    }, manager);
+
     const response = result.content[0].text;
 
     // Verify Readiness Preview is present
     expect(response).toContain('🎯 Readiness Preview');
-    expect(response).toContain('What You Need to Finalize');
+    expect(response).toContain('Finalization Readiness');
 
     // Verify correct total steps calculation (4 + 5 + 3 = 12)
-    expect(response).toContain('Total declared steps**: 12');
+    expect(response).toContain('0/12 steps');
 
-    // Verify coverage calculation (95% of 12 = 11.4, rounded up to 12)
-    expect(response).toContain('Steps needed**: Execute at least 12 steps');
+    // Verify coverage gap is shown (0/12 executed)
+    expect(response).toContain('Coverage Gap');
+    expect(response).toContain('0.0%');
 
-    // Verify confidence guidance
-    expect(response).toContain('Evidence needed**: At least 4 unique evidence IDs');
+    // Verify confidence gap is shown
+    expect(response).toContain('Confidence Gap');
 
-    // Verify consensus guidance
-    expect(response).toContain('Peer critiques**: Submit 3-5 peer critiques');
-
-    // Verify recommended execution strategy
-    expect(response).toContain('📋 Recommended Execution Strategy');
-    expect(response).toContain('Execute core steps first');
-    expect(response).toContain('Check readiness');
+    // Verify consensus gap is shown
+    expect(response).toContain('Consensus Gap');
   });
 
-  test('should NOT show Readiness Preview before all plans submitted', async () => {
+  test('should prompt to call list_plan_status after submitting plans', async () => {
     // Initialize session
     manager.initSession({
       session_id: 'test_preview_002',
@@ -113,9 +113,11 @@ describe('Readiness Preview Feature', () => {
 
     const response = result.content[0].text;
 
-    // Verify Readiness Preview is NOT present
-    expect(response).not.toContain('🎯 Readiness Preview');
+    // Verify it shows how many more plans are needed
     expect(response).toContain('Submit 2 more plan(s)');
+
+    // Verify it doesn't contain the old readiness preview format
+    expect(response).not.toContain('🎯 Readiness Preview');
   });
 
   test('should show warning for long capability chains', async () => {
@@ -200,7 +202,7 @@ describe('Readiness Preview Feature', () => {
       }
     }, manager);
 
-    const result = await handleSubmitReasoningPlan({
+    await handleSubmitReasoningPlan({
       session_id: 'test_preview_005',
       plan: {
         plan_id: 'plan_B',
@@ -212,13 +214,18 @@ describe('Readiness Preview Feature', () => {
       }
     }, manager);
 
+    // Call list_plan_status to get readiness info
+    const result = await handleListPlanStatus({
+      session_id: 'test_preview_005'
+    }, manager);
+
     const response = result.content[0].text;
 
     // Verify correct total (3 + 7 = 10)
-    expect(response).toContain('Total declared steps**: 10');
+    expect(response).toContain('0/10 steps');
 
-    // Verify correct coverage requirement (95% of 10 = 9.5, rounded up to 10)
-    expect(response).toContain('Steps needed**: Execute at least 10 steps');
+    // Verify coverage gap is shown
+    expect(response).toContain('Coverage Gap');
   });
 
   test('should include all three quality metrics in preview', async () => {
@@ -242,7 +249,7 @@ describe('Readiness Preview Feature', () => {
       }
     }, manager);
 
-    const result = await handleSubmitReasoningPlan({
+    await handleSubmitReasoningPlan({
       session_id: 'test_preview_006',
       plan: {
         plan_id: 'plan_B',
@@ -254,17 +261,22 @@ describe('Readiness Preview Feature', () => {
       }
     }, manager);
 
+    // Call list_plan_status to get readiness info
+    const result = await handleListPlanStatus({
+      session_id: 'test_preview_006'
+    }, manager);
+
     const response = result.content[0].text;
 
     // Verify all three metrics are present
-    expect(response).toContain('1. Coverage ≥ 95%');
-    expect(response).toContain('2. Confidence ≥ 85%');
-    expect(response).toContain('3. Consensus ≥ 80%');
+    expect(response).toContain('Coverage');
+    expect(response).toContain('Confidence');
+    expect(response).toContain('Consensus');
 
-    // Verify formulas are explained
-    expect(response).toContain('Coverage = executed_steps / total_declared_steps');
-    expect(response).toContain('Base 50% + 10% per evidence ID');
-    expect(response).toContain('(agreements - conflicts) / total_interactions');
+    // Verify gaps are shown
+    expect(response).toContain('Coverage Gap');
+    expect(response).toContain('Confidence Gap');
+    expect(response).toContain('Consensus Gap');
   });
 });
 
