@@ -248,6 +248,15 @@ export class MCPSession extends DurableObject {
         headers.set('mcp-session-id', this.sessionId);
         request = new Request(request, { headers });
       }
+
+      // CRITICAL: Auto-initialize transport IMMEDIATELY when header mismatch detected
+      // This happens when ChatGPT closes the original connection and opens a new one
+      // but the worker routes to the correct DO based on session_id in body
+      if (!this.transportInitialized) {
+        console.log(`[MCPSession] Header mismatch detected - auto-initializing transport BEFORE processing request`);
+        await this.autoInitializeTransport(request.url);
+        console.log(`[MCPSession] Transport auto-initialized, transportInitialized: ${this.transportInitialized}`);
+      }
     }
 
     // Convert and handle the request using adapter
@@ -260,8 +269,9 @@ export class MCPSession extends DurableObject {
     const requestMethod = this.getJsonRpcMethod(expressReq.body);
     console.log(`[MCPSession] Request method: ${requestMethod}, transportInitialized: ${this.transportInitialized}, transport exists: ${!!this.transport}`);
 
+    // Double-check transport initialization (fallback)
     if (!this.transportInitialized && requestMethod !== 'initialize') {
-      console.log(`[MCPSession] Auto-initializing transport before handling ${requestMethod}...`);
+      console.log(`[MCPSession] Transport still not initialized - auto-initializing before handling ${requestMethod}...`);
       await this.autoInitializeTransport(request.url);
       console.log(`[MCPSession] Auto-initialization completed, transportInitialized: ${this.transportInitialized}`);
     }

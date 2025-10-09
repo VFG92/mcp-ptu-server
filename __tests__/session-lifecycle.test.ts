@@ -73,7 +73,7 @@ describe('Session Lifecycle Edge Cases', () => {
 
       manager.submitPlan(sessionId, plan);
 
-      // Init again (should preserve plan)
+      // Init again (should RESET session to allow new workflow)
       manager.initSession({
         session_id: sessionId,
         task_description: 'Test task',
@@ -82,8 +82,9 @@ describe('Session Lifecycle Edge Cases', () => {
       });
 
       const session = manager.getSession(sessionId);
-      expect(session?.plans.size).toBe(1);
-      expect(session?.plans.has('plan_A')).toBe(true);
+      // Session should be reset, so plans should be empty
+      expect(session?.plans.size).toBe(0);
+      expect(session?.status).toBe('initialized');
     });
   });
 
