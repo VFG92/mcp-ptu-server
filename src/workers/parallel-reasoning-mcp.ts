@@ -145,27 +145,103 @@ export interface ParsedAxis {
  * - "Key: Value" → {key: "key", value: "value"}
  * - "Key" → {key: "key", value: ""}
  * - "Key: Value1 vs Value2 vs Value3" → {key: "key", value: "value1 vs value2 vs value3"}
+ * - "Key description (details)" → {key: "key", value: ""}
+ * - "Key verso X (Y vs Z)" → {key: "key", value: ""}
  *
  * Examples:
  * - "Tech Stack: Hybrid" → {key: "tech_stack", value: "hybrid"}
  * - "data_sources" → {key: "data_sources", value: ""}
  * - "Risk: Market vs Operational" → {key: "risk", value: "market vs operational"}
+ * - "Postura verso l'AGCM (accettazione vs contestazione)" → {key: "postura", value: ""}
+ * - "Postura: accettazione" → {key: "postura", value: "accettazione"}
+ * - "Ampiezza del rimedio economico ai clienti" → {key: "ampiezza", value: ""}
+ * - "Rimedio: ampio" → {key: "rimedio", value: "ampio"}
  */
 export function parseAxisString(axis: string): ParsedAxis {
   const trimmed = axis.trim();
 
-  // Try to match "Key: Value" pattern
-  const match = trimmed.match(/^([^:]+):\s*(.+)$/);
+  // Try to match "Key: Value" pattern first (explicit key-value)
+  const colonMatch = trimmed.match(/^([^:]+):\s*(.+)$/);
 
-  if (match) {
-    const key = match[1].trim().toLowerCase().replace(/\s+/g, '_');
-    const value = match[2].trim().toLowerCase();
+  if (colonMatch) {
+    // Extract key from the part before colon, removing parentheses and extra words
+    const keyPart = colonMatch[1].trim();
+    const key = extractMainKey(keyPart);
+    const value = colonMatch[2].trim().toLowerCase();
     return { key, value, original: trimmed };
   }
 
-  // No colon found - treat entire string as key
-  const key = trimmed.toLowerCase().replace(/\s+/g, '_');
+  // No colon found - extract main key from entire string
+  const key = extractMainKey(trimmed);
   return { key, value: '', original: trimmed };
+}
+
+/**
+ * Extract the main key from a string, removing parentheses, "verso", "del/della/dei", etc.
+ *
+ * Strategy: Extract all significant nouns and create multiple possible keys.
+ * This allows matching both "Grado di apertura" with "Grado" or "Apertura".
+ *
+ * Examples:
+ * - "Postura verso l'AGCM (accettazione vs contestazione)" → "postura"
+ * - "Ampiezza del rimedio economico" → "ampiezza|rimedio"
+ * - "Velocità di implementazione vs robustezza" → "velocità|implementazione"
+ * - "Tonalità della comunicazione (penitente vs assertiva)" → "tonalità|comunicazione"
+ * - "Grado di apertura dei dati" → "grado|apertura"
+ * - "Propensione al rischio" → "propensione|rischio"
+ * - "Tech Stack" → "tech_stack"
+ */
+function extractMainKey(text: string): string {
+  let cleaned = text.trim();
+
+  // Remove everything in parentheses
+  cleaned = cleaned.replace(/\([^)]*\)/g, '');
+
+  // Remove "vs" and everything after it
+  cleaned = cleaned.replace(/\s+vs\s+.*/i, '');
+
+  // Trim
+  cleaned = cleaned.trim();
+
+  // Split into words
+  const words = cleaned.split(/\s+/);
+
+  // Italian prepositions and articles to skip
+  const skipWords = new Set(['verso', 'del', 'della', 'dei', 'degli', 'di', 'al', 'alla', 'ai', 'agli', 'a', 'per', 'con', 'su', 'in', 'da', 'e', 'ed', 'l\'', 'il', 'lo', 'la', 'i', 'gli', 'le']);
+
+  // Extract significant words (nouns, not prepositions)
+  const significantWords: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].toLowerCase();
+    const cleanWord = word.replace(/^l'/, ''); // Remove l' prefix
+
+    // Skip if it's a preposition/article
+    if (skipWords.has(word) || skipWords.has(cleanWord)) {
+      continue;
+    }
+
+    // Skip very short words (likely articles)
+    if (cleanWord.length <= 1) {
+      continue;
+    }
+
+    significantWords.push(cleanWord);
+
+    // Stop after collecting 2-3 significant words
+    if (significantWords.length >= 3) {
+      break;
+    }
+  }
+
+  // If we have multiple significant words, join them with underscore
+  // This creates a compound key like "grado_apertura" or "tech_stack"
+  if (significantWords.length === 0) {
+    // Fallback: use first word
+    return words[0].toLowerCase().replace(/\s+/g, '_');
+  }
+
+  // Join all significant words with underscore
+  return significantWords.join('_');
 }
 
 /**
@@ -200,16 +276,48 @@ export function compareAxesSemantically(axis1: string, axis2: string): boolean {
  * Check if a plan's axes satisfy required axes semantically
  *
  * A plan satisfies required axes if for each required axis key,
- * there exists at least one plan axis with the same key.
+ * there exists at least one plan axis that matches.
+ *
+ * Matching rules:
+ * - Exact match: "postura" matches "postura"
+ * - Partial match: "apertura" matches "grado_apertura_dati" (substring)
+ * - Partial match: "rimedio" matches "ampiezza_rimedio_economico" (substring)
+ *
+ * This allows flexible axis naming where:
+ * - Required: "Grado di apertura dei dati" → key: "grado_apertura_dati"
+ * - Plan: "Apertura: radicale" → key: "apertura"
+ * - Match: "apertura" is contained in "grado_apertura_dati" ✓
  */
 export function satisfiesRequiredAxes(
   planAxes: string[],
   requiredAxes: string[]
 ): boolean {
-  const planKeys = new Set(planAxes.map(axis => parseAxisString(axis).key));
+  const planKeys = planAxes.map(axis => parseAxisString(axis).key);
   const requiredKeys = requiredAxes.map(axis => parseAxisString(axis).key);
 
-  return requiredKeys.every(reqKey => planKeys.has(reqKey));
+  // For each required key, check if any plan key matches (exact or partial)
+  return requiredKeys.every(reqKey => {
+    return planKeys.some(planKey => {
+      // Exact match
+      if (planKey === reqKey) {
+        return true;
+      }
+
+      // Partial match: plan key is substring of required key
+      // e.g., "apertura" matches "grado_apertura_dati"
+      if (reqKey.includes(planKey)) {
+        return true;
+      }
+
+      // Partial match: required key is substring of plan key
+      // e.g., "grado_apertura_dati" matches "apertura"
+      if (planKey.includes(reqKey)) {
+        return true;
+      }
+
+      return false;
+    });
+  });
 }
 
 /**
