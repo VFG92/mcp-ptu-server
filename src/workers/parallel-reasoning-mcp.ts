@@ -458,6 +458,14 @@ export interface ParallelReasoningSession {
     consensus: number;
     computed_at: number;
   };
+  // NEW: Execution tokens for manifest-based execution
+  execution_tokens?: Array<{
+    token: string;
+    session_id: string;
+    created_at: number;
+    expires_at: number;
+    used: boolean;
+  }>;
 }
 
 /**

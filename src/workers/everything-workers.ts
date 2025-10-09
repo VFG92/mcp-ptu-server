@@ -130,7 +130,10 @@ enum ParallelReasoningV5ToolName {
   SUBMIT_MEDIATION_DECISION = 'submit_mediation_decision',
   LIST_PLAN_STATUS = 'list_plan_status',
   CHECK_SESSION_READINESS = 'check_session_readiness',
-  FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning'
+  FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning',
+  // NEW: Manifest-based execution
+  EXECUTE_REASONING_MANIFEST = 'execute_reasoning_manifest',
+  REGISTER_EXECUTION_RESULTS = 'register_execution_results'
 }
 
 // Example completion values
