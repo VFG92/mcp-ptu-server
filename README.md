@@ -83,6 +83,31 @@ When calling `execute_plan_step`, the `task` parameter must describe **WHAT ANAL
 - Detailed tasks → System uses reasoning + tools → High-quality evidence → Higher confidence score
 - Vague tasks → System just returns text → Low-quality evidence → Lower confidence score
 
+### Understanding confidence scores
+
+Confidence is calculated as:
+```
+confidence = 0.5 (base) + min(0.3, evidence_count * 0.1) - min(0.4, evidence_low_count * 0.2)
+```
+
+**Common issue**: You have many evidence IDs but confidence is still low (e.g., 40%).
+
+**Root cause**: Too many `evidence_low` quality signals from vague tasks.
+
+**Example scenario**:
+- 26 evidence IDs → +30% bonus (max reached)
+- But confidence = 40% → means -40% penalty (max penalty)
+- Formula: 50% + 30% - 40% = 40% ✓
+
+**Solution**: Call `list_plan_status` to see the diagnostic. It will show:
+```
+⚠️ CRITICAL: You have 26 evidence IDs but confidence is still low (40%).
+This means your evidence has LOW QUALITY signals - the system detected that your
+execute_plan_step tasks were too vague or didn't trigger real reasoning.
+```
+
+Then re-execute steps with MUCH MORE DETAILED task descriptions.
+
 ## Semantic diversity validation
 The server uses **semantic validation** for diversity axes, enabling more flexible plan differentiation:
 

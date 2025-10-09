@@ -41,6 +41,38 @@ Use the following prompt to exercise the server end-to-end:
 > - Call `list_plan_status` before attempting finalization
 > - This tool shows current coverage/confidence/consensus % and specific gaps to fill
 
+## Troubleshooting: Low confidence despite many evidence IDs
+
+**Symptom**: You have 20+ evidence IDs but confidence is stuck at 40-50%.
+
+**Root cause**: Too many `evidence_low` quality signals. This happens when `execute_plan_step` tasks are too vague.
+
+**Confidence formula**:
+```
+confidence = 0.5 (base) + min(0.3, evidence_count * 0.1) - min(0.4, evidence_low_count * 0.2)
+```
+
+**Example scenario**:
+- 26 evidence IDs → +30% bonus (max)
+- Confidence = 40% → -40% penalty (max)
+- Formula: 50% + 30% - 40% = 40% ✓
+
+**Solution**:
+1. Call `list_plan_status` to see the diagnostic
+2. It will show: "⚠️ CRITICAL: You have 26 evidence IDs but confidence is still low (40%). This means your evidence has LOW QUALITY signals..."
+3. Re-execute steps with MUCH MORE DETAILED task descriptions
+4. Use specific analytical instructions that force tool use and reasoning
+
+**Before (generates evidence_low)**:
+```json
+{"task": "market analysis"}
+```
+
+**After (generates high-quality evidence)**:
+```json
+{"task": "Search for top 5 B2B SaaS companies in healthcare. For EACH: 1) Find website, 2) Extract pricing page URL, 3) Identify pricing model, 4) Estimate revenue from Crunchbase, 5) List 3 differentiators. Provide URLs and data."}
+```
+
 ## Useful commands
 ```bash
 npm install            # install dependencies
