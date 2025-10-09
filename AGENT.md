@@ -17,11 +17,29 @@ This document keeps contributors and AI agents aligned while working on the repo
 ## Recommended MCP prompt
 Use the following prompt to exercise the server end-to-end:
 
-> Start a parallel reasoning session on this issue, invoke every endpoint at the right moment, and use reasoning to drive a workflow that ends with closing the session. Use **all** MCP endpoints and activate native capabilities whenever calculations or retrieval of real evidence is required.
+> Start a parallel reasoning session on this issue. Use **all** MCP endpoints and activate native capabilities whenever calculations or retrieval of real evidence is required.
 >
-> **IMPORTANT**: Always call `check_session_readiness` before attempting `finalize_parallel_reasoning`. Finalization is **automatically blocked** unless the quality metrics report **Confidence ≥ 85%**, **Coverage ≥ 95%** (essential steps complete, no fluff), **Consensus ≥ 80%**, and every material figure is backed by at least two independent sources or one primary source plus a reconstruction workpaper.
+> **CRITICAL WORKFLOW**:
+> 1. Call `init_parallel_reasoning` to start the session
+> 2. Submit ${min_plans} plans using `submit_reasoning_plan`
+> 3. **Call `list_plan_status` immediately** to see what needs to be done
+> 4. Execute capability steps using `execute_plan_step` with **DETAILED task descriptions** that trigger real reasoning and tool use
+> 5. **Call `list_plan_status` frequently** to track progress and identify gaps
+> 6. Submit peer critiques using `submit_peer_critique` to build consensus
+> 7. Call `check_session_readiness` before finalizing
+> 8. Call `finalize_parallel_reasoning` when ready
 >
-> If readiness check shows metrics below thresholds, follow the recommendations provided (e.g., execute more capability steps, add more evidence, conduct peer reviews) before attempting finalization.
+> **IMPORTANT FOR EXECUTE_PLAN_STEP**:
+> - The `task` parameter must describe WHAT ANALYSIS TO PERFORM in detail
+> - GOOD: "Analyze top 5 competitors: identify pricing models, estimate market share using web search, list differentiators"
+> - BAD: "competitor analysis" (too vague)
+> - Detailed tasks trigger real reasoning + tool use → high-quality evidence → higher confidence scores
+>
+> **IMPORTANT FOR TRACKING PROGRESS**:
+> - Call `list_plan_status` after submitting all plans
+> - Call `list_plan_status` after executing several steps
+> - Call `list_plan_status` before attempting finalization
+> - This tool shows current coverage/confidence/consensus % and specific gaps to fill
 
 ## Useful commands
 ```bash

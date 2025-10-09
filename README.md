@@ -45,22 +45,43 @@ The server implements the standard MCP transport plus a convenience proxy:
 Within the MCP session the following tools drive the workflow:
 - `init_parallel_reasoning` – declare a new reasoning workflow and expected diversity axes.
 - `submit_reasoning_plan` – register a plan path.
-- `execute_plan_step` – perform capability steps and automatically log evidence IDs.
-- `submit_peer_review` – critique other plans and update consensus tallies.
-- `record_plan_result` – save outcomes and evidence references for a plan.
+- **`list_plan_status`** – **PRIMARY tool for tracking progress**. Shows current coverage/confidence/consensus %, specific gaps, and actionable next steps. **Call this frequently!**
+- `execute_plan_step` – perform REAL ANALYSIS with reasoning and tool use. Use detailed task descriptions to trigger deep reasoning.
+- `submit_peer_critique` – critique other plans and update consensus tallies.
 - `check_session_readiness` – verify if session meets quality thresholds before finalization (recommended).
 - `finalize_parallel_reasoning` – close the session, returning quality metrics and a consolidated recommendation.
 
 All tools accept a `session_id` parameter. Reuse the same value throughout a workflow to keep state aligned.
 
-### Best practice: Check readiness before finalization
-Always call `check_session_readiness` before attempting `finalize_parallel_reasoning`. This tool:
-- Verifies structural requirements (min plans, all plans executed)
-- Checks quality metrics against thresholds (confidence ≥85%, coverage ≥95%, consensus ≥80%)
-- Provides actionable recommendations if not ready
-- Prevents premature finalization attempts
+### Best practice: Use list_plan_status frequently
+Call `list_plan_status` after submitting plans and during execution to:
+- See current progress toward finalization thresholds (coverage ≥95%, confidence ≥85%, consensus ≥80%)
+- Identify specific gaps that need to be filled
+- Get actionable recommendations for next steps
+- Track which plans need more execution
 
-If `finalize_parallel_reasoning` is called when quality metrics are below thresholds, it will **block finalization** and return detailed warnings explaining which metrics need improvement.
+This tool provides a **readiness preview** that guides your workflow and prevents premature finalization attempts.
+
+### Best practice: Execute plan steps with detailed tasks
+When calling `execute_plan_step`, the `task` parameter must describe **WHAT ANALYSIS TO PERFORM** in detail, not just a label.
+
+**GOOD Example** (triggers real reasoning + tool use):
+```json
+{
+  "task": "Analyze the top 5 competitors in the B2B SaaS healthcare market. For each: 1) Identify their primary product, 2) Estimate annual revenue using web search, 3) List key differentiators, 4) Analyze pricing strategy. Provide specific data and sources."
+}
+```
+
+**BAD Example** (too vague, won't trigger deep reasoning):
+```json
+{
+  "task": "competitor analysis"
+}
+```
+
+**Why this matters**:
+- Detailed tasks → System uses reasoning + tools → High-quality evidence → Higher confidence score
+- Vague tasks → System just returns text → Low-quality evidence → Lower confidence score
 
 ## Semantic diversity validation
 The server uses **semantic validation** for diversity axes, enabling more flexible plan differentiation:

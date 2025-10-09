@@ -314,18 +314,31 @@ export async function handleSubmitReasoningPlan(
 
 /**
  * Tool 3: Execute Plan Step
+ *
+ * CRITICAL: This tool executes REAL ANALYSIS using reasoning and tool use.
+ * The `task` parameter must describe WHAT ANALYSIS TO PERFORM in detail.
+ *
+ * GOOD: "Analyze top 5 competitors: identify pricing models, estimate market share, list differentiators. Use web search."
+ * BAD: "competitor analysis" (too vague, won't trigger deep reasoning)
+ *
+ * The system will:
+ * 1. Parse your task description
+ * 2. Activate reasoning capabilities
+ * 3. Use tools (web search, calculations, etc.) as needed
+ * 4. Generate evidence with traceable ID
+ * 5. Return detailed analysis results
  */
 export const ExecutePlanStepSchema = z.object({
-  session_id: z.string(),
-  plan_id: z.string(),
-  task: z.string().describe('Task for capability execution'),
-  adapter_id: z.enum(['strategy', 'finance', 'commercial', 'risk', 'comprehensive']).optional(),
+  session_id: z.string().describe('Session ID'),
+  plan_id: z.string().describe('Plan ID to execute step for'),
+  task: z.string().describe('DETAILED description of what analysis to perform. Be specific about: 1) What to analyze, 2) What data to collect, 3) What tools/methods to use, 4) What outputs are expected. Detailed tasks trigger deeper reasoning and tool use.'),
+  adapter_id: z.enum(['strategy', 'finance', 'commercial', 'risk', 'comprehensive']).optional().describe('Analysis adapter type (default: comprehensive)'),
   budget: z.object({
     max_tokens_in: z.number().int().min(1),
     max_tokens_out: z.number().int().min(1),
     max_cpu_ms: z.number().int().min(1),
     max_subrequests: z.number().int().min(1)
-  }).optional()
+  }).optional().describe('Resource limits for execution (optional)')
 });
 
 export async function handleExecutePlanStep(
@@ -563,10 +576,16 @@ Decision stored. Continue submitting decisions for all key points.`;
 }
 
 /**
- * Tool 7: List Plan Status (Passive)
+ * Tool 7: Get Readiness Preview & Session Status
+ *
+ * This is the PRIMARY tool for checking session progress and understanding what needs to be done.
+ * Call this frequently to:
+ * - See current progress toward finalization thresholds
+ * - Identify specific gaps that need to be filled
+ * - Get actionable recommendations for next steps
  */
 export const ListPlanStatusSchema = z.object({
-  session_id: z.string()
+  session_id: z.string().describe('Session ID to get readiness preview and status for')
 });
 
 export async function handleListPlanStatus(
@@ -583,41 +602,151 @@ export async function handleListPlanStatus(
 
   const session = status.session;
 
-  let response = `# Parallel Reasoning Session Status
+  // Calculate readiness metrics
+  const readiness = manager.checkSessionReadiness(args.session_id);
 
-**Session ID**: ${session.session_id}
+  // Calculate total declared and executed steps
+  let total_declared_steps = 0;
+  let total_executed_steps = 0;
+  for (const plan of session.plans.values()) {
+    total_declared_steps += plan.capability_chain.length;
+    total_executed_steps += session.plan_results.get(plan.plan_id)?.length || 0;
+  }
+
+  const coverage_pct = total_declared_steps > 0 ? (total_executed_steps / total_declared_steps * 100) : 0;
+  const confidence_pct = readiness.metrics.confidence * 100;
+  const consensus_pct = readiness.metrics.consensus * 100;
+  const evidence_count = readiness.metrics.details.confidence.unique_evidence_count;
+
+  // Build response with READINESS PREVIEW as primary content
+  let response = `# 🎯 Readiness Preview & Session Status
+
+**Session ID**: \`${session.session_id}\`
 **Status**: ${session.status}
-**Plans**: ${session.plans.size}/${session.min_plans}
-
-## Plans
-
-${Array.from(session.plans.values()).map(plan => `
-### ${plan.plan_id}
-- **Diversity Axes**: ${plan.diversity_axes.join(', ')}
-- **Capability Chain**: ${plan.capability_chain.join(' → ')}
-- **Results**: ${session.plan_results.get(plan.plan_id)?.length || 0} steps completed
-`).join('\n')}
-
-## Cross-Plan Notes
-
-${session.cross_plan_notes.length} notes exchanged
-
-## Peer Critiques
-
-${session.peer_critiques.length} critiques submitted
-
-## Mediation Decisions
-
-${session.mediation_decisions.length} decisions recorded
-
-## Pending Frames
-
-${status.pending_frames.length > 0 ? status.pending_frames.map(f => `- ${f}`).join('\n') : 'None - all frames complete'}
+**Plans Submitted**: ${session.plans.size}/${session.min_plans}
 
 ---
 
-**Created**: ${new Date(session.created_at).toISOString()}
-**Updated**: ${new Date(session.updated_at).toISOString()}`;
+## 📊 Finalization Readiness
+
+${readiness.ready ? '✅ **READY TO FINALIZE**' : '⚠️ **NOT READY - Action Required**'}
+
+| Metric | Current | Target | Status |
+|--------|---------|--------|--------|
+| **Coverage** | ${coverage_pct.toFixed(1)}% (${total_executed_steps}/${total_declared_steps} steps) | ≥95% | ${readiness.quality_check.coverage_met ? '✅' : '❌'} |
+| **Confidence** | ${confidence_pct.toFixed(1)}% | ≥85% | ${readiness.quality_check.confidence_met ? '✅' : '❌'} |
+| **Consensus** | ${consensus_pct.toFixed(1)}% | ≥80% | ${readiness.quality_check.consensus_met ? '✅' : '❌'} |
+
+---
+
+## 🎬 What You Need To Do Now
+
+${!readiness.quality_check.coverage_met ? `
+### ❌ Coverage Gap: ${(95 - coverage_pct).toFixed(1)}% short
+
+**Problem**: You've only executed ${total_executed_steps} out of ${total_declared_steps} declared capability steps.
+**Target**: Execute at least ${Math.ceil(total_declared_steps * 0.95)} steps (95% coverage).
+**Gap**: ${Math.ceil(total_declared_steps * 0.95) - total_executed_steps} more steps needed.
+
+**Action Required**:
+1. Call \`execute_plan_step\` for each remaining capability in your plans
+2. For EACH step, use the \`task\` parameter to describe WHAT ANALYSIS TO PERFORM
+3. **CRITICAL**: The system will execute real reasoning and tool use for each task
+4. Don't just list steps - describe the actual analytical work needed
+
+**Example - GOOD**:
+\`\`\`json
+{
+  "session_id": "${session.session_id}",
+  "plan_id": "plan_A",
+  "task": "Analyze the top 5 competitors in the healthcare SaaS market. For each: 1) Identify their pricing model, 2) Estimate market share, 3) List key differentiators. Use web search and financial data."
+}
+\`\`\`
+
+**Example - BAD** (don't do this):
+\`\`\`json
+{
+  "task": "competitor analysis"  // ❌ Too vague, won't trigger deep reasoning
+}
+\`\`\`
+
+` : ''}${!readiness.quality_check.confidence_met ? `
+### ❌ Confidence Gap: ${(85 - confidence_pct).toFixed(1)}% short
+
+**Problem**: ${evidence_count < 4 ? 'Not enough evidence collected' : 'Evidence quality is too low'}.
+**Current Evidence IDs**: ${evidence_count}
+**Target**: At least 4 unique evidence IDs with HIGH QUALITY
+
+${evidence_count >= 4 ? `
+**⚠️ CRITICAL**: You have ${evidence_count} evidence IDs but confidence is still low (${confidence_pct.toFixed(1)}%).
+This means your evidence has LOW QUALITY signals - the system detected that your \`execute_plan_step\` tasks were too vague or didn't trigger real reasoning.
+
+**Root Cause**: Using vague tasks like "analyze competitors" instead of detailed analytical instructions.
+
+**Solution**: Re-execute steps with MUCH MORE DETAILED tasks that force the system to:
+- Use specific tools (web search, calculations, data analysis)
+- Collect specific data points
+- Perform specific analytical operations
+- Generate traceable, verifiable outputs
+
+` : ''}
+**Action Required**:
+1. Call \`execute_plan_step\` with EXTREMELY DETAILED task descriptions
+2. **BAD Example**: \`{"task": "market analysis"}\` ❌
+3. **GOOD Example**: \`{"task": "Search for the top 5 B2B SaaS companies in healthcare. For EACH company: 1) Find their website, 2) Extract their pricing page URL, 3) Identify their pricing model (per-user/per-feature/tiered), 4) Estimate their annual revenue from Crunchbase or similar sources, 5) List 3 key product differentiators. Provide URLs and specific data points for each finding."}\` ✅
+
+**Why this matters**: Detailed tasks → System uses reasoning + tools → High-quality evidence → Higher confidence
+
+` : ''}${!readiness.quality_check.consensus_met ? `
+### ❌ Consensus Gap: ${(80 - consensus_pct).toFixed(1)}% short
+
+**Problem**: Not enough peer critiques to establish consensus.
+**Current Critiques**: ${session.peer_critiques.length}
+**Target**: 3-5 peer critiques with high agreement scores
+
+**Action Required**:
+1. Call \`submit_peer_critique\` to have plans review each other
+2. Aim for agreement_score > 0.7 in each critique
+3. Focus on substantive agreement/disagreement, not superficial points
+
+` : ''}${readiness.ready ? `
+### ✅ All Requirements Met
+
+You can now call \`finalize_parallel_reasoning\` to complete the session.
+
+` : ''}
+---
+
+## 📋 Detailed Plan Status
+
+${Array.from(session.plans.values()).map(plan => {
+  const executed = session.plan_results.get(plan.plan_id)?.length || 0;
+  const declared = plan.capability_chain.length;
+  const plan_coverage = declared > 0 ? (executed / declared * 100) : 0;
+
+  return `
+### ${plan.plan_id} ${plan_coverage >= 95 ? '✅' : '⚠️'}
+
+- **Coverage**: ${plan_coverage.toFixed(0)}% (${executed}/${declared} steps executed)
+- **Diversity Axes**: ${plan.diversity_axes.join(', ')}
+- **Capability Chain**: ${plan.capability_chain.join(' → ')}
+${executed < declared ? `
+**Missing Steps**: ${declared - executed} steps not yet executed
+**Next Action**: Call \`execute_plan_step\` with detailed analytical tasks for remaining capabilities
+` : ''}`;
+}).join('\n')}
+
+---
+
+## 📈 Session Activity
+
+- **Cross-Plan Notes**: ${session.cross_plan_notes.length} notes exchanged
+- **Peer Critiques**: ${session.peer_critiques.length} critiques submitted
+- **Mediation Decisions**: ${session.mediation_decisions.length} decisions recorded
+
+---
+
+**💡 Pro Tip**: Call this tool frequently to track progress and identify gaps. Don't wait until the end!`;
 
   // Create structured content for UI visualization
   const structuredContent = createStructuredContent<WorkflowStatusContent>(

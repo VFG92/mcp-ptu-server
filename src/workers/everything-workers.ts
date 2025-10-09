@@ -197,11 +197,11 @@ This server supports parallel reasoning with diversity enforcement for complex a
 Use these 8 tools for multi-path reasoning:
 - init_parallel_reasoning: Initialize session with diversity requirements
 - submit_reasoning_plan: Submit plan with diversity validation
-- execute_plan_step: Execute capability for specific plan
+- execute_plan_step: Execute REAL ANALYSIS with reasoning + tools (use detailed task descriptions)
 - submit_cross_plan_note: Cross-plan contamination
 - submit_peer_critique: Peer review (ChatGPT-generated)
 - submit_mediation_decision: Final mediation with evidence
-- list_plan_status: List pending frames
+- list_plan_status: Get readiness preview & track progress (call FREQUENTLY)
 - check_session_readiness: Verify session meets quality thresholds before finalization
 - finalize_parallel_reasoning: Validate completeness and finalize session
 
@@ -533,7 +533,7 @@ Use these 8 tools for multi-path reasoning:
       {
         name: ParallelReasoningV5ToolName.LIST_PLAN_STATUS,
         description:
-          "List pending frames for session (passive). Shows what needs completion (plan executions, peer reviews, decisions). Helps ChatGPT see what to do next.",
+          "Get readiness preview and session status. PRIMARY tool for tracking progress toward finalization. Shows: current coverage/confidence/consensus %, specific gaps that need filling, actionable next steps. Call this FREQUENTLY to understand what needs to be done.",
         inputSchema: zodToJsonSchema(ListPlanStatusSchema) as ToolInput,
       },
       {

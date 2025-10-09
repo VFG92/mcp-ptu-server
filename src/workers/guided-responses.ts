@@ -109,10 +109,13 @@ You can use ANY axis that makes sense for your task. Here are more examples:
   - Longer chains (7+) = more execution time and token usage
   - Coverage formula: executed_steps / total_declared_steps ≥ 0.95
 
-## Next Step
-Call \`submit_reasoning_plan\` to submit your first plan.
+## Next Steps
 
-**Example**:
+1. **Submit ${min_plans} reasoning plans** using \`submit_reasoning_plan\`
+2. **Check progress frequently** using \`list_plan_status\` to see what gaps need filling
+3. **Execute capability steps** using \`execute_plan_step\` with detailed analytical tasks
+
+**Example - Submit First Plan**:
 \`\`\`json
 {
   "session_id": "${session_id}",
@@ -127,7 +130,10 @@ Call \`submit_reasoning_plan\` to submit your first plan.
 }
 \`\`\`
 
-💡 **Tip**: Start with 3-5 capabilities per plan. You can always add more plans if needed.
+💡 **Pro Tips**:
+- Start with 3-5 capabilities per plan for optimal execution efficiency
+- Call \`list_plan_status\` frequently to track progress and identify gaps
+- Each \`execute_plan_step\` should describe WHAT ANALYSIS to perform, not just a label
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
 `;
@@ -155,37 +161,30 @@ Longer chains require more \`execute_plan_step\` calls to reach the 95% coverage
 **Recommendation**: Consider 3-5 steps per plan for optimal execution efficiency.
 ` : '';
 
-  // Readiness preview when all plans submitted
-  const readinessPreview = !needs_more ? `
+  // Prompt to check readiness when all plans submitted
+  const readinessPrompt = !needs_more ? `
 
-## 🎯 Readiness Preview - What You Need to Finalize
+## 🎯 Next: Check Your Readiness
 
-Before you can call \`finalize_parallel_reasoning\`, you must meet these thresholds:
+You've submitted all ${plans_submitted} required plans. Now it's time to execute them!
 
-### 1. Coverage ≥ 95%
-- **Total declared steps**: ${total_declared_steps} (across all ${plans_submitted} plans)
-- **Steps needed**: Execute at least ${Math.ceil(total_declared_steps * 0.95)} steps using \`execute_plan_step\`
-- **Why**: Coverage = executed_steps / total_declared_steps
+**IMPORTANT - Call this tool NOW**:
+\`\`\`json
+{
+  "name": "list_plan_status",
+  "arguments": {
+    "session_id": "${session_id}"
+  }
+}
+\`\`\`
 
-### 2. Confidence ≥ 85%
-- **Evidence needed**: At least 4 unique evidence IDs from executed steps
-- **Formula**: Base 50% + 10% per evidence ID (max +30%) - quality penalties
-- **How**: Each \`execute_plan_step\` generates an evidence ID automatically
+This will show you:
+- ✅ What % coverage, confidence, and consensus you currently have
+- ❌ Specific gaps that need to be filled
+- 🎯 Exact actions needed to reach finalization thresholds
+- 📋 Detailed status of each plan's execution progress
 
-### 3. Consensus ≥ 80%
-- **Peer critiques**: Submit 3-5 peer critiques using \`submit_peer_critique\`
-- **Agreement scores**: Aim for agreement_score > 0.7 to build consensus
-- **Why**: Consensus = (agreements - conflicts) / total_interactions
-
-### 📋 Recommended Execution Strategy
-
-1. **Execute core steps first** (${Math.ceil(total_declared_steps * 0.95)} steps minimum)
-2. **Monitor evidence accumulation** (target: 4+ unique evidence IDs)
-3. **Add peer critiques** (3-5 critiques with high agreement scores)
-4. **Check readiness** using \`check_session_readiness\` before finalizing
-5. **Finalize** using \`finalize_parallel_reasoning\` when ready
-
-⚠️ **Important**: Use \`check_session_readiness\` BEFORE attempting to finalize to avoid rejection.
+**Don't skip this step!** The readiness preview will guide your next actions.
 ` : '';
 
   return `# ✅ Plan Accepted: ${plan_id}
@@ -212,13 +211,14 @@ Instead, think about what unique perspective would genuinely improve the analysi
 ` : `
 ## Next Step
 You have submitted the minimum number of plans (${min_plans}).
-${readinessPreview}
+${readinessPrompt}
 
-You can now:
-1. **Execute capabilities**: Call \`execute_plan_step\` to run analysis for each plan
-2. **Submit more plans**: Add additional plans for deeper analysis (optional)
+After checking readiness, you'll need to:
+1. **Execute capabilities**: Call \`execute_plan_step\` with detailed analytical tasks
+2. **Submit peer critiques**: Use \`submit_peer_critique\` to build consensus
+3. **Check progress**: Call \`list_plan_status\` frequently to track gaps
 
-**Example - Execute capability**:
+**Example - Execute capability with REAL analysis**:
 \`\`\`json
 {
   "session_id": "${session_id}",
@@ -415,33 +415,67 @@ export function formatCapabilityExecuted(
 
 **Session ID**: \`${session_id}\`
 
-## Result
+## Result Summary
 ${result_summary}
 
-## Next Steps
+---
 
-You can now:
+## 🎯 Critical: Check Your Progress
 
-1. **Execute more capabilities** for this plan:
-   \`\`\`json
-   {
-     "session_id": "${session_id}",
-     "plan_id": "${plan_id}",
-     "task": "Next capability task",
-     "adapter_id": "strategy"
-   }
-   \`\`\`
+**Call this NOW to see what's next**:
+\`\`\`json
+{
+  "name": "list_plan_status",
+  "arguments": {
+    "session_id": "${session_id}"
+  }
+}
+\`\`\`
 
-2. **Execute capabilities for other plans**
+This will show you:
+- How many more steps you need to execute
+- Current coverage, confidence, and consensus percentages
+- Specific gaps that need to be filled
 
-3. **Submit cross-plan notes** to share insights:
-   \`\`\`json
-   {
-     "session_id": "${session_id}",
-     "note": {
-       "from_plan_id": "${plan_id}",
-       "to_plan_id": "other_plan_id",
-       "note": "Key insight to share",
+---
+
+## Next Actions
+
+After checking status, continue with:
+
+### 1. Execute More Capabilities (if coverage < 95%)
+
+**CRITICAL**: The \`task\` parameter must describe WHAT ANALYSIS TO PERFORM, not just a label.
+
+**GOOD Example** (triggers real reasoning + tool use):
+\`\`\`json
+{
+  "session_id": "${session_id}",
+  "plan_id": "${plan_id}",
+  "task": "Research the top 5 competitors in the B2B SaaS healthcare market. For each competitor: 1) Identify their primary product offering, 2) Estimate their annual revenue using web search and financial databases, 3) List their key differentiators, 4) Analyze their pricing strategy. Provide specific data points and sources."
+}
+\`\`\`
+
+**BAD Example** (don't do this - too vague):
+\`\`\`json
+{
+  "task": "competitor analysis"  // ❌ Won't trigger deep reasoning
+}
+\`\`\`
+
+**Why this matters**:
+- Detailed tasks → System uses reasoning + tools → High-quality evidence
+- Vague tasks → System just returns text → Low-quality evidence
+- Quality evidence → Higher confidence score → Easier to finalize
+
+### 2. Submit Cross-Plan Notes (optional)
+\`\`\`json
+{
+  "session_id": "${session_id}",
+  "note": {
+    "from_plan_id": "${plan_id}",
+    "to_plan_id": "other_plan_id",
+    "note": "Key insight to share",
        "references": ["evidence_001"],
        "timestamp": ${Date.now()}
      }
