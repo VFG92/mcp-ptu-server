@@ -813,6 +813,12 @@ This server supports parallel reasoning with diversity enforcement for complex a
         }
         const validatedArgs = ExecuteReasoningManifestSchema.parse(args);
         const result = await handleExecuteReasoningManifest(validatedArgs, parallelReasoningV5Manager);
+        // CRITICAL: Persist session state after generating manifest (saves execution tokens)
+        if (parallelReasoningV5PersistCallback) {
+          console.log(`[CallTool] Persisting session state after manifest generation...`);
+          await parallelReasoningV5PersistCallback();
+          console.log(`[CallTool] Session state persisted successfully`);
+        }
         return result;
       }
 

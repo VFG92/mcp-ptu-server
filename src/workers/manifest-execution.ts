@@ -408,6 +408,16 @@ export async function handleRegisterExecutionResults(
       );
     }
 
+    // Check if session is terminated
+    if (session.status === 'terminated') {
+      throw new Error(
+        `Session ${session.session_id} has been terminated. ` +
+        'This may happen if finalize_parallel_reasoning was called before registering results. ' +
+        'To recover: 1) Call init_parallel_reasoning with the same session_id to reset the session, ' +
+        '2) Submit plans again, 3) Generate new manifest, 4) Execute and register results.'
+      );
+    }
+
     // Mark token as used
     const token = session.execution_tokens?.find((t: ExecutionToken) => t.token === args.execution_token);
     if (!token) {
@@ -535,12 +545,34 @@ function findSessionByExecutionToken(
   token: string,
   manager: ParallelReasoningSessionManager
 ): any | null {
+  console.log(`[findSessionByExecutionToken] Searching for token: ${token.substring(0, 50)}...`);
+
+  const sessions = (manager as any).sessions;
+  console.log(`[findSessionByExecutionToken] Total sessions in manager: ${sessions.size}`);
+
   // Iterate through all sessions to find the one with this token
-  for (const [session_id, session] of (manager as any).sessions) {
+  let sessionIndex = 0;
+  for (const [session_id, session] of sessions) {
+    sessionIndex++;
+    console.log(`[findSessionByExecutionToken] Checking session ${sessionIndex}/${sessions.size}: ${session_id}`);
+    console.log(`[findSessionByExecutionToken]   - Status: ${session.status}`);
+    console.log(`[findSessionByExecutionToken]   - Has execution_tokens: ${!!session.execution_tokens}`);
+    console.log(`[findSessionByExecutionToken]   - Execution tokens count: ${session.execution_tokens?.length || 0}`);
+
+    if (session.execution_tokens) {
+      for (let i = 0; i < session.execution_tokens.length; i++) {
+        const t = session.execution_tokens[i];
+        console.log(`[findSessionByExecutionToken]   - Token ${i + 1}: ${t.token.substring(0, 50)}... (used: ${t.used}, expires: ${new Date(t.expires_at).toISOString()})`);
+      }
+    }
+
     if (session.execution_tokens?.some((t: ExecutionToken) => t.token === token)) {
+      console.log(`[findSessionByExecutionToken] ✅ Found session: ${session_id}`);
       return session;
     }
   }
+
+  console.log(`[findSessionByExecutionToken] ❌ Token not found in any session`);
   return null;
 }
 
