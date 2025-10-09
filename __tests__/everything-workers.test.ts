@@ -113,10 +113,16 @@ describe('everything workers server', () => {
     const toolsResponse = await listToolsHandler!.handler({ params: {} });
     expect(Array.isArray(toolsResponse.tools)).toBe(true);
 
-    // v5.1.0: Only parallel reasoning tools exposed (multi-path only)
+    // v5.2.0: Only parallel reasoning tools exposed (manifest-based workflow)
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'init_parallel_reasoning')).toBe(true);
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'submit_reasoning_plan')).toBe(true);
-    expect(toolsResponse.tools.some((tool: any) => tool.name === 'execute_plan_step')).toBe(true);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'execute_reasoning_manifest')).toBe(true);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'register_execution_results')).toBe(true);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'generate_meta_reflection')).toBe(true);
+
+    // Deprecated tools should NOT be exposed
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'execute_plan_step')).toBe(false);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'submit_cross_plan_note')).toBe(false);
 
     // v5.1.0: Single-path tools no longer exposed
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'analyze_with_capabilities')).toBe(false);

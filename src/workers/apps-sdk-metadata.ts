@@ -137,8 +137,8 @@ export function createToolResponse(
 export const TOOL_WIDGET_MAPPING = {
   init_parallel_reasoning: WidgetTypes.WORKFLOW_VISUALIZER,
   submit_reasoning_plan: WidgetTypes.PLAN_TIMELINE,
-  execute_plan_step: WidgetTypes.PLAN_TIMELINE,
-  submit_cross_plan_note: WidgetTypes.WORKFLOW_VISUALIZER,
+  // REMOVED: execute_plan_step (deprecated)
+  // REMOVED: submit_cross_plan_note (deprecated)
   submit_peer_critique: WidgetTypes.WORKFLOW_VISUALIZER,
   submit_mediation_decision: WidgetTypes.WORKFLOW_VISUALIZER,
   list_plan_status: WidgetTypes.DIVERSITY_MATRIX,

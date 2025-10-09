@@ -17,60 +17,76 @@ This document keeps contributors and AI agents aligned while working on the repo
 ## Recommended MCP prompt
 Use the following prompt to exercise the server end-to-end:
 
-> Start a parallel reasoning session on this issue. Use **all** MCP endpoints and activate native capabilities whenever calculations or retrieval of real evidence is required.
+> Start a parallel reasoning session on this issue. Use the **manifest-based workflow** for efficient execution.
 >
-> **CRITICAL WORKFLOW**:
+> **RECOMMENDED WORKFLOW** (Manifest-based):
 > 1. Call `init_parallel_reasoning` to start the session
-> 2. Submit ${min_plans} plans using `submit_reasoning_plan`
-> 3. **Call `list_plan_status` immediately** to see what needs to be done
-> 4. Execute capability steps using `execute_plan_step` with **DETAILED task descriptions** that trigger real reasoning and tool use
-> 5. **Call `list_plan_status` frequently** to track progress and identify gaps
-> 6. Submit peer critiques using `submit_peer_critique` to build consensus
-> 7. Call `check_session_readiness` before finalizing
-> 8. Call `finalize_parallel_reasoning` when ready
+> 2. Submit 3+ plans using `submit_reasoning_plan` with diverse axes
+> 3. Call `execute_reasoning_manifest` to generate execution manifest
+> 4. **Execute ALL steps** using native ChatGPT tools (web search, Python, code interpreter)
+> 5. Call `register_execution_results` to batch register all results with evidence
+> 6. **Call `list_plan_status`** to check evidence quality report and gaps
+> 7. Submit peer critiques using `submit_peer_critique` with falsification tests
+> 8. Submit mediation decisions using `submit_mediation_decision`
+> 9. **Call `generate_meta_reflection`** to analyze patterns and identify gaps (NEW)
+> 10. Call `check_session_readiness` before finalizing
+> 11. Call `finalize_parallel_reasoning` when ready
 >
-> **IMPORTANT FOR EXECUTE_PLAN_STEP**:
-> - The `task` parameter must describe WHAT ANALYSIS TO PERFORM in detail
-> - GOOD: "Analyze top 5 competitors: identify pricing models, estimate market share using web search, list differentiators"
-> - BAD: "competitor analysis" (too vague)
-> - Detailed tasks trigger real reasoning + tool use → high-quality evidence → higher confidence scores
+> **IMPORTANT FOR EXECUTION**:
+> - Execute ALL manifest steps using native tools (web search, Python, etc.)
+> - Provide detailed evidence with URLs, calculations, and workpapers
+> - The manifest includes execution token for batch registration
 >
 > **IMPORTANT FOR TRACKING PROGRESS**:
-> - Call `list_plan_status` after submitting all plans
-> - Call `list_plan_status` after executing several steps
-> - Call `list_plan_status` before attempting finalization
+> - Call `list_plan_status` after registering results to see evidence quality report
+> - The report shows exactly what evidence is missing (external sources, quantitative data, etc.)
+> - Call `generate_meta_reflection` after mediation to identify patterns and gaps
 > - This tool shows current coverage/confidence/consensus % and specific gaps to fill
+>
+> **REMOVED TOOLS** (no longer available):
+> - `execute_plan_step`: Removed - Use `execute_reasoning_manifest` + `register_execution_results`
+> - `submit_cross_plan_note`: Removed - Not needed in manifest workflow
 
-## Troubleshooting: Low confidence despite many evidence IDs
+## Troubleshooting: Low confidence or missing evidence types
 
-**Symptom**: You have 20+ evidence IDs but confidence is stuck at 40-50%.
+**Symptom**: Confidence is stuck at 40-50% or `list_plan_status` shows missing evidence types.
 
-**Root cause**: Too many `evidence_low` quality signals. This happens when `execute_plan_step` tasks are too vague.
+**Root cause**: Missing evidence types (external sources, quantitative data, workpapers) or low-quality evidence.
 
-**Confidence formula**:
-```
-confidence = 0.5 (base) + min(0.3, evidence_count * 0.1) - min(0.4, evidence_low_count * 0.2)
-```
+**Solution with manifest-based workflow**:
+1. Call `list_plan_status` to see the **Evidence Quality Report**
+2. It will show exactly what's missing:
+   ```markdown
+   ### ❌ Missing Evidence Types
 
-**Example scenario**:
-- 26 evidence IDs → +30% bonus (max)
-- Confidence = 40% → -40% penalty (max)
-- Formula: 50% + 30% - 40% = 40% ✓
+   #### 🔴 EXTERNAL SOURCES
+   **Examples of what to add**:
+   - Industry reports with URLs (e.g., Gartner, Forrester)
+   - Company financial data from public sources
+   ```
+3. When executing manifest steps, provide:
+   - **External sources**: URLs to industry reports, academic papers, company data
+   - **Quantitative data**: Specific numbers with calculations
+   - **Workpapers**: Detailed analysis documents with methodology
+4. Register results with `register_execution_results` including all evidence types
 
-**Solution**:
-1. Call `list_plan_status` to see the diagnostic
-2. It will show: "⚠️ CRITICAL: You have 26 evidence IDs but confidence is still low (40%). This means your evidence has LOW QUALITY signals..."
-3. Re-execute steps with MUCH MORE DETAILED task descriptions
-4. Use specific analytical instructions that force tool use and reasoning
-
-**Before (generates evidence_low)**:
+**Example of high-quality evidence**:
 ```json
-{"task": "market analysis"}
-```
-
-**After (generates high-quality evidence)**:
-```json
-{"task": "Search for top 5 B2B SaaS companies in healthcare. For EACH: 1) Find website, 2) Extract pricing page URL, 3) Identify pricing model, 4) Estimate revenue from Crunchbase, 5) List 3 differentiators. Provide URLs and data."}
+{
+  "evidence": [
+    {
+      "type": "external_source",
+      "content": "Gartner Market Guide for Healthcare SaaS 2024",
+      "url": "https://www.gartner.com/...",
+      "metadata": {"source": "Gartner", "date": "2024-01"}
+    },
+    {
+      "type": "quantitative_data",
+      "content": "Market size: $45.2B (CAGR 12.3%)",
+      "calculation": "Base: $32B (2020) * (1.123^4) = $45.2B"
+    }
+  ]
+}
 ```
 
 ## Useful commands

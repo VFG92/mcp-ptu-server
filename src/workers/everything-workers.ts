@@ -134,15 +134,15 @@ enum PromptName {
 enum ParallelReasoningV5ToolName {
   INIT_PARALLEL_REASONING = 'init_parallel_reasoning',
   SUBMIT_REASONING_PLAN = 'submit_reasoning_plan',
-  EXECUTE_PLAN_STEP = 'execute_plan_step',
-  SUBMIT_CROSS_PLAN_NOTE = 'submit_cross_plan_note',
+  // REMOVED: execute_plan_step (deprecated - use manifest-based workflow)
+  // REMOVED: submit_cross_plan_note (deprecated - not needed in manifest workflow)
   SUBMIT_PEER_CRITIQUE = 'submit_peer_critique',
   SUBMIT_MEDIATION_DECISION = 'submit_mediation_decision',
   LIST_PLAN_STATUS = 'list_plan_status',
   CHECK_SESSION_READINESS = 'check_session_readiness',
   GENERATE_META_REFLECTION = 'generate_meta_reflection',
   FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning',
-  // NEW: Manifest-based execution
+  // Manifest-based execution (NEW - replaces execute_plan_step)
   EXECUTE_REASONING_MANIFEST = 'execute_reasoning_manifest',
   REGISTER_EXECUTION_RESULTS = 'register_execution_results'
 }
@@ -208,16 +208,22 @@ This server supports parallel reasoning with diversity enforcement for complex a
 
 **Architecture**: MCP provides guardrails + memory, ChatGPT is sole deliberative agent.
 
-Use these 8 tools for multi-path reasoning:
-- init_parallel_reasoning: Initialize session with diversity requirements
-- submit_reasoning_plan: Submit plan with diversity validation
-- execute_plan_step: Execute REAL ANALYSIS with reasoning + tools (use detailed task descriptions)
-- submit_cross_plan_note: Cross-plan contamination
-- submit_peer_critique: Peer review (ChatGPT-generated)
-- submit_mediation_decision: Final mediation with evidence
-- list_plan_status: Get readiness preview & track progress (call FREQUENTLY)
-- check_session_readiness: Verify session meets quality thresholds before finalization
-- finalize_parallel_reasoning: Validate completeness and finalize session
+**RECOMMENDED WORKFLOW** (Manifest-based - NEW):
+1. init_parallel_reasoning: Initialize session with diversity requirements
+2. submit_reasoning_plan: Submit 3+ plans with diversity validation
+3. execute_reasoning_manifest: Generate manifest for ALL steps (returns execution token)
+4. Execute ALL steps using native ChatGPT tools (web search, Python, code interpreter)
+5. register_execution_results: Batch register all results with evidence
+6. list_plan_status: Check evidence quality report & gaps (call FREQUENTLY)
+7. submit_peer_critique: Peer review with falsification tests
+8. submit_mediation_decision: Make mediation decisions
+9. generate_meta_reflection: Analyze patterns & identify gaps (NEW)
+10. check_session_readiness: Verify quality thresholds
+11. finalize_parallel_reasoning: Complete session
+
+**Removed tools** (no longer available):
+- execute_plan_step: Use execute_reasoning_manifest + register_execution_results instead
+- submit_cross_plan_note: Not needed in manifest workflow
 
 **Diversity Axes**: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views
 
@@ -520,18 +526,8 @@ Use these 8 tools for multi-path reasoning:
           "Submit a reasoning plan with diversity axes. Server validates that plans differ on at least 2 axes (real diversification, not cosmetic variants). ChatGPT generates plans, server validates structure.",
         inputSchema: zodToJsonSchema(SubmitReasoningPlanSchema) as ToolInput,
       },
-      {
-        name: ParallelReasoningV5ToolName.EXECUTE_PLAN_STEP,
-        description:
-          "Execute a capability for a specific plan. Server records result and associates with plan. Enables ChatGPT to execute multiple plans in parallel (internally).",
-        inputSchema: zodToJsonSchema(ExecutePlanStepSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningV5ToolName.SUBMIT_CROSS_PLAN_NOTE,
-        description:
-          "Submit a note from one plan to another (contamination). ChatGPT uses this to enable interaction between reasoning paths. Server stores notes for audit trail.",
-        inputSchema: zodToJsonSchema(SubmitCrossPlanNoteSchema) as ToolInput,
-      },
+      // REMOVED: execute_plan_step (deprecated - use manifest-based workflow)
+      // REMOVED: submit_cross_plan_note (deprecated - not needed in manifest workflow)
       {
         name: ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE,
         description:
@@ -684,41 +680,8 @@ Use these 8 tools for multi-path reasoning:
         return result;
       }
 
-      if (name === ParallelReasoningV5ToolName.EXECUTE_PLAN_STEP) {
-        console.log(`[CallTool] Handling execute_plan_step (v5)`);
-        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
-        if (!parallelReasoningV5Manager) {
-          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
-          return {
-            content: [{
-              type: 'text',
-              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
-            }]
-          };
-        }
-        const validatedArgs = ExecutePlanStepSchema.parse(args);
-        const result = await handleExecutePlanStep(validatedArgs, capabilitySystemRefs, parallelReasoningV5Manager);
-        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
-        return result;
-      }
-
-      if (name === ParallelReasoningV5ToolName.SUBMIT_CROSS_PLAN_NOTE) {
-        console.log(`[CallTool] Handling submit_cross_plan_note (v5)`);
-        console.log(`[CallTool] parallelReasoningV5Manager defined: ${!!parallelReasoningV5Manager}`);
-        if (!parallelReasoningV5Manager) {
-          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined! This will cause session persistence issues.`);
-          return {
-            content: [{
-              type: 'text',
-              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
-            }]
-          };
-        }
-        const validatedArgs = SubmitCrossPlanNoteSchema.parse(args);
-        const result = await handleSubmitCrossPlanNote(validatedArgs, parallelReasoningV5Manager);
-        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
-        return result;
-      }
+      // REMOVED: execute_plan_step handler (deprecated - use manifest-based workflow)
+      // REMOVED: submit_cross_plan_note handler (deprecated - not needed in manifest workflow)
 
       if (name === ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE) {
         console.log(`[CallTool] Handling submit_peer_critique (v5)`);

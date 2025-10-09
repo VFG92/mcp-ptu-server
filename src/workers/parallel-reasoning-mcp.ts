@@ -8,13 +8,16 @@
  * - ChatGPT generates plans, diversifies, contaminates, mediates
  * - No intelligence in server: only structural validation and storage
  * 
- * WORKFLOW:
- * 1. ChatGPT: init_parallel_reasoning_session → declares diversity axes
+ * WORKFLOW (Manifest-based):
+ * 1. ChatGPT: init_parallel_reasoning → declares diversity axes
  * 2. ChatGPT: submit_reasoning_plan (Plan A, B, C...) → server validates diversity
- * 3. ChatGPT: execute_plan_step → invokes capabilities, server persists
- * 4. ChatGPT: submit_cross_plan_note → contamination between plans
- * 5. ChatGPT: submit_peer_critique → peer review (ChatGPT writes, server stores)
- * 6. ChatGPT: finalize_mediated_result → synthesis with decision map
+ * 3. ChatGPT: execute_reasoning_manifest → generates manifest with execution token
+ * 4. ChatGPT: executes ALL steps using native tools (web search, Python, etc.)
+ * 5. ChatGPT: register_execution_results → batch registers all evidence
+ * 6. ChatGPT: submit_peer_critique → peer review with falsification tests
+ * 7. ChatGPT: submit_mediation_decision → mediation with evidence
+ * 8. ChatGPT: generate_meta_reflection → analyzes patterns and gaps
+ * 9. ChatGPT: finalize_parallel_reasoning → synthesis with quality metrics
  * 
  * References:
  * - Wang et al., Self-Consistency, 2022
@@ -1143,7 +1146,7 @@ export class ParallelReasoningSessionManager {
         const needed = Math.ceil((CONFIDENCE_THRESHOLD - metrics.confidence) / 0.1);
         warnings.push(
           `❌ **Confidence**: ${(metrics.confidence * 100).toFixed(1)}% (need ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}%) - ` +
-          `Add ${needed} more evidence references using \`execute_plan_step\``
+          `Add ${needed} more evidence references. Check \`list_plan_status\` for evidence quality report.`
         );
       }
 

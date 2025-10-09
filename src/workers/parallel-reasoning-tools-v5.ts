@@ -6,13 +6,16 @@
  * - ChatGPT = Unico agente deliberativo (planning, reasoning, mediation)
  * - Parallel reasoning happens INSIDE ChatGPT, not in server
  * 
- * WORKFLOW:
+ * WORKFLOW (Manifest-based):
  * 1. ChatGPT: init_parallel_reasoning → declares diversity axes
  * 2. ChatGPT: submit_reasoning_plan (Plan A, B, C...) → server validates diversity
- * 3. ChatGPT: execute_plan_step → invokes capabilities, server persists
- * 4. ChatGPT: submit_cross_plan_note → contamination between plans
- * 5. ChatGPT: submit_peer_critique → peer review (ChatGPT writes, server stores)
- * 6. ChatGPT: finalize_parallel_reasoning → synthesis with decision map
+ * 3. ChatGPT: execute_reasoning_manifest → generates manifest with execution token
+ * 4. ChatGPT: executes ALL steps using native tools (web search, Python, etc.)
+ * 5. ChatGPT: register_execution_results → batch registers all evidence
+ * 6. ChatGPT: submit_peer_critique → peer review with falsification tests
+ * 7. ChatGPT: submit_mediation_decision → mediation with evidence
+ * 8. ChatGPT: generate_meta_reflection → analyzes patterns and gaps
+ * 9. ChatGPT: finalize_parallel_reasoning → synthesis with quality metrics
  * 
  * References:
  * - Wang et al., Self-Consistency, 2022
@@ -649,8 +652,10 @@ ${!readiness.quality_check.coverage_met ? `
 **Gap**: ${Math.ceil(total_declared_steps * 0.95) - total_executed_steps} more steps needed.
 
 **Action Required**:
-1. Call \`execute_plan_step\` for each remaining capability in your plans
-2. For EACH step, use the \`task\` parameter to describe WHAT ANALYSIS TO PERFORM
+1. Use \`execute_reasoning_manifest\` to generate execution manifest
+2. Execute ALL steps using native tools (web search, Python, code interpreter)
+3. Register results with \`register_execution_results\`
+4. For EACH step, use the \`task\` parameter to describe WHAT ANALYSIS TO PERFORM
 3. **CRITICAL**: The system will execute real reasoning and tool use for each task
 4. Don't just list steps - describe the actual analytical work needed
 
