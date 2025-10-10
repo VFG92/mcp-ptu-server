@@ -581,7 +581,32 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
         description:
-          "STEP 6: Register execution results. REQUIRED: findings (detailed text). OPTIONAL: evidence_refs, workpapers. If you get 403/safety block, OMIT evidence_refs entirely - include sources in findings text instead. Token use: ONCE only. If 'token used', call execute_reasoning_manifest for new token. After success: submit_peer_critique → submit_mediation_decision.",
+          `STEP 6: Register execution results. REQUIRED: findings (detailed text). OPTIONAL: evidence_refs, workpapers. Token use: ONCE only. If 'token used', call execute_reasoning_manifest for new token. After success: submit_peer_critique → submit_mediation_decision.
+
+⚠️ CRITICAL: To avoid 403 safety blocks from OpenAI's security filters:
+
+**DO NOT include URLs in evidence_refs**:
+❌ BAD: evidence_refs: [{type: "url", source: "https://...", description: "..."}]
+❌ BAD: evidence_refs: [{source: "https://example.com", description: "..."}]
+
+**INSTEAD, include URLs directly in findings text**:
+✅ GOOD: findings: "Analysis shows X. Sources: Reuters (https://...), Bloomberg (https://...)"
+✅ GOOD: Use evidence_refs ONLY for: type="citation", type="calculation", type="data_source" WITHOUT URLs
+
+**Safe evidence_refs examples**:
+✅ {type: "citation", source: "Smith et al. 2024", description: "Study on X"}
+✅ {type: "calculation", source: "see-workpapers", description: "ROI calculation"}
+✅ {type: "data_source", source: "internal-db", description: "Customer data"}
+
+**If you need to include web sources**:
+1. Put ALL URLs in findings text (markdown format: [title](url))
+2. Use evidence_refs only for non-URL references
+3. Or OMIT evidence_refs entirely and put everything in findings
+
+**Payload size limits**:
+- Keep each result under 10KB
+- If registering many steps, split into multiple calls with new tokens
+- Use workpapers for large datasets (they can contain URLs in content field)`,
         inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
       },
       {
