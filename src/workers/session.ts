@@ -91,6 +91,11 @@ export class MCPSession extends DurableObject {
     const sessionHeader = request.headers.get('mcp-session-id');
     console.log(`[MCPSession] fetch() called: ${method} ${pathname}, session header: ${sessionHeader}, DO ID: ${this.sessionId}`);
 
+    // Handle internal API endpoints (bypass MCP session management)
+    if (pathname.startsWith('/internal/')) {
+      return this.handleInternalAPI(request, pathname);
+    }
+
     // Handle heartbeat endpoint - lightweight keep-alive
     if (method === 'POST' && pathname === '/heartbeat') {
       return this.handleHeartbeat(request);
@@ -674,6 +679,73 @@ export class MCPSession extends DurableObject {
       console.log(`[MCPSession] Successfully loaded v5 sessions into manager`);
     } else {
       console.log(`[MCPSession] No v5 sessions found in DO storage (first initialization)`);
+    }
+  }
+
+  /**
+   * Handle internal API endpoints that bypass MCP session management
+   * This prevents "Session terminated" errors for critical operations
+   */
+  private async handleInternalAPI(request: Request, pathname: string): Promise<Response> {
+    console.log(`[MCPSession] Internal API call: ${pathname}`);
+
+    // Load state if not already loaded
+    if (this.parallelReasoningV5Manager.getAllSessions().size === 0) {
+      console.log(`[MCPSession] Loading state for internal API call...`);
+      await this.loadParallelReasoningV5Sessions();
+    }
+
+    if (pathname === '/internal/register-results') {
+      return this.handleInternalRegisterResults(request);
+    }
+
+    return new Response(JSON.stringify({ error: 'Unknown internal endpoint' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  /**
+   * Internal handler for register_execution_results
+   * Bypasses MCP session management to prevent "Session terminated" errors
+   */
+  private async handleInternalRegisterResults(request: Request): Promise<Response> {
+    try {
+      const body = await request.json();
+      const { execution_token, results } = body;
+
+      console.log(`[MCPSession] Internal register_results: token=${execution_token}, results=${results?.length || 0}`);
+
+      // Import the handler
+      const { handleRegisterExecutionResults, RegisterExecutionResultsSchema } = await import('./manifest-execution.js');
+
+      // Validate and execute
+      const validatedArgs = RegisterExecutionResultsSchema.parse({ execution_token, results });
+      const result = await handleRegisterExecutionResults(validatedArgs, this.parallelReasoningV5Manager);
+
+      // Persist state
+      await this.persistParallelReasoningV5Sessions();
+
+      // Return success
+      return new Response(JSON.stringify({
+        success: true,
+        result: result.content[0].text
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      console.error(`[MCPSession] Internal register_results error:`, error);
+
+      return new Response(JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        details: error instanceof Error ? error.stack : undefined
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
   }
 

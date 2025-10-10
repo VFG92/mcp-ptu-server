@@ -196,13 +196,36 @@ app.post('/proxy', async (c) => {
   // Extract session_id from body if present
   let sessionId: string | null = null;
 
+  // Try multiple locations for session_id
   if (body.params?.arguments?.session_id) {
     sessionId = body.params.arguments.session_id;
     console.log(`[Proxy] Found session_id in body.params.arguments.session_id: ${sessionId}`);
   } else if (body.params?.session_id) {
     sessionId = body.params.session_id;
     console.log(`[Proxy] Found session_id in body.params.session_id: ${sessionId}`);
+  } else if (body.arguments?.session_id) {
+    // Direct arguments (not nested in params)
+    sessionId = body.arguments.session_id;
+    console.log(`[Proxy] Found session_id in body.arguments.session_id: ${sessionId}`);
+  } else if (body.session_id) {
+    // Top-level session_id
+    sessionId = body.session_id;
+    console.log(`[Proxy] Found session_id in body.session_id: ${sessionId}`);
+  } else if (body.params?.arguments?.execution_token) {
+    // For register_execution_results, extract session_id from execution_token
+    const token = body.params.arguments.execution_token;
+    console.log(`[Proxy] Found execution_token, extracting session_id: ${token}`);
+    // Token format: exec_<session_id>_<timestamp>
+    const match = token.match(/^exec_(.+)_\d+$/);
+    if (match) {
+      sessionId = match[1];
+      console.log(`[Proxy] Extracted session_id from execution_token: ${sessionId}`);
+    }
   }
+
+  console.log(`[Proxy] Final extracted session_id: ${sessionId || 'none'}`);
+  console.log(`[Proxy] Body structure: ${JSON.stringify(Object.keys(body))}, params: ${JSON.stringify(Object.keys(body.params || {}))}, arguments: ${JSON.stringify(Object.keys(body.params?.arguments || {}))}`);
+
 
   // Create new request with mcp-session-id header
   const headers = new Headers(c.req.raw.headers);
@@ -226,6 +249,60 @@ app.post('/proxy', async (c) => {
 
   // Forward to /mcp handler using app.fetch for internal routing
   return app.fetch(mcpRequest, c.env, c.executionCtx);
+});
+
+// Direct API endpoint for register_execution_results - bypasses MCP session management
+// This prevents "Session terminated" errors that block ChatGPT
+app.post('/api/register-results', async (c) => {
+  console.log('[API] Direct register_execution_results call');
+
+  try {
+    const body = await c.req.json();
+    const { execution_token, results } = body;
+
+    if (!execution_token) {
+      return c.json({
+        error: 'Missing execution_token',
+        message: 'execution_token is required'
+      }, 400);
+    }
+
+    // Extract session_id from execution_token
+    // Token format: exec_<session_id>_<timestamp>
+    const match = execution_token.match(/^exec_(.+)_\d+$/);
+    if (!match) {
+      return c.json({
+        error: 'Invalid execution_token format',
+        message: 'Token must be in format: exec_<session_id>_<timestamp>'
+      }, 400);
+    }
+
+    const sessionId = match[1];
+    console.log(`[API] Extracted session_id: ${sessionId}`);
+
+    // Get Durable Object stub using the helper function
+    const doId = getDurableObjectId(c.env.MCP_SESSION, sessionId);
+    const stub = c.env.MCP_SESSION.get(doId);
+
+    // Call the DO directly with a special internal endpoint
+    const doRequest = new Request('http://internal/internal/register-results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ execution_token, results })
+    });
+
+    const response = await stub.fetch(doRequest);
+    const result = await response.json();
+
+    return c.json(result);
+
+  } catch (error) {
+    console.error('[API] Error:', error);
+    return c.json({
+      error: 'Internal error',
+      message: error instanceof Error ? error.message : String(error)
+    }, 500);
+  }
 });
 
 // MCP POST endpoint - initialization and requests

@@ -57,21 +57,35 @@ The project targets Node.js 20+ and Wrangler 4.40+. Cloudflare account credentia
 The server implements the standard MCP transport plus a convenience proxy:
 - `POST /mcp` – canonical MCP entry point (requires `mcp-session-id` header).
 - `POST /proxy` – extracts the parallel reasoning `session_id` from the request body and forwards to `/mcp` with the correct header.
+- `POST /api/register-results` – **DIRECT API** for registering execution results, bypasses MCP session management to prevent "Session terminated" errors.
 
+### MCP Tools (for ChatGPT)
 Within the MCP session the following tools drive the workflow:
-- `init_parallel_reasoning` – declare a new reasoning workflow and expected diversity axes.
-- `submit_reasoning_plan` – register a plan path.
-- **`list_plan_status`** – **PRIMARY tool for tracking progress**. Shows current coverage/confidence/consensus %, specific gaps, evidence quality report, and actionable next steps. **Call this frequently!**
-- `execute_plan_step` – perform REAL ANALYSIS with reasoning and tool use. Use detailed task descriptions to trigger deep reasoning.
-- `execute_reasoning_manifest` – **NEW**: Generate execution manifest for batch execution of all steps.
-- `register_execution_results` – **NEW**: Batch register execution results with evidence and workpapers.
-- `submit_peer_critique` – critique other plans with falsification tests and update consensus tallies.
-- `submit_mediation_decision` – make mediation decisions between conflicting plans.
-- **`generate_meta_reflection`** – **NEW**: Analyze patterns in disagreements, identify residual uncertainty, suggest further analysis.
-- `check_session_readiness` – verify if session meets quality thresholds before finalization (recommended).
-- `finalize_parallel_reasoning` – close the session, returning quality metrics and a consolidated recommendation.
+
+**Core Workflow Tools** (use these in order):
+1. `init_parallel_reasoning` – declare a new reasoning workflow and expected diversity axes.
+2. `submit_reasoning_plan` – register a plan path (submit 3-4 diverse plans).
+3. `execute_reasoning_manifest` – generate execution manifest for batch execution of all steps.
+4. `register_execution_results` – ⚠️ **DEPRECATED** - may cause "Session terminated" errors. Use direct API instead.
+5. `submit_peer_critique` – critique other plans with falsification tests.
+6. `submit_mediation_decision` – make mediation decisions between conflicting plans.
+7. `generate_meta_reflection` – analyze patterns in disagreements.
+8. `check_session_readiness` – verify if session meets quality thresholds before finalization.
+9. `finalize_parallel_reasoning` – close the session, returning quality metrics.
+
+**Monitoring Tools** (call frequently):
+- **`list_plan_status`** – **PRIMARY tool for tracking progress**. Shows current coverage/confidence/consensus %, specific gaps, evidence quality report, and actionable next steps.
+
+**Utility Tools**:
+- `regenerate_execution_token` – regenerate expired execution token (after 7 days).
 
 All tools accept a `session_id` parameter. Reuse the same value throughout a workflow to keep state aligned.
+
+### ⚠️ Important: Session Management
+MCP sessions can expire or terminate, causing "Session terminated" errors. To prevent workflow interruption:
+- Complete the entire workflow quickly without long pauses
+- If you get "Session terminated" error, the workflow cannot be recovered
+- The `/api/register-results` endpoint bypasses session management for critical operations
 
 ### Best practice: Use list_plan_status frequently
 Call `list_plan_status` after submitting plans and during execution to:

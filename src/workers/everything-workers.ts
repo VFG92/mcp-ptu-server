@@ -583,13 +583,12 @@ This server supports parallel reasoning with diversity enforcement for complex a
         description:
           `STEP 6: Register execution results. REQUIRED: findings (detailed text). OPTIONAL: evidence_refs, workpapers. Token use: ONCE only. If 'token used', call execute_reasoning_manifest for new token. After success: submit_peer_critique → submit_mediation_decision.
 
-⚠️ CRITICAL: To avoid 403 safety blocks from OpenAI's security filters:
+⚠️ CRITICAL SAFETY GUIDELINES:
 
-**DO NOT include URLs in evidence_refs**:
+**1. Avoid 403 errors - NO URLs in evidence_refs**:
 ❌ BAD: evidence_refs: [{type: "url", source: "https://...", description: "..."}]
 ❌ BAD: evidence_refs: [{source: "https://example.com", description: "..."}]
 
-**INSTEAD, include URLs directly in findings text**:
 ✅ GOOD: findings: "Analysis shows X. Sources: Reuters (https://...), Bloomberg (https://...)"
 ✅ GOOD: Use evidence_refs ONLY for: type="citation", type="calculation", type="data_source" WITHOUT URLs
 
@@ -598,15 +597,21 @@ This server supports parallel reasoning with diversity enforcement for complex a
 ✅ {type: "calculation", source: "see-workpapers", description: "ROI calculation"}
 ✅ {type: "data_source", source: "internal-db", description: "Customer data"}
 
-**If you need to include web sources**:
-1. Put ALL URLs in findings text (markdown format: [title](url))
-2. Use evidence_refs only for non-URL references
-3. Or OMIT evidence_refs entirely and put everything in findings
+**2. If you need to include web sources**:
+- Put ALL URLs in findings text (markdown format: [title](url))
+- Use evidence_refs only for non-URL references
+- Or OMIT evidence_refs entirely and put everything in findings
 
-**Payload size limits**:
+**3. Payload size limits**:
 - Keep each result under 10KB
 - If registering many steps, split into multiple calls with new tokens
-- Use workpapers for large datasets (they can contain URLs in content field)`,
+- Use workpapers for large datasets (they can contain URLs in content field)
+
+**4. IMPORTANT - This tool is DEPRECATED and may cause "Session terminated" errors**:
+- This MCP tool depends on session state which can expire
+- If you get "Session terminated" error, the session is no longer available
+- There is NO recovery from this error - you cannot continue the workflow
+- To prevent this, complete the entire workflow quickly without long pauses`,
         inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
       },
       {

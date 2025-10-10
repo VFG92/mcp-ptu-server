@@ -28,7 +28,7 @@ Use the following prompt to exercise the server end-to-end:
 > 6. **Call `list_plan_status`** to check evidence quality report and gaps
 > 7. Submit peer critiques using `submit_peer_critique` with falsification tests
 > 8. Submit mediation decisions using `submit_mediation_decision`
-> 9. **Call `generate_meta_reflection`** to analyze patterns and identify gaps (NEW)
+> 9. **Call `generate_meta_reflection`** to analyze patterns and identify gaps
 > 10. Call `check_session_readiness` before finalizing
 > 11. Call `finalize_parallel_reasoning` when ready
 >
@@ -36,6 +36,7 @@ Use the following prompt to exercise the server end-to-end:
 > - Execute ALL manifest steps using native tools (web search, Python, etc.)
 > - Provide detailed evidence with URLs, calculations, and workpapers
 > - The manifest includes execution token for batch registration
+> - **Complete the workflow quickly** - MCP sessions can expire causing "Session terminated" errors
 >
 > **IMPORTANT FOR TRACKING PROGRESS**:
 > - Call `list_plan_status` after registering results to see evidence quality report
@@ -43,9 +44,17 @@ Use the following prompt to exercise the server end-to-end:
 > - Call `generate_meta_reflection` after mediation to identify patterns and gaps
 > - This tool shows current coverage/confidence/consensus % and specific gaps to fill
 >
-> **REMOVED TOOLS** (no longer available):
-> - `execute_plan_step`: Removed - Use `execute_reasoning_manifest` + `register_execution_results`
-> - `submit_cross_plan_note`: Removed - Not needed in manifest workflow
+> **⚠️ CRITICAL: Avoiding Errors**:
+> - **403 Errors**: DO NOT put URLs in `evidence_refs`. Put ALL URLs in `findings` text instead.
+> - **Session Terminated**: MCP sessions can expire. Complete workflow quickly without long pauses.
+> - If you get "Session terminated", the workflow CANNOT be recovered - you must start over.
+>
+> **TOOLS NOT EXPOSED** (hidden from ChatGPT to avoid confusion):
+> - `execute_plan_step`: Deprecated - Use `execute_reasoning_manifest` + `register_execution_results`
+> - `submit_cross_plan_note`: Deprecated - Not needed in manifest workflow
+> - `analyze_with_capabilities`: Internal capability system - not for parallel reasoning
+> - `get_capability_status`: Internal capability system - not for parallel reasoning
+> - `export_session`: Internal capability system - not for parallel reasoning
 
 ## Session Persistence & Heartbeat
 
