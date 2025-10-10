@@ -49,10 +49,17 @@ export interface SessionMetrics {
 
 /**
  * Calculate confidence metric based on evidence density and quality signals
- * 
- * Formula: confidence = base + evidence_bonus - quality_penalty
- * - base: 0.5
- * - evidence_bonus: +0.1 per unique evidence ID (max +0.3)
+ *
+ * UPDATED 2025-10-10: Enhanced to consider multiple evidence sources:
+ * - evidence_ids (legacy)
+ * - evidence_refs from register_execution_results
+ * - workpapers (high-quality structured evidence)
+ * - findings quality (length, URLs, quantitative data)
+ *
+ * Formula: confidence = base + evidence_bonus + content_bonus - quality_penalty
+ * - base: 0.4
+ * - evidence_bonus: +0.05 per unique evidence item (max +0.3)
+ * - content_bonus: +0.2 for high-quality findings/workpapers (max +0.2)
  * - quality_penalty: -0.2 per evidence_low signal (max -0.4)
  * - Clamped to [0, 1]
  */
@@ -60,32 +67,92 @@ export function calculateConfidence(session: ParallelReasoningSession): {
   score: number;
   details: SessionMetrics['details']['confidence'];
 } {
-  const baseConfidence = 0.5;
-  
-  // Count unique evidence IDs across all artifacts
+  const baseConfidence = 0.4;
+
+  // Count unique evidence items from multiple sources
   const uniqueEvidenceIds = new Set<string>();
-  
-  // From plan results
+  let totalEvidenceRefs = 0;
+  let totalWorkpapers = 0;
+  let totalFindingsLength = 0;
+  let findingsWithUrls = 0;
+  let findingsWithNumbers = 0;
+
+  // From plan results (registered via register_execution_results)
   for (const results of session.plan_results.values()) {
     for (const result of results) {
+      // Legacy evidence_id
       if (result.evidence_id) {
         uniqueEvidenceIds.add(result.evidence_id);
       }
+
+      // Evidence refs (citations, calculations, data sources)
+      if (result.evidence_refs && Array.isArray(result.evidence_refs)) {
+        totalEvidenceRefs += result.evidence_refs.length;
+        // Count each evidence_ref as unique evidence
+        result.evidence_refs.forEach((ref: any, idx: number) => {
+          uniqueEvidenceIds.add(`${result.evidence_id}_ref_${idx}`);
+        });
+      }
+
+      // Workpapers (high-quality structured evidence)
+      if (result.workpapers && Array.isArray(result.workpapers)) {
+        totalWorkpapers += result.workpapers.length;
+        // Workpapers are high-value evidence
+        result.workpapers.forEach((wp: any, idx: number) => {
+          uniqueEvidenceIds.add(`${result.evidence_id}_wp_${idx}`);
+        });
+      }
+
+      // Findings quality analysis
+      if (result.findings) {
+        totalFindingsLength += result.findings.length;
+
+        // Check for URLs in findings (indicates external sources)
+        if (result.findings.match(/https?:\/\//)) {
+          findingsWithUrls++;
+        }
+
+        // Check for quantitative data (numbers, percentages, metrics)
+        if (result.findings.match(/\d+(\.\d+)?%?|\$\d+|€\d+/)) {
+          findingsWithNumbers++;
+        }
+      }
     }
   }
-  
+
   // From mediation decisions
   for (const decision of session.mediation_decisions) {
     for (const evidenceId of decision.evidence_ids) {
       uniqueEvidenceIds.add(evidenceId);
     }
   }
-  
-  const evidenceBonus = Math.min(0.3, uniqueEvidenceIds.size * 0.1);
-  
+
+  // Evidence bonus: +0.05 per unique evidence item (max +0.3)
+  const evidenceBonus = Math.min(0.3, uniqueEvidenceIds.size * 0.05);
+
+  // Content quality bonus (max +0.2)
+  let contentBonus = 0;
+
+  // Bonus for workpapers (structured, high-quality evidence)
+  if (totalWorkpapers > 0) {
+    contentBonus += Math.min(0.1, totalWorkpapers * 0.02);
+  }
+
+  // Bonus for findings with URLs (external sources)
+  if (findingsWithUrls > 0) {
+    contentBonus += Math.min(0.05, findingsWithUrls * 0.01);
+  }
+
+  // Bonus for findings with quantitative data
+  if (findingsWithNumbers > 0) {
+    contentBonus += Math.min(0.05, findingsWithNumbers * 0.01);
+  }
+
+  contentBonus = Math.min(0.2, contentBonus);
+
   // Count evidence_low signals
   let evidenceLowCount = 0;
-  
+
   for (const plan of session.plans.values()) {
     if (plan.signals?.signals.some((s: any) => s.type === 'evidence_low')) {
       evidenceLowCount++;
@@ -103,18 +170,22 @@ export function calculateConfidence(session: ParallelReasoningSession): {
       evidenceLowCount++;
     }
   }
-  
+
   const qualityPenalty = Math.min(0.4, evidenceLowCount * 0.2);
-  
-  const score = Math.max(0, Math.min(1, baseConfidence + evidenceBonus - qualityPenalty));
-  
+
+  const score = Math.max(0, Math.min(1, baseConfidence + evidenceBonus + contentBonus - qualityPenalty));
+
+  console.log(`[Confidence Calculation] Evidence items: ${uniqueEvidenceIds.size} (refs: ${totalEvidenceRefs}, workpapers: ${totalWorkpapers})`);
+  console.log(`[Confidence Calculation] Content quality: URLs=${findingsWithUrls}, Numbers=${findingsWithNumbers}`);
+  console.log(`[Confidence Calculation] Score breakdown: base=${baseConfidence}, evidence_bonus=${evidenceBonus.toFixed(3)}, content_bonus=${contentBonus.toFixed(3)}, penalty=${qualityPenalty.toFixed(3)}, final=${score.toFixed(3)}`);
+
   return {
     score,
     details: {
       unique_evidence_count: uniqueEvidenceIds.size,
       evidence_low_count: evidenceLowCount,
       base: baseConfidence,
-      bonus: evidenceBonus,
+      bonus: evidenceBonus + contentBonus,
       penalty: qualityPenalty
     }
   };

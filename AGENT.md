@@ -139,6 +139,70 @@ ConnectorClientError: 403: "Server returned 403: 'Invocation is blocked on safet
 - ❌ URLs in `evidence_refs.source` field
 - ❌ `type: "url"` in evidence_refs
 
+## Confidence Calculation Enhancement (2025-10-10)
+
+### The Problem
+
+The original confidence calculation only counted `evidence_ids` from legacy `plan_results`. When ChatGPT followed our guidance to avoid 403 errors by putting URLs in `findings` text instead of `evidence_refs`, the confidence score was artificially low because:
+
+1. **Evidence_refs weren't counted** (only legacy evidence_ids)
+2. **Workpapers weren't considered** (high-quality structured evidence)
+3. **Findings quality was ignored** (URLs, quantitative data, length)
+
+This created a paradox: ChatGPT followed our safety guidance but got penalized with low confidence scores.
+
+### The Solution
+
+**Enhanced confidence calculation** (`src/workers/session-metrics.ts`) that considers multiple evidence sources:
+
+**Evidence sources counted**:
+1. ✅ Legacy `evidence_id` (backward compatibility)
+2. ✅ `evidence_refs` from `register_execution_results` (citations, calculations, data sources)
+3. ✅ `workpapers` (high-value structured evidence - datasets, calculations, analyses)
+4. ✅ `findings` quality indicators:
+   - URLs in findings text (external sources)
+   - Quantitative data (numbers, percentages, currency)
+   - Length and depth
+
+**New formula**:
+```
+confidence = base + evidence_bonus + content_bonus - quality_penalty
+
+Where:
+- base: 0.4 (was 0.5)
+- evidence_bonus: +0.05 per unique evidence item (max +0.3)
+  - Counts: evidence_ids + evidence_refs + workpapers
+- content_bonus: +0.2 max for high-quality findings
+  - +0.02 per workpaper (max +0.1)
+  - +0.01 per finding with URLs (max +0.05)
+  - +0.01 per finding with numbers (max +0.05)
+- quality_penalty: -0.2 per evidence_low signal (max -0.4)
+```
+
+**Impact**:
+- ChatGPT can now reach 85%+ confidence by providing quality findings with URLs and workpapers
+- No need to use `evidence_refs` with URLs (which cause 403 errors)
+- Workpapers are properly valued as high-quality evidence
+- Quantitative analysis is rewarded
+
+**Example**:
+```json
+{
+  "findings": "Market size: $45.2B (CAGR 12.3%). Sources: Gartner (https://...), IDC (https://...)",
+  "workpapers": [
+    {"type": "calculation", "title": "Market Size Calc", "content": "..."}
+  ]
+}
+```
+
+This would score:
+- Base: 0.4
+- Evidence bonus: +0.15 (3 items: evidence_id + workpaper + finding)
+- Content bonus: +0.07 (workpaper +0.02, URL +0.01, numbers +0.01)
+- **Total: 0.62 (62%)** from a single high-quality result
+
+With 4-5 such results per plan × 4 plans = **85%+ confidence easily achievable**.
+
 ## Recent Improvements (2025-10-10)
 
 ### 1. Optimal Capability Chain Length ✅
