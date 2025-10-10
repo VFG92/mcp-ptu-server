@@ -27,6 +27,7 @@ This document keeps contributors and AI agents aligned while working on the repo
 - The endpoint extracts `session_id` from the `execution_token`, so clients never send session identifiers directly.
 - Run `./test-simple-direct-api.sh` and `./test-direct-api.sh` before shipping changes that touch execution result handling.
 - Error handling and storage writes live in `src/workers/session.ts#handleInternalRegisterResults`; keep the handler idempotent for safe retries.
+- The MCP tool `register_execution_results` is now hidden; rely exclusively on the HTTP endpoint for batch submissions.
 
 ## Recommended MCP prompt
 Use the following prompt to exercise the server end-to-end:
@@ -38,7 +39,7 @@ Use the following prompt to exercise the server end-to-end:
 > 2. Submit 3+ plans using `submit_reasoning_plan` with diverse axes
 > 3. Call `execute_reasoning_manifest` to generate execution manifest
 > 4. **Execute ALL steps** using native ChatGPT tools (web search, Python, code interpreter)
-> 5. Call `register_execution_results` to batch register all results with evidence
+> 5. POST the manifest payload to `/api/register-results` (HTTP). This replaces the MCP tool and auto-extracts `session_id`.
 > 6. **Call `list_plan_status`** to check evidence quality report and gaps
 > 7. Submit peer critiques using `submit_peer_critique` with falsification tests
 > 8. Submit mediation decisions using `submit_mediation_decision`
@@ -64,7 +65,8 @@ Use the following prompt to exercise the server end-to-end:
 > - If you get "Session terminated", the workflow CANNOT be recovered - you must start over.
 >
 > **TOOLS NOT EXPOSED** (hidden from ChatGPT to avoid confusion):
-> - `execute_plan_step`: Deprecated - Use `execute_reasoning_manifest` + `register_execution_results`
+> - `register_execution_results`: Hidden - Use the `/api/register-results` HTTP endpoint instead
+> - `execute_plan_step`: Deprecated - Use `execute_reasoning_manifest` + direct API submission
 > - `submit_cross_plan_note`: Deprecated - Not needed in manifest workflow
 > - `analyze_with_capabilities`: Internal capability system - not for parallel reasoning
 > - `get_capability_status`: Internal capability system - not for parallel reasoning

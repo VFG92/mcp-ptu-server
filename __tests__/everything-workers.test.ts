@@ -117,7 +117,7 @@ describe('everything workers server', () => {
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'init_parallel_reasoning')).toBe(true);
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'submit_reasoning_plan')).toBe(true);
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'execute_reasoning_manifest')).toBe(true);
-    expect(toolsResponse.tools.some((tool: any) => tool.name === 'register_execution_results')).toBe(true);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'register_execution_results')).toBe(false);
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'generate_meta_reflection')).toBe(true);
 
     // Deprecated tools should NOT be exposed

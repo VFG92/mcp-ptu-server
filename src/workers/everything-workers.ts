@@ -49,10 +49,8 @@ import {
 import {
   ExecuteReasoningManifestSchema,
   RegenerateExecutionTokenSchema,
-  RegisterExecutionResultsSchema,
   handleExecuteReasoningManifest,
-  handleRegenerateExecutionToken,
-  handleRegisterExecutionResults
+  handleRegenerateExecutionToken
 } from './manifest-execution.js';
 
 // Import parallel reasoning session type
@@ -146,7 +144,6 @@ enum ParallelReasoningV5ToolName {
   FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning',
   // Manifest-based execution (NEW - replaces execute_plan_step)
   EXECUTE_REASONING_MANIFEST = 'execute_reasoning_manifest',
-  REGISTER_EXECUTION_RESULTS = 'register_execution_results',
   REGENERATE_EXECUTION_TOKEN = 'regenerate_execution_token'
 }
 
@@ -216,7 +213,7 @@ This server supports parallel reasoning with diversity enforcement for complex a
 2. submit_reasoning_plan: Submit 3+ plans with diversity validation
 3. execute_reasoning_manifest: Generate manifest for ALL steps (returns execution token valid for 7 days)
 4. Execute ALL steps using native ChatGPT tools (web search, Python, code interpreter)
-5. register_execution_results: Batch register all results with evidence
+5. POST /api/register-results (HTTP): Batch register all results with evidence (NOT an MCP tool; payload = manifest results)
 6. list_plan_status: Check evidence quality report & gaps (call FREQUENTLY)
 7. submit_peer_critique: Peer review with falsification tests
 8. submit_mediation_decision: Make mediation decisions
@@ -228,7 +225,7 @@ This server supports parallel reasoning with diversity enforcement for complex a
 - regenerate_execution_token: Generate new token while preserving existing results (NEW)
 
 **Removed tools** (no longer available):
-- execute_plan_step: Use execute_reasoning_manifest + register_execution_results instead
+- execute_plan_step: Use execute_reasoning_manifest + direct /api/register-results submission instead
 - submit_cross_plan_note: Not needed in manifest workflow
 
 **Diversity Axes**: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views
@@ -575,44 +572,8 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.EXECUTE_REASONING_MANIFEST,
         description:
-          "STEP 5: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions. ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter), then call register_execution_results with the token and findings. Each token can only be used ONCE - if you need to register more results, call execute_reasoning_manifest again to get a new token.",
+          "STEP 5: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions. ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter) and then POST results to /api/register-results (HTTP, not an MCP tool). Each token can only be used ONCE—generate a new manifest if you need another token.",
         inputSchema: zodToJsonSchema(ExecuteReasoningManifestSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
-        description:
-          `STEP 6: Register execution results. REQUIRED: findings (detailed text). OPTIONAL: evidence_refs, workpapers. Token use: ONCE only. If 'token used', call execute_reasoning_manifest for new token. After success: submit_peer_critique → submit_mediation_decision.
-
-⚠️ CRITICAL SAFETY GUIDELINES:
-
-**1. Avoid 403 errors - NO URLs in evidence_refs**:
-❌ BAD: evidence_refs: [{type: "url", source: "https://...", description: "..."}]
-❌ BAD: evidence_refs: [{source: "https://example.com", description: "..."}]
-
-✅ GOOD: findings: "Analysis shows X. Sources: Reuters (https://...), Bloomberg (https://...)"
-✅ GOOD: Use evidence_refs ONLY for: type="citation", type="calculation", type="data_source" WITHOUT URLs
-
-**Safe evidence_refs examples**:
-✅ {type: "citation", source: "Smith et al. 2024", description: "Study on X"}
-✅ {type: "calculation", source: "see-workpapers", description: "ROI calculation"}
-✅ {type: "data_source", source: "internal-db", description: "Customer data"}
-
-**2. If you need to include web sources**:
-- Put ALL URLs in findings text (markdown format: [title](url))
-- Use evidence_refs only for non-URL references
-- Or OMIT evidence_refs entirely and put everything in findings
-
-**3. Payload size limits**:
-- Keep each result under 10KB
-- If registering many steps, split into multiple calls with new tokens
-- Use workpapers for large datasets (they can contain URLs in content field)
-
-**4. IMPORTANT - This tool is DEPRECATED and may cause "Session terminated" errors**:
-- This MCP tool depends on session state which can expire
-- If you get "Session terminated" error, the session is no longer available
-- There is NO recovery from this error - you cannot continue the workflow
-- To prevent this, complete the entire workflow quickly without long pauses`,
-        inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
       },
       {
         name: ParallelReasoningV5ToolName.REGENERATE_EXECUTION_TOKEN,
@@ -862,23 +823,6 @@ This server supports parallel reasoning with diversity enforcement for complex a
         }
         const validatedArgs = RegenerateExecutionTokenSchema.parse(args);
         const result = await handleRegenerateExecutionToken(validatedArgs, parallelReasoningV5Manager);
-        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
-        return result;
-      }
-
-      if (name === ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS) {
-        console.log(`[CallTool] Handling register_execution_results`);
-        if (!parallelReasoningV5Manager) {
-          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined!`);
-          return {
-            content: [{
-              type: 'text',
-              text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized.'
-            }]
-          };
-        }
-        const validatedArgs = RegisterExecutionResultsSchema.parse(args);
-        const result = await handleRegisterExecutionResults(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
         return result;
       }

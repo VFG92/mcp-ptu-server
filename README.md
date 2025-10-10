@@ -74,12 +74,13 @@ Within the MCP session the following tools drive the workflow:
 1. `init_parallel_reasoning` – declare a new reasoning workflow and expected diversity axes.
 2. `submit_reasoning_plan` – register a plan path (submit 3-4 diverse plans).
 3. `execute_reasoning_manifest` – generate execution manifest for batch execution of all steps.
-4. `register_execution_results` – ⚠️ **DEPRECATED** - may cause "Session terminated" errors. Use direct API instead.
-5. `submit_peer_critique` – critique other plans with falsification tests.
-6. `submit_mediation_decision` – make mediation decisions between conflicting plans.
-7. `generate_meta_reflection` – analyze patterns in disagreements.
-8. `check_session_readiness` – verify if session meets quality thresholds before finalization.
-9. `finalize_parallel_reasoning` – close the session, returning quality metrics.
+4. `submit_peer_critique` – critique other plans with falsification tests.
+5. `submit_mediation_decision` – make mediation decisions between conflicting plans.
+6. `generate_meta_reflection` – analyze patterns in disagreements.
+7. `check_session_readiness` – verify if session meets quality thresholds before finalization.
+8. `finalize_parallel_reasoning` – close the session, returning quality metrics.
+
+**Step 5 (HTTP, not an MCP tool)**: POST the manifest payload to `/api/register-results`. The endpoint extracts `session_id` from the `execution_token`, revives inactive Durable Objects, and avoids moderation-triggered 403s. The legacy MCP tool `register_execution_results` is hidden by default.
 
 **Monitoring Tools** (call frequently):
 - **`list_plan_status`** – **PRIMARY tool for tracking progress**. Shows current coverage/confidence/consensus %, specific gaps, evidence quality report, and actionable next steps.

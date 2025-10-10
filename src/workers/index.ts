@@ -268,12 +268,12 @@ app.post('/api/register-results', async (c) => {
     }
 
     // Extract session_id from execution_token
-    // Token format: exec_<session_id>_<timestamp>
-    const match = execution_token.match(/^exec_(.+)_\d+$/);
+    // Token format: exec_<session_id>_<timestamp>[_<random>]
+    const match = execution_token.match(/^exec_(.+?)_(\d+)(?:_[a-z0-9]+)?$/i);
     if (!match) {
       return c.json({
         error: 'Invalid execution_token format',
-        message: 'Token must be in format: exec_<session_id>_<timestamp>'
+        message: 'Token must be in format: exec_<session_id>_<timestamp> or exec_<session_id>_<timestamp>_<random>'
       }, 400);
     }
 
