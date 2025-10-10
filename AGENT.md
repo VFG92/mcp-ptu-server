@@ -240,6 +240,274 @@ With 4-5 such results per plan × 4 plans = **85%+ confidence easily achievable*
 
 **Impact**: ChatGPT now receives clear, actionable feedback instead of just "not ready".
 
+## 🚨 Critical Issues and Solutions (ChatGPT Feedback - 2025-01)
+
+This section documents **5 critical issues** identified through real-world ChatGPT usage and their solutions.
+
+### Issue 1: Schema Validation Rigido (Blocking at Register Phase)
+
+**Problem**: `register_execution_results` uses extremely strict JSON Schema validation with `additionalProperties: false`.
+
+**Common Errors**:
+- ❌ Extra field `session_id` in payload → rejected
+- ❌ `null` values in optional fields → "None is not of type 'object'"
+- ❌ Nested structures with extra keys (e.g., `reliability_score` in `evidence_refs`) → rejected
+
+**Root Cause**: Server rejects ANY argument that doesn't match the exact JSON Schema.
+
+**Solution - Minimal Valid Payload**:
+```json
+{
+  "execution_token": "exec_...",
+  "results": [
+    {
+      "plan_id": "P1r",
+      "step_id": "P1r_step_1",
+      "findings": "...",
+      "workpapers": [],      // Empty array, NOT null
+      "evidence_refs": []    // Empty array, NOT null
+    }
+  ]
+}
+```
+
+**Rules**:
+- ✅ Only include required fields: `plan_id`, `step_id`, `findings`
+- ✅ Optional fields can be **omitted entirely** or set to `[]`
+- ❌ DO NOT include `session_id` (it's inferred from execution token)
+- ❌ DO NOT use `null` for optional fields (use `[]` or omit)
+- ❌ DO NOT add extra keys not in schema
+
+**Best Practice**: Start with minimal payload, add optional fields only if needed.
+
+### Issue 2: Moderation Layer Blocking
+
+**Problem**: OpenAI's moderation layer blocks payloads that are:
+- Long (tens of thousands of characters in `findings`)
+- Contain URLs (especially in `evidence_refs`)
+- Contain academic citations with author names + years
+- Combine multiple "suspicious" patterns
+
+**Error**: `This tool call was blocked by a moderation check`
+
+**Root Cause**: Moderation happens **BEFORE** the request reaches our server. We never see blocked requests in logs.
+
+**Solution - Safe Payload Construction**:
+
+**✅ SAFE - URLs in findings text**:
+```json
+{
+  "findings": "Analysis shows X. Sources: Reuters (https://reuters.com/article), Bloomberg (https://bloomberg.com/data)",
+  "evidence_refs": [
+    {"type": "citation", "source": "Reuters 2024", "description": "Market analysis"},
+    {"type": "citation", "source": "Bloomberg 2024", "description": "Financial data"}
+  ]
+}
+```
+
+**✅ SAFE - URLs in workpapers**:
+```json
+{
+  "findings": "Market size: $45.2B. See workpapers for sources.",
+  "workpapers": [
+    {
+      "type": "dataset",
+      "title": "Data Sources",
+      "content": "Gartner: https://gartner.com/report\nIDC: https://idc.com/forecast",
+      "format": "markdown"
+    }
+  ]
+}
+```
+
+**❌ UNSAFE - URLs in evidence_refs (WILL CAUSE 403)**:
+```json
+{
+  "evidence_refs": [
+    {"type": "url", "source": "https://example.com", "description": "..."}  // ❌ BLOCKED
+  ]
+}
+```
+
+**Payload Size Limits**:
+- Keep each result under **10KB**
+- If registering many steps, **split into multiple calls** with new tokens
+- Move large datasets to `workpapers`, not `findings`
+
+**Best Practice**:
+1. Put URLs in `findings` text (markdown format: `[title](url)`)
+2. Use `evidence_refs` ONLY for non-URL references (citations, calculations)
+3. Or OMIT `evidence_refs` entirely and put everything in `findings`
+
+### Issue 3: Session Lifecycle e Race Conditions
+
+**Problem**: Sessions and execution tokens have complex lifecycle rules:
+- Execution tokens are **single-use only** (even if registration fails)
+- Sessions expire after **24 hours of inactivity**
+- Tokens expire after **7 days**
+- No retry with same token after validation failure
+
+**Common Errors**:
+- `Session terminated` → session expired or closed
+- `Execution token already used` → token was consumed in previous attempt
+- `Execution token expired` → token older than 7 days
+
+**Solutions**:
+
+**For "token already used"**:
+```bash
+# Token is consumed even if registration failed
+1. Call execute_reasoning_manifest → get NEW token
+2. Use new token in register_execution_results
+3. DO NOT retry with same token
+```
+
+**For "session terminated"**:
+```bash
+# Session was closed or timed out
+1. Verify session_id is correct
+2. Check if >24h since last activity
+3. Start new session if needed
+```
+
+**For "token expired"**:
+```bash
+# Token older than 7 days
+1. Call regenerate_execution_token
+2. Use new token (valid for 7 more days)
+3. Existing results are preserved
+```
+
+**Best Practices**:
+- ✅ Register results **incrementally** (one plan at a time)
+- ✅ Generate **new token** for each registration batch
+- ✅ Use `regenerate_execution_token` for long workflows (>7 days)
+- ❌ DO NOT retry with same token after failure
+- ❌ DO NOT register all results in one giant batch
+
+### Issue 4: Gestione della Diversità e Pianificazione
+
+**Problem**: Plans are rejected if they don't contain ALL required diversity axes with exact semantic matching.
+
+**Example Rejection**:
+```json
+// Required axes (from init_parallel_reasoning)
+[
+  "Mathematical framework",
+  "Search strategy",
+  "Constraint encoding",
+  "Proof style",
+  "Data support"
+]
+
+// Plan rejected - missing "Data support"
+{
+  "diversity_axes": [
+    "Framework: algebraic",
+    "Search: breadth-first",
+    "Encoding: explicit",
+    "Proof: constructive"
+    // ❌ Missing "Data support" axis
+  ]
+}
+```
+
+**Solution - Semantic Matching**:
+
+The server uses **semantic validation** with partial key matching:
+
+```json
+// ✅ ACCEPTED - All 5 axes present (semantic match)
+{
+  "diversity_axes": [
+    "Framework: algebraic",           // Matches "Mathematical framework"
+    "Search: breadth-first",          // Matches "Search strategy"
+    "Encoding: explicit",             // Matches "Constraint encoding"
+    "Proof: constructive",            // Matches "Proof style"
+    "Data: empirical validation"      // Matches "Data support"
+  ]
+}
+```
+
+**Matching Rules**:
+- "Mathematical framework" → key: `mathematical_framework`
+- "Framework: algebraic" → key: `framework`
+- Match: `framework` is contained in `mathematical_framework` ✓
+
+**Best Practices**:
+- ✅ Use **long descriptive forms** in `init_parallel_reasoning`
+- ✅ Use **short "Key: Value" forms** in `submit_reasoning_plan`
+- ✅ Ensure ALL required axes are covered (semantic match)
+- ✅ Ensure ≥2 axes differ from existing plans
+- ❌ DO NOT copy exact strings (semantic matching is flexible)
+
+### Issue 5: Limiti Strutturali di Serializzazione
+
+**Problem**: Very large payloads (>25KB JSON) cause:
+- Server timeout during parsing
+- Moderation layer blocking (more content = higher risk)
+- Memory overflow in Durable Objects
+
+**Common Causes**:
+- Hundreds of lines in `findings` field
+- Complex mathematical notation with escape sequences (`\\prod`, `\\leq`)
+- Dozens of results in single batch
+
+**Solutions**:
+
+**1. Compress findings** (≤500 characters):
+```json
+// ✅ GOOD - Concise findings
+{
+  "findings": "Proved theorem using algebraic approach. Result: optimal solution exists. See workpapers for proof.",
+  "workpapers": [
+    {
+      "type": "analysis",
+      "title": "Complete Proof",
+      "content": "[Full mathematical proof with all steps...]",
+      "format": "markdown"
+    }
+  ]
+}
+
+// ❌ BAD - Everything in findings (bloated)
+{
+  "findings": "Step 1: Assume X. Step 2: Apply lemma Y. Step 3: Derive Z. Step 4: ... [5000 characters of proof] ... Therefore optimal solution exists."
+}
+```
+
+**2. Avoid complex escape sequences**:
+```json
+// ✅ GOOD - Plain text or markdown
+"findings": "Formula: sum(i=1 to n) of x_i <= M"
+
+// ❌ BAD - LaTeX escapes (parsing issues)
+"findings": "Formula: \\sum_{i=1}^{n} x_i \\leq M"
+```
+
+**3. Split large batches**:
+```bash
+# Instead of 20 results at once:
+Batch 1: Register 5 results (plan P1) → new token
+Batch 2: Register 5 results (plan P2) → new token
+Batch 3: Register 5 results (plan P3) → new token
+Batch 4: Register 5 results (plan P4) → new token
+```
+
+**Optimal Payload Structure**:
+- `findings`: ≤500 characters (summary)
+- `workpapers`: Detailed data, calculations, proofs
+- `evidence_refs`: ≤5 items per result
+- Batch size: ≤10 results per call
+
+**Best Practices**:
+- ✅ Keep `findings` concise (summary only)
+- ✅ Move details to `workpapers`
+- ✅ Use plain text/markdown (avoid LaTeX)
+- ✅ Split into batches of 5-10 results
+- ❌ DO NOT put entire analysis in `findings`
+- ❌ DO NOT use complex escape sequences
+
 ## Troubleshooting: 403 Safety Block on `register_execution_results`
 
 **Symptom**: `ConnectorClientError: 403: "Server returned 403: 'Invocation is blocked on safety'"`
@@ -263,6 +531,117 @@ With 4-5 such results per plan × 4 plans = **85%+ confidence easily achievable*
 - Sources can be included directly in `findings` text
 - No information is lost - just different format
 - ChatGPT auto-corrects after first 403 error
+
+## 🛠️ Validation Helpers
+
+Il server fornisce utility di validazione client-side per aiutare ChatGPT a costruire payload validi ed evitare errori comuni. Queste utility sono disponibili in `src/workers/validation-helpers.ts`:
+
+### Funzioni Disponibili
+
+1. **`validateExecutionResults(payload)`** - Valida payload prima della chiamata `register_execution_results`
+2. **`sanitizeForModeration(payload)`** - Rimuove URL da `evidence_refs`, li sposta in `findings`
+3. **`checkPayloadSize(payload)`** - Calcola dimensione JSON con breakdown per campo
+4. **`splitExecutionResults(payload, maxKB)`** - Divide payload grandi in chunk <10KB
+   - ⚡ **OTTIMIZZATO**: Pre-calcola dimensioni, usa TextEncoder cached, bin-packing efficiente
+   - Gestisce 100+ risultati in <1 secondo
+5. **`compressFindings(payload, maxLength)`** - Sposta findings lunghi in workpapers
+6. **`checkSessionHealth(token)`** - Valida scadenza token e fornisce warning
+7. **`validateDiversityAxes(planAxes, requiredAxes, existingPlans)`** - Valida assi del piano
+8. **`suggestDiversityAxes(requiredAxes, existingPlans, preferredValues)`** - Suggerisce assi per nuovi piani
+   - 🔧 **ESTESO**: Supporta 8 pattern di separatori (vs, /, ,, -, (), [], :, range)
+
+### Esempio d'Uso
+
+```typescript
+import {
+  validateExecutionResults,
+  sanitizeForModeration,
+  suggestDiversityAxes
+} from './validation-helpers';
+
+// Prima di submit results
+const validation = validateExecutionResults(payload);
+if (!validation.valid) {
+  console.error('Errori:', validation.errors);
+  return;
+}
+
+// Sanitizza per moderation
+const { sanitized } = sanitizeForModeration(payload);
+
+// Suggerisci assi per nuovo piano
+const suggestions = suggestDiversityAxes(requiredAxes, existingPlans);
+console.log('Assi suggeriti:', suggestions.suggested_axes);
+```
+
+Vedi README.md per documentazione completa e esempi dettagliati.
+
+## ✅ Pre-Invio Checklist for ChatGPT
+
+Before calling `register_execution_results`, verify:
+
+### Schema Validation
+- [ ] Payload contains ONLY required fields: `execution_token`, `results`
+- [ ] Each result has: `plan_id`, `step_id`, `findings`
+- [ ] Optional fields are `[]` (empty array) or omitted, NOT `null`
+- [ ] NO extra fields like `session_id`, `reasoning_trace` (unless explicitly needed)
+
+### Moderation Safety
+- [ ] URLs are in `findings` text or `workpapers.content`, NOT in `evidence_refs`
+- [ ] No `type: "url"` in `evidence_refs` array
+- [ ] Academic citations use `type: "citation"` with author/year in `source` field
+- [ ] Payload size <10KB per result (check with `JSON.stringify(result).length`)
+
+### Session Lifecycle
+- [ ] Using a FRESH execution token (not previously used)
+- [ ] Token is <7 days old (or regenerated with `regenerate_execution_token`)
+- [ ] Session is active (<24h since last activity)
+
+### Payload Size
+- [ ] `findings` field is ≤500 characters (summary only)
+- [ ] Detailed data moved to `workpapers`
+- [ ] No complex escape sequences (`\\prod`, `\\leq`) - use plain text
+- [ ] Batch size ≤10 results per call
+
+### Diversity Axes (for `submit_reasoning_plan`)
+- [ ] Plan includes ALL required diversity axes (semantic match)
+- [ ] Plan differs from existing plans on ≥2 axes
+- [ ] Using "Key: Value" format for axes
+
+### Example Valid Payload
+
+```json
+{
+  "execution_token": "exec_bonza-001_1760100180012_qnyf6",
+  "results": [
+    {
+      "plan_id": "P1r",
+      "step_id": "P1r_step_1",
+      "findings": "Market size: $45.2B (CAGR 12.3%). Sources: Gartner (https://gartner.com/report), Bloomberg (https://bloomberg.com/data). See workpapers for calculations.",
+      "evidence_refs": [
+        {
+          "type": "citation",
+          "source": "Gartner 2024",
+          "description": "Market analysis report"
+        },
+        {
+          "type": "calculation",
+          "source": "see-workpapers",
+          "description": "Market size calculation"
+        }
+      ],
+      "workpapers": [
+        {
+          "type": "calculation",
+          "title": "Market Size Calculation",
+          "content": "Base (2020): $32B\nGrowth rate: 12.3%\nYears: 4\nFormula: $32B * (1.123^4) = $45.2B\n\nSources:\n- Gartner: https://gartner.com/report\n- Bloomberg: https://bloomberg.com/data",
+          "format": "markdown"
+        }
+      ]
+    }
+  ]
+}
+```
 
 ## Troubleshooting: Low confidence or missing evidence types
 

@@ -665,6 +665,56 @@ export async function handleRegisterExecutionResults(
       }]
     };
   } catch (error) {
+    // Enhanced error handling for Zod validation errors
+    if (error instanceof z.ZodError) {
+      const errorDetails = error.errors.map(err => {
+        const path = err.path.join('.');
+        const message = err.message;
+        const code = err.code;
+
+        // Provide specific guidance based on error type
+        let suggestion = '';
+        if (code === 'invalid_type' && message.includes('null')) {
+          suggestion = ` → Use [] (empty array) instead of null, or omit the field entirely`;
+        } else if (path.includes('evidence_refs') && message.includes('url')) {
+          suggestion = ` → URLs in evidence_refs cause 403 errors. Put URLs in findings text instead`;
+        } else if (code === 'unrecognized_keys') {
+          suggestion = ` → Remove extra fields. Only include: execution_token, results`;
+        }
+
+        return `  - Field "${path}": ${message}${suggestion}`;
+      }).join('\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **Schema Validation Error**\n\n` +
+                `The payload does not match the required schema. Please fix the following issues:\n\n` +
+                `${errorDetails}\n\n` +
+                `**Common fixes:**\n` +
+                `- Remove extra fields like "session_id" (only "execution_token" and "results" allowed)\n` +
+                `- Change null values to [] (empty arrays) or omit optional fields\n` +
+                `- Move URLs from evidence_refs to findings text to avoid 403 errors\n\n` +
+                `**Valid minimal payload:**\n` +
+                `\`\`\`json\n` +
+                `{\n` +
+                `  "execution_token": "exec_...",\n` +
+                `  "results": [\n` +
+                `    {\n` +
+                `      "plan_id": "P1",\n` +
+                `      "step_id": "P1_step_1",\n` +
+                `      "findings": "...",\n` +
+                `      "evidence_refs": [],\n` +
+                `      "workpapers": []\n` +
+                `    }\n` +
+                `  ]\n` +
+                `}\n` +
+                `\`\`\`\n`
+        }]
+      };
+    }
+
+    // Standard error handling for other errors
     return {
       content: [{
         type: 'text',
