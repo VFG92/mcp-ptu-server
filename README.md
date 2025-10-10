@@ -56,7 +56,7 @@ The project targets Node.js 20+ and Wrangler 4.40+. Cloudflare account credentia
 ## Testing & diagnostics
 - `npm test` / `npm run test:integration` – unit and integration coverage for workers and Durable Objects.
 - `./test-simple-direct-api.sh` – smoke tests the `/api/register-results` fallback (session extraction + moderation safety).
-- `./test-direct-api.sh` – runs an end-to-end manifest workflow that submits results through the direct API.
+- `./test-direct-api.sh` – end-to-end manifest workflow for the direct API; last validated 2025-10-10 (token parsing, manifest instructions, internal routing all green).
 - `./test-403-fix.sh` – regression check ensuring sanitized `evidence_refs` avoid OpenAI 403 blocks.
 - `./scripts/test-parallel-reasoning-simple.sh` – Durable Object persistence smoke test (requires `npm run workers:dev`).
 - `./scripts/test-parallel-reasoning-fix.sh` – verbose MCP run useful when debugging session lifecycle issues.
