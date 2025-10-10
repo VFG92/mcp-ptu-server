@@ -47,6 +47,39 @@ Use the following prompt to exercise the server end-to-end:
 > - `execute_plan_step`: Removed - Use `execute_reasoning_manifest` + `register_execution_results`
 > - `submit_cross_plan_note`: Removed - Not needed in manifest workflow
 
+## Session Persistence & Heartbeat
+
+### How It Works
+
+**Session Registry** (`SessionRegistry` Durable Object):
+- Maps custom session IDs to Durable Object IDs
+- Tracks `lastAccessedAt` timestamp for each session
+- Automatically updated on EVERY tool call (via `getDoId()`)
+- Cleans up sessions after **24 hours of inactivity**
+
+**Durable Object Eviction**:
+- Cloudflare evicts DOs from memory after "a short period of time" without events
+- Exact timeout not documented, but typically seconds to minutes
+- State is persisted to storage on every tool call
+- When DO is recreated, state is restored from storage
+
+**Heartbeat**:
+- The `startHeartbeat()` method is intentionally a placeholder
+- Cloudflare Alarms do NOT prevent eviction (per official docs)
+- State persistence on every tool call is the correct approach
+- ChatGPT typically calls tools every 1-3 minutes, keeping sessions alive
+
+**Why Sessions Don't Expire**:
+1. Every tool call → Worker routes to registry → `getDoId()` → updates `lastAccessedAt`
+2. ChatGPT calls tools frequently (1-3 min intervals)
+3. 24h timeout is much longer than typical ChatGPT session
+4. Even if DO is evicted, state is restored from storage
+
+**If you see "session expired" errors**, it's likely:
+- User provided wrong session_id
+- Server was restarted (local dev only)
+- Actual 24h+ of inactivity (very rare)
+
 ## Recent Improvements (2025-10-10)
 
 ### 1. Optimal Capability Chain Length ✅
