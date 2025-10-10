@@ -53,11 +53,19 @@ An MCP-compliant Cloudflare Worker that helps ChatGPT coordinate structured, mul
 
 The project targets Node.js 20+ and Wrangler 4.40+. Cloudflare account credentials must be configured for `wrangler dev` and `wrangler deploy`.
 
+## Testing & diagnostics
+- `npm test` / `npm run test:integration` – unit and integration coverage for workers and Durable Objects.
+- `./test-simple-direct-api.sh` – smoke tests the `/api/register-results` fallback (session extraction + moderation safety).
+- `./test-direct-api.sh` – runs an end-to-end manifest workflow that submits results through the direct API.
+- `./test-403-fix.sh` – regression check ensuring sanitized `evidence_refs` avoid OpenAI 403 blocks.
+- `./scripts/test-parallel-reasoning-simple.sh` – Durable Object persistence smoke test (requires `npm run workers:dev`).
+- `./scripts/test-parallel-reasoning-fix.sh` – verbose MCP run useful when debugging session lifecycle issues.
+
 ## MCP endpoints
 The server implements the standard MCP transport plus a convenience proxy:
 - `POST /mcp` – canonical MCP entry point (requires `mcp-session-id` header).
 - `POST /proxy` – extracts the parallel reasoning `session_id` from the request body and forwards to `/mcp` with the correct header.
-- `POST /api/register-results` – **DIRECT API** for registering execution results, bypasses MCP session management to prevent "Session terminated" errors.
+- `POST /api/register-results` – **DIRECT API** for registering execution results; extracts `session_id` from the `execution_token` and avoids stale MCP sessions or moderation-triggered 403s.
 
 ### MCP Tools (for ChatGPT)
 Within the MCP session the following tools drive the workflow:
@@ -86,6 +94,7 @@ MCP sessions can expire or terminate, causing "Session terminated" errors. To pr
 - Complete the entire workflow quickly without long pauses
 - If you get "Session terminated" error, the workflow cannot be recovered
 - The `/api/register-results` endpoint bypasses session management for critical operations
+- Run `./test-simple-direct-api.sh` before large result batches to confirm the fallback is healthy
 
 ### Best practice: Use list_plan_status frequently
 Call `list_plan_status` after submitting plans and during execution to:
@@ -617,6 +626,18 @@ console.log('Diversity preview:', suggestions.diversity_preview);
 - Avoid complex escape sequences (`\\prod`, `\\leq`) - use plain text or markdown
 - Register results in batches of 5-10 steps maximum
 
+## Reference examples
+- `src/workers/examples/capability-integration-example.ts` – illustrates capability orchestration, evidence handling, and tournament kernel usage.
+- `examples/parallel-reasoning-v5-example.ts` – runnable manifest-based parallel reasoning walkthrough.
+- `examples/peer-review-example.ts` – demonstrates the peer review tooling flow.
+- `__tests__/` – executable suites covering capabilities, parallel reasoning, peer review, and session persistence.
+
+## Deprecated modules
+- `src/workers/deprecated/agent-personas.ts` – persona-based workflow replaced by capability-driven architecture in v3.0.
+- `src/workers/deprecated/parallel-reasoning-engine.ts` – legacy engine superseded by `parallel-reasoning-mcp.ts` in v5.0.
+- Preferred replacements live under `src/workers/capabilities/` and `src/workers/parallel-reasoning-mcp.ts`.
+- Deprecated code remains read-only for migration context and is slated for removal in v6.0 once external usage ends.
+
 ## OpenAI Apps SDK Compatibility
 
 This server is **architecturally compatible** with [OpenAI Apps SDK](https://developers.openai.com/apps-sdk) for building ChatGPT apps. The MCP protocol implementation, tool system, and UI layer align with Apps SDK requirements.
@@ -624,13 +645,10 @@ This server is **architecturally compatible** with [OpenAI Apps SDK](https://dev
 **Current Status**: ~70% compatible
 **Required Changes**: Adapt tool response format to include `_meta.openai/outputTemplate` metadata
 
-See [`APPS_SDK_COMPATIBILITY_ANALYSIS.md`](./APPS_SDK_COMPATIBILITY_ANALYSIS.md) for detailed compatibility analysis and implementation roadmap.
+Compatibility notes are documented inline throughout the repository; continue aligning tool responses before enabling Apps SDK mode.
 
 ## Additional resources
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [OpenAI Apps SDK](https://developers.openai.com/apps-sdk)
 - [Apps SDK Examples](https://github.com/openai/openai-apps-sdk-examples)
-- [`SESSION_ID_EXPLAINED.md`](./SESSION_ID_EXPLAINED.md) – detailed guidance on the two types of session identifiers.
-- [`IMPLEMENTATION_SUMMARY.md`](./IMPLEMENTATION_SUMMARY.md) – subsystem overview for maintainers.
-- [`APPS_SDK_COMPATIBILITY_ANALYSIS.md`](./APPS_SDK_COMPATIBILITY_ANALYSIS.md) – Apps SDK compatibility analysis and roadmap.
-
+- `AGENT.md` – consolidated operational playbook for contributors and AI agents.

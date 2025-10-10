@@ -14,6 +14,20 @@ This document keeps contributors and AI agents aligned while working on the repo
 3. Execute the appropriate test or build commands.
 4. Document changes clearly in commit messages and pull requests.
 
+## Operational toolkit
+- `npm test` / `npm run test:integration` – primary guardrails for regressions across workers and Durable Objects.
+- `./test-simple-direct-api.sh` – verifies the `/api/register-results` fallback path (session extraction + moderation safety).
+- `./test-direct-api.sh` – drives a manifest workflow end to end through the direct API.
+- `./test-403-fix.sh` – reproduces OpenAI safety filtering to ensure `evidence_refs` stay compliant.
+- `./scripts/test-parallel-reasoning-simple.sh` – lightweight smoke test for Durable Object persistence (requires `npm run workers:dev`).
+- `./scripts/test-parallel-reasoning-fix.sh` – verbose MCP walkthrough for debugging complex workflows.
+
+## Direct results API
+- Switch to `POST /api/register-results` when MCP sessions expire or moderation blocks `register_execution_results`.
+- The endpoint extracts `session_id` from the `execution_token`, so clients never send session identifiers directly.
+- Run `./test-simple-direct-api.sh` and `./test-direct-api.sh` before shipping changes that touch execution result handling.
+- Error handling and storage writes live in `src/workers/session.ts#handleInternalRegisterResults`; keep the handler idempotent for safe retries.
+
 ## Recommended MCP prompt
 Use the following prompt to exercise the server end-to-end:
 
@@ -974,3 +988,10 @@ All quality metrics are now enhanced:
 - Coverage ≥ 95%
 - Consensus ≥ 80%
 
+## Code reference map
+- `src/workers/examples/capability-integration-example.ts` – capability orchestration, evidence handling, and tournament kernel reference.
+- `examples/parallel-reasoning-v5-example.ts` – runnable manifest workflow covering every MCP tool.
+- `examples/peer-review-example.ts` – peer review lifecycle with critiques, mediation, and evidence capture.
+- `src/workers/deprecated/agent-personas.ts` – preserved for historical context; superseded by capability modules in v3.0.
+- `src/workers/deprecated/parallel-reasoning-engine.ts` – legacy engine replaced by `parallel-reasoning-mcp.ts` and manifest tooling in v5.0.
+- Preferred replacements live under `src/workers/capabilities/` and `src/workers/parallel-reasoning-mcp.ts`; keep future work aligned there.
