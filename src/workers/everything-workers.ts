@@ -529,7 +529,7 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.SUBMIT_REASONING_PLAN,
         description:
-          "STEP 2: Submit reasoning plans (min 3-4). Each must differ on ≥2 diversity axes. Include plan_id, description, diversity_axes, capability_chain (3-5 steps), rationale, expected_outputs. After all plans: execute_reasoning_manifest.",
+          "STEP 2: Submit reasoning plans (min 3-4). Each must differ on ≥2 diversity axes. Include plan_id, description, diversity_axes, capability_chain (5-10 steps recommended for robustness), rationale, expected_outputs. After all plans: execute_reasoning_manifest.",
         inputSchema: zodToJsonSchema(SubmitReasoningPlanSchema) as ToolInput,
       },
       // REMOVED: execute_plan_step (deprecated - use manifest-based workflow)

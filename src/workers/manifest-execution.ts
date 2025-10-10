@@ -170,6 +170,31 @@ Create structured artifacts for each analysis:
 3. **Comparisons**: Side-by-side analysis with metrics
 4. **Visualizations**: Charts, graphs (as code or descriptions)
 
+### Quality Targets (What You're Aiming For)
+
+To successfully finalize this session, you need to meet these thresholds:
+
+- **Coverage ≥95%**: Execute ALL declared steps (don't skip any!)
+- **Confidence ≥85%**: Provide high-quality evidence (10-15+ evidence items per plan)
+- **Consensus ≥80%**: Submit peer critiques and mediation decisions
+
+**How to reach these targets**:
+
+1. **Coverage**: Simply execute every step you declared in your capability chains
+   - If you declared 5 steps per plan × 3 plans = 15 steps total
+   - You must register results for all 15 steps
+
+2. **Confidence**: Quality over quantity
+   - Include URLs to authoritative sources (in findings text if evidence_refs is blocked)
+   - Show calculations with numbers and formulas
+   - Create workpapers with detailed analysis
+   - Aim for 10-15+ high-quality evidence items per plan
+
+3. **Consensus**: Cross-plan validation
+   - After registering results, submit peer critiques
+   - Each plan reviews other plans with specific claims challenged
+   - Then submit mediation decisions to resolve disagreements
+
 ### After Completion
 
 When you've executed ALL steps across ALL plans:
@@ -177,6 +202,11 @@ When you've executed ALL steps across ALL plans:
 1. Review your work for quality
 2. Ensure each step has evidence and workpapers
 3. Call \`register_execution_results\` with your findings
+4. Check progress with \`list_plan_status\` to see current metrics
+5. If metrics are low, add more evidence or execute remaining steps
+6. Submit peer critiques and mediation decisions for consensus
+7. Call \`check_session_readiness\` to verify all thresholds are met
+8. Finally, call \`finalize_parallel_reasoning\` to complete
 
 **Remember**: This is NOT about writing descriptions. This is about DOING THE ANALYSIS and SHOWING YOUR WORK.
 

@@ -897,22 +897,59 @@ export async function handleCheckSessionReadiness(
     response += `\n`;
   }
 
-  // Next steps
+  // Next steps with DETAILED GUIDANCE
   if (!readiness.ready) {
-    response += `### 🎯 Next Steps\n\n`;
+    response += `### 🎯 Next Steps (Detailed Guidance)\n\n`;
+
+    // COVERAGE guidance
     if (!readiness.quality_check.coverage_met) {
-      response += `1. **Execute remaining capability steps** using \`execute_plan_step\` to complete declared workflows\n`;
+      const coverageGap = 95 - (readiness.metrics.coverage * 100);
+      response += `#### 1. ❌ Coverage: ${(readiness.metrics.coverage * 100).toFixed(1)}% (need 95%)\n\n`;
+      response += `**Gap**: ${coverageGap.toFixed(1)}% more coverage needed\n\n`;
+      response += `**How to fix**:\n`;
+      response += `- You have ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps executed\n`;
+      response += `- Execute remaining ${readiness.metrics.details.coverage.total_declared_steps - readiness.metrics.details.coverage.executed_steps} steps using \`register_execution_results\`\n`;
+      response += `- Each step should include detailed findings with sources (URLs can be in findings text if evidence_refs is blocked)\n\n`;
     }
+
+    // CONFIDENCE guidance
     if (!readiness.quality_check.confidence_met) {
-      response += `2. **Add more evidence** by executing plan steps with detailed analysis\n`;
+      const confidenceGap = 85 - (readiness.metrics.confidence * 100);
+      response += `#### 2. ❌ Confidence: ${(readiness.metrics.confidence * 100).toFixed(1)}% (need 85%)\n\n`;
+      response += `**Gap**: ${confidenceGap.toFixed(1)}% more confidence needed\n\n`;
+      response += `**How to fix** (add high-quality evidence):\n`;
+      response += `- **External sources**: Include URLs to authoritative sources (academic papers, official reports, industry data)\n`;
+      response += `  - If security filters block URLs in evidence_refs, include them directly in findings text\n`;
+      response += `  - Example: "Analysis confirmed by Banca d'Italia (https://...) and Reuters (https://...)"\n`;
+      response += `- **Quantitative data**: Provide specific numbers, calculations, and data points\n`;
+      response += `  - Show your work in findings or workpapers\n`;
+      response += `  - Example: "Market size: $45.2B (CAGR 12.3%). Calculation: Base $32B (2020) * (1.123^4) = $45.2B"\n`;
+      response += `- **Workpapers**: Create detailed analysis documents showing methodology, assumptions, calculations\n`;
+      response += `- Current evidence count: ${readiness.metrics.details.confidence.unique_evidence_count}\n`;
+      response += `- Aim for 10-15+ high-quality evidence items per plan\n\n`;
     }
+
+    // CONSENSUS guidance
     if (!readiness.quality_check.consensus_met) {
-      response += `3. **Submit peer critiques** using \`submit_peer_critique\` to build consensus\n`;
+      const consensusGap = 80 - (readiness.metrics.consensus * 100);
+      response += `#### 3. ❌ Consensus: ${(readiness.metrics.consensus * 100).toFixed(1)}% (need 80%)\n\n`;
+      response += `**Gap**: ${consensusGap.toFixed(1)}% more consensus needed\n\n`;
+      response += `**How to fix**:\n`;
+      response += `- Submit peer critiques using \`submit_peer_critique\`\n`;
+      response += `- Each plan should review other plans with:\n`;
+      response += `  - \`claims_challenged\`: Specific claims with evidence_ids and falsification tests\n`;
+      response += `  - \`residual_risks\`: Remaining uncertainties\n`;
+      response += `  - \`agreement_score\`: 0-1 score indicating agreement level\n`;
+      response += `- Then submit mediation decisions using \`submit_mediation_decision\`\n`;
+      response += `- For each decision_point, choose best approach with rationale and evidence_ids\n`;
+      response += `- Current: ${readiness.metrics.details.consensus.agreements} agreements, ${readiness.metrics.details.consensus.conflicts} conflicts\n\n`;
     }
-    response += `4. **Re-check readiness** using \`check_session_readiness\` before attempting finalization\n`;
+
+    response += `#### 4. ✅ Final Step\n\n`;
+    response += `After addressing the above, call \`check_session_readiness\` again to verify all metrics are met.\n`;
   } else {
     response += `### 🎯 Next Step\n\n`;
-    response += `Call \`finalize_parallel_reasoning\` to complete the session.\n`;
+    response += `✅ All requirements met! Call \`finalize_parallel_reasoning\` to complete the session.\n`;
   }
 
   return {

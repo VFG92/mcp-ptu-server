@@ -375,7 +375,7 @@ export const ReasoningPlanSchema = z.object({
   plan_id: z.string(),
   description: z.string(),
   diversity_axes: z.array(DiversityAxisSchema).min(2), // Minimum 2 axes must differ
-  capability_chain: z.array(z.string()).min(3).max(32).describe('Capability chain: 3-32 capabilities per workflow (optimal: 3-5)'),
+  capability_chain: z.array(z.string()).min(3).max(32).describe('Capability chain: 3-32 capabilities per workflow (optimal: 5-10 for robustness based on diversity research)'),
   rationale: z.string(),
   expected_outputs: z.array(z.string())
 });

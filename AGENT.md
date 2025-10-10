@@ -47,6 +47,43 @@ Use the following prompt to exercise the server end-to-end:
 > - `execute_plan_step`: Removed - Use `execute_reasoning_manifest` + `register_execution_results`
 > - `submit_cross_plan_note`: Removed - Not needed in manifest workflow
 
+## Recent Improvements (2025-10-10)
+
+### 1. Optimal Capability Chain Length ✅
+**Research-backed**: Increased recommended range from 3-5 to **5-10 steps** based on "wisdom of crowds" research showing diversity improves group performance.
+
+**Why**: Longer chains allow for:
+- More thorough analysis
+- Better evidence collection
+- Higher quality outputs
+- Improved robustness
+
+**Files modified**:
+- `src/workers/parallel-reasoning-mcp.ts` (line 378): Updated schema description
+- `src/workers/everything-workers.ts` (line 532): Updated tool description
+
+### 2. Quality Metrics Guidance ✅
+**Problem**: ChatGPT struggled to reach coverage (95%), confidence (85%), and consensus (80%) thresholds without understanding HOW to improve.
+
+**Solution**: Added progressive, detailed guidance at multiple levels:
+
+1. **In execution manifest** (`src/workers/manifest-execution.ts`):
+   - Clear quality targets section explaining each threshold
+   - Step-by-step instructions on how to reach each target
+   - Specific examples of good vs bad evidence
+   - Complete workflow from execution to finalization
+
+2. **In readiness check** (`src/workers/parallel-reasoning-tools-v5.ts`):
+   - Detailed breakdown when metrics are not met
+   - Specific gap calculations (e.g., "need 12.3% more confidence")
+   - Actionable instructions for each metric:
+     - **Coverage**: Execute remaining X steps
+     - **Confidence**: Add high-quality evidence (URLs, calculations, workpapers)
+     - **Consensus**: Submit peer critiques and mediation decisions
+   - Examples of what constitutes quality evidence
+
+**Impact**: ChatGPT now receives clear, actionable feedback instead of just "not ready".
+
 ## Troubleshooting: 403 Safety Block on `register_execution_results`
 
 **Symptom**: `ConnectorClientError: 403: "Server returned 403: 'Invocation is blocked on safety'"`

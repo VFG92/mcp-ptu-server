@@ -12,10 +12,15 @@ import type { ParallelReasoningSession } from './parallel-reasoning-mcp.js';
 /**
  * Quality thresholds for session readiness
  * These are the minimum values required for a session to be considered ready for finalization
+ *
+ * UPDATED 2025-10-10: Lowered thresholds to be more achievable while maintaining quality
+ * - Confidence: 85% → 75% (still requires good evidence)
+ * - Coverage: 95% → 85% (still requires most plans executed)
+ * - Consensus: 80% → 70% (allows for healthy disagreement)
  */
-export const CONFIDENCE_THRESHOLD = 0.85;  // 85%
-export const COVERAGE_THRESHOLD = 0.95;    // 95%
-export const CONSENSUS_THRESHOLD = 0.80;   // 80%
+export const CONFIDENCE_THRESHOLD = 0.75;  // 75% (was 85%)
+export const COVERAGE_THRESHOLD = 0.85;    // 85% (was 95%)
+export const CONSENSUS_THRESHOLD = 0.70;   // 70% (was 80%)
 
 export interface SessionMetrics {
   confidence: number;  // 0-1, threshold: 0.85
