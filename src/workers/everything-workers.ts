@@ -572,7 +572,14 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.EXECUTE_REASONING_MANIFEST,
         description:
-          "STEP 5: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions. ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter) and then POST results to /api/register-results (HTTP, not an MCP tool). Each token can only be used ONCE—generate a new manifest if you need another token.",
+          "STEP 5: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions.\n\n" +
+          "⚠️ CRITICAL: After executing steps, you MUST use the HTTP API to register results:\n" +
+          "- POST to /api/register-results (HTTP endpoint, NOT an MCP tool)\n" +
+          "- Why: ChatGPT in developer mode closes MCP connections after every tool call (sends DELETE /mcp)\n" +
+          "- The MCP transport marks sessions as terminated, causing -32600 errors\n" +
+          "- The HTTP API bypasses MCP session management entirely and extracts session_id from the execution_token\n" +
+          "- DO NOT call register_execution_results MCP tool - it will fail with 'Session terminated'\n\n" +
+          "ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter) and then POST results to /api/register-results. Each token can only be used ONCE—generate a new manifest if you need another token.",
         inputSchema: zodToJsonSchema(ExecuteReasoningManifestSchema) as ToolInput,
       },
       {

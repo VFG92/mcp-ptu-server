@@ -908,7 +908,9 @@ export async function handleCheckSessionReadiness(
       response += `**Gap**: ${coverageGap.toFixed(1)}% more coverage needed\n\n`;
       response += `**How to fix**:\n`;
       response += `- You have ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps executed\n`;
-      response += `- Execute remaining ${readiness.metrics.details.coverage.total_declared_steps - readiness.metrics.details.coverage.executed_steps} steps using \`register_execution_results\`\n`;
+      response += `- Execute remaining ${readiness.metrics.details.coverage.total_declared_steps - readiness.metrics.details.coverage.executed_steps} steps\n`;
+      response += `- **Register results via HTTP API**: POST to \`/api/register-results\` (NOT the MCP tool)\n`;
+      response += `- Why: ChatGPT closes MCP connections after every tool call, causing -32600 errors\n`;
       response += `- Each step should include detailed findings with sources (URLs can be in findings text if evidence_refs is blocked)\n\n`;
     }
 

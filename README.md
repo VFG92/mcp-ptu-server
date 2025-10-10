@@ -90,12 +90,34 @@ Within the MCP session the following tools drive the workflow:
 
 All tools accept a `session_id` parameter. Reuse the same value throughout a workflow to keep state aligned.
 
-### ⚠️ Important: Session Management
-MCP sessions can expire or terminate, causing "Session terminated" errors. To prevent workflow interruption:
-- Complete the entire workflow quickly without long pauses
-- If you get "Session terminated" error, the workflow cannot be recovered
-- The `/api/register-results` endpoint bypasses session management for critical operations
-- Run `./test-simple-direct-api.sh` before large result batches to confirm the fallback is healthy
+### ⚠️ Critical: MCP Session Lifecycle in ChatGPT Developer Mode
+
+**The Problem**: ChatGPT in developer mode closes the MCP connection after EVERY tool call by sending `DELETE /mcp`. The official MCP transport (`@modelcontextprotocol/sdk`) marks the session as terminated when it receives DELETE. When ChatGPT tries to reuse the same `session_id` for the next request, the transport sees the session as closed and returns:
+
+```
+JSON-RPC error code: -32600
+message: "Session terminated"
+```
+
+**Why This Happens**:
+1. ChatGPT calls tool → Worker routes to Durable Object → Tool executes successfully
+2. ChatGPT sends `DELETE /mcp` → Transport calls `_onsessionclosed` and `close()` → Session marked as terminated
+3. ChatGPT calls next tool with same `session_id` → Transport rejects: "Session terminated"
+
+**The Workaround**: The worker has code to reinject the session header (src/workers/session.ts:252-259), but it **cannot reopen a session that the transport has already closed**.
+
+**The Solution**: Use the HTTP API `/api/register-results` for critical operations (especially `register_execution_results`). This endpoint:
+- Bypasses MCP session management entirely
+- Extracts `session_id` from the `execution_token`
+- Routes directly to the Durable Object
+- Avoids `-32600` errors completely
+
+**Best Practices**:
+- Use MCP tools for lightweight operations (init, submit plans, status checks)
+- Use `/api/register-results` for heavy operations (registering execution results)
+- Complete workflows quickly to minimize connection closures
+- If you get "Session terminated", the workflow CANNOT be recovered - start over
+- Run `./test-simple-direct-api.sh` to verify the HTTP API is healthy
 
 ### Best practice: Use list_plan_status frequently
 Call `list_plan_status` after submitting plans and during execution to:

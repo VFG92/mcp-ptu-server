@@ -72,9 +72,53 @@ Use the following prompt to exercise the server end-to-end:
 > - `get_capability_status`: Internal capability system - not for parallel reasoning
 > - `export_session`: Internal capability system - not for parallel reasoning
 
-## Session Persistence & Heartbeat
+## 🚨 Critical: MCP Session Lifecycle in ChatGPT Developer Mode
 
-### How It Works
+### The Root Problem
+
+**ChatGPT in developer mode closes the MCP connection after EVERY tool call** by sending `DELETE /mcp`. This is NOT a bug in our code - it's how the ChatGPT client behaves in developer mode.
+
+**What Happens**:
+1. ChatGPT calls MCP tool → Worker routes to Durable Object → Tool executes ✅
+2. ChatGPT sends `DELETE /mcp` → Official MCP transport (`node_modules/@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js#L433-L446`) receives DELETE
+3. Transport calls `_onsessionclosed` and `close()` → Session marked as **terminated** ❌
+4. ChatGPT tries to call next tool with same `session_id` → Transport rejects with:
+   ```
+   JSON-RPC error code: -32600
+   message: "Session terminated"
+   ```
+
+**Why Our Workaround Has Limits**:
+- The worker has code to reinject the session header (src/workers/session.ts:252-259)
+- This works for header mismatches, but **cannot reopen a session that the transport has already closed**
+- Once the transport calls `close()`, the session is dead - no amount of header injection can revive it
+
+### The Solution: HTTP API Bypass
+
+**Use `/api/register-results` for critical operations** (especially `register_execution_results`):
+
+**Why it works**:
+- Bypasses MCP transport entirely
+- Extracts `session_id` from `execution_token` (no MCP session needed)
+- Routes directly to Durable Object via worker
+- Avoids `-32600 "Session terminated"` errors completely
+
+**Implementation** (src/workers/index.ts:214):
+```typescript
+// Extract session_id from execution_token
+const token = body.params.arguments.execution_token;
+const match = token.match(/^exec_(.+)_\d+$/);
+if (match) {
+  sessionId = match[1]; // Direct routing, no MCP session
+}
+```
+
+**When to Use Each Approach**:
+- ✅ **MCP tools**: Lightweight operations (init, submit plans, status checks, critiques)
+- ✅ **HTTP API**: Heavy operations (register_execution_results with large payloads)
+- ⚠️ **Risk**: Long pauses between MCP calls → connection closed → `-32600` error
+
+### Session Persistence (Still Works)
 
 **Session Registry** (`SessionRegistry` Durable Object):
 - Maps custom session IDs to Durable Object IDs
@@ -84,26 +128,19 @@ Use the following prompt to exercise the server end-to-end:
 
 **Durable Object Eviction**:
 - Cloudflare evicts DOs from memory after "a short period of time" without events
-- Exact timeout not documented, but typically seconds to minutes
 - State is persisted to storage on every tool call
 - When DO is recreated, state is restored from storage
 
-**Heartbeat**:
-- The `startHeartbeat()` method is intentionally a placeholder
-- Cloudflare Alarms do NOT prevent eviction (per official docs)
-- State persistence on every tool call is the correct approach
-- ChatGPT typically calls tools every 1-3 minutes, keeping sessions alive
-
-**Why Sessions Don't Expire**:
+**Why Sessions Don't Expire** (if you avoid `-32600`):
 1. Every tool call → Worker routes to registry → `getDoId()` → updates `lastAccessedAt`
 2. ChatGPT calls tools frequently (1-3 min intervals)
 3. 24h timeout is much longer than typical ChatGPT session
 4. Even if DO is evicted, state is restored from storage
 
-**If you see "session expired" errors**, it's likely:
-- User provided wrong session_id
-- Server was restarted (local dev only)
-- Actual 24h+ of inactivity (very rare)
+**If you see "session terminated" errors**, it's likely:
+- ChatGPT closed the MCP connection (developer mode behavior)
+- Long pause between tool calls (>1-2 minutes)
+- **Solution**: Use `/api/register-results` for the next operation
 
 ## 403 Safety Blocks on register_execution_results
 
@@ -370,29 +407,33 @@ This section documents **5 critical issues** identified through real-world ChatG
 - Execution tokens are **single-use only** (even if registration fails)
 - Sessions expire after **24 hours of inactivity**
 - Tokens expire after **7 days**
-- No retry with same token after validation failure
+- **ChatGPT in developer mode closes MCP connections after EVERY tool call** → `-32600 "Session terminated"`
 
 **Common Errors**:
-- `Session terminated` → session expired or closed
+- `Session terminated` (code: -32600) → **ChatGPT closed the MCP connection** (most common)
 - `Execution token already used` → token was consumed in previous attempt
 - `Execution token expired` → token older than 7 days
 
+**Root Cause of `-32600` Errors**:
+ChatGPT in developer mode sends `DELETE /mcp` after every tool call. The official MCP transport (`@modelcontextprotocol/sdk`) marks the session as terminated. When ChatGPT tries to reuse the same `session_id`, the transport rejects it with `-32600`.
+
 **Solutions**:
+
+**For "Session terminated" (-32600) - MOST COMMON**:
+```bash
+# ChatGPT closed the MCP connection
+1. Switch to HTTP API: POST /api/register-results
+2. This bypasses MCP session management entirely
+3. Extracts session_id from execution_token automatically
+4. Avoids -32600 errors completely
+```
 
 **For "token already used"**:
 ```bash
 # Token is consumed even if registration failed
 1. Call execute_reasoning_manifest → get NEW token
-2. Use new token in register_execution_results
+2. Use new token in register_execution_results OR /api/register-results
 3. DO NOT retry with same token
-```
-
-**For "session terminated"**:
-```bash
-# Session was closed or timed out
-1. Verify session_id is correct
-2. Check if >24h since last activity
-3. Start new session if needed
 ```
 
 **For "token expired"**:
@@ -404,11 +445,12 @@ This section documents **5 critical issues** identified through real-world ChatG
 ```
 
 **Best Practices**:
-- ✅ Register results **incrementally** (one plan at a time)
+- ✅ Use `/api/register-results` for registering execution results (avoids -32600)
+- ✅ Use MCP tools for lightweight operations (init, submit plans, status)
 - ✅ Generate **new token** for each registration batch
 - ✅ Use `regenerate_execution_token` for long workflows (>7 days)
 - ❌ DO NOT retry with same token after failure
-- ❌ DO NOT register all results in one giant batch
+- ❌ DO NOT use MCP tool `register_execution_results` for large payloads (use HTTP API instead)
 
 ### Issue 4: Gestione della Diversità e Pianificazione
 

@@ -210,8 +210,18 @@ When you've executed ALL steps across ALL plans:
 
 ### ⚠️ CRITICAL: Register execution results via the direct API (skip the MCP tool)
 
-- **Do not call the \`register_execution_results\` MCP tool** — it will terminate long-running sessions.
-- **Instead**, send the exact same payload to the HTTP endpoint below. The worker extracts \`session_id\` from the \`execution_token\` and revives inactive sessions automatically, keeping you safe from 32600 errors.
+**WHY THIS IS NECESSARY**:
+- ChatGPT in developer mode closes the MCP connection after EVERY tool call by sending \`DELETE /mcp\`
+- The official MCP transport (\`@modelcontextprotocol/sdk\`) marks the session as **terminated** when it receives DELETE
+- When you try to call \`register_execution_results\` MCP tool, you'll get: **JSON-RPC error -32600: "Session terminated"**
+- This is NOT a bug - it's how ChatGPT developer mode works
+
+**THE SOLUTION**:
+- **Do not call the \`register_execution_results\` MCP tool** — it will fail with "Session terminated"
+- **Instead**, send the exact same payload to the HTTP endpoint below
+- The HTTP API bypasses MCP session management entirely
+- It extracts \`session_id\` from the \`execution_token\` automatically
+- No MCP session needed = no -32600 errors
 
 \`\`\`bash
 curl -X POST http://localhost:8787/api/register-results \\
@@ -443,7 +453,9 @@ function formatManifest(manifest: ExecutionManifest): string {
   output += '2. Generate workpapers (datasets, calculations, comparisons) for each analysis\n';
   output += '3. Cite external sources with URLs and specific data points\n';
   output += '4. Document your findings and reasoning process\n';
-  output += '5. POST your complete results to `/api/register-results` (HTTP call, not an MCP tool)\n\n';
+  output += '5. **POST your complete results to `/api/register-results`** (HTTP endpoint, NOT an MCP tool)\n\n';
+  output += '⚠️ **CRITICAL**: Do NOT call `register_execution_results` MCP tool - it will fail with "Session terminated" (-32600)\n';
+  output += 'Why: ChatGPT closes MCP connections after every tool call. Use the HTTP API instead.\n\n';
   output += `**Execution Token**: \`${manifest.execution_token}\` (required in the POST body)\n`;
   
   return output;
