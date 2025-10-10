@@ -14,21 +14,31 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 SESSION_ID="test-direct-api-$(date +%s)"
-BASE_URL="http://localhost:8787"
+# Auto-detect port from wrangler
+if curl -s http://localhost:38349/health > /dev/null 2>&1; then
+  PORT=38349
+else
+  PORT=8787
+fi
+BASE_URL="http://localhost:$PORT"
 MCP_URL="$BASE_URL/mcp"
 PROXY_URL="$BASE_URL/proxy"
 DIRECT_API_URL="$BASE_URL/api/register-results"
 
+echo "Using port: $PORT"
+
 echo "📋 Session ID: $SESSION_ID"
 echo ""
 
-# Helper function to call MCP tools via proxy
-call_tool_proxy() {
+# Helper function to call MCP tools
+call_tool() {
   local tool_name=$1
   local args=$2
-  
-  curl -s -X POST "$PROXY_URL" \
+
+  curl -s -X POST "$MCP_URL" \
     -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    -H "mcp-session-id: $SESSION_ID" \
     -d "{
       \"jsonrpc\": \"2.0\",
       \"method\": \"tools/call\",
@@ -41,8 +51,8 @@ call_tool_proxy() {
 }
 
 # Step 1: Initialize session
-echo "1️⃣  Initializing session via proxy..."
-INIT_RESPONSE=$(call_tool_proxy "init_parallel_reasoning" "{
+echo "1️⃣  Initializing session..."
+INIT_RESPONSE=$(call_tool "init_parallel_reasoning" "{
   \"session_id\": \"$SESSION_ID\",
   \"task_description\": \"Test direct API endpoint\",
   \"required_diversity_axes\": [\"approach\", \"methodology\"]
@@ -59,7 +69,7 @@ echo ""
 # Step 2: Submit plans
 echo "2️⃣  Submitting 3 plans..."
 
-call_tool_proxy "submit_reasoning_plan" "{
+call_tool "submit_reasoning_plan" "{
   \"session_id\": \"$SESSION_ID\",
   \"plan\": {
     \"plan_id\": \"plan_a\",
@@ -71,7 +81,7 @@ call_tool_proxy "submit_reasoning_plan" "{
   }
 }" > /dev/null
 
-call_tool_proxy "submit_reasoning_plan" "{
+call_tool "submit_reasoning_plan" "{
   \"session_id\": \"$SESSION_ID\",
   \"plan\": {
     \"plan_id\": \"plan_b\",
@@ -83,7 +93,7 @@ call_tool_proxy "submit_reasoning_plan" "{
   }
 }" > /dev/null
 
-call_tool_proxy "submit_reasoning_plan" "{
+call_tool "submit_reasoning_plan" "{
   \"session_id\": \"$SESSION_ID\",
   \"plan\": {
     \"plan_id\": \"plan_c\",
@@ -100,7 +110,7 @@ echo ""
 
 # Step 3: Execute manifest
 echo "3️⃣  Generating execution manifest..."
-MANIFEST_RESPONSE=$(call_tool_proxy "execute_reasoning_manifest" "{
+MANIFEST_RESPONSE=$(call_tool "execute_reasoning_manifest" "{
   \"session_id\": \"$SESSION_ID\"
 }")
 
@@ -181,7 +191,7 @@ echo ""
 
 # Step 5: Verify via list_plan_status
 echo "5️⃣  Verifying registration via list_plan_status..."
-STATUS_RESPONSE=$(call_tool_proxy "list_plan_status" "{
+STATUS_RESPONSE=$(call_tool "list_plan_status" "{
   \"session_id\": \"$SESSION_ID\"
 }")
 
