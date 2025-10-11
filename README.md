@@ -4,6 +4,17 @@ An MCP-compliant Cloudflare Worker that helps ChatGPT coordinate structured, mul
 
 ## 🆕 What's New (January 2025)
 
+### 🔧 Latest Updates (v5.9.1 - October 2025)
+
+**Fixed: Diversity Axis Parsing**
+- ✅ Added support for `Key (value)` format in diversity axes (e.g., `Metodologia (econometrico)`)
+- ✅ Fixed semantic diversity calculation returning 0 for clearly different plans
+- ✅ Plans using parentheses format now correctly differentiate from each other
+- ✅ Updated wrangler to 4.42.2
+- ✅ Resolved all TypeScript compilation errors
+
+**Impact**: Plans that were incorrectly rejected as "too similar" are now properly accepted, enabling more diverse parallel reasoning workflows.
+
 ### 🎯 Self-Assessment Approach (v5.9.0+) - NO MORE 403 ERRORS!
 
 **MAJOR CHANGE**: ChatGPT now **counts evidence** and **self-evaluates quality** instead of sending textual content.

@@ -2,6 +2,23 @@
 
 This document keeps contributors and AI agents aligned while working on the repository. All guidance is written for English-language contributions.
 
+## 🆕 Recent Updates (October 2025)
+
+### Diversity Axis Format Support
+**Fixed**: The system now supports both `Key: value` and `Key (value)` formats for diversity axes.
+
+**Examples**:
+- ✅ `Metodologia: econometrico` (colon format)
+- ✅ `Metodologia (econometrico)` (parentheses format)
+- ✅ `Narrativa di scenario (baseline ISTAT / WEF median automation)` (complex value in parentheses)
+
+**Impact**: Plans using parentheses format are now correctly differentiated. Previously, plans like:
+- `Metodologia (econometrico)` vs `Metodologia (sistemi dinamici)`
+
+Were incorrectly considered identical (diversity = 0) because the parser removed parentheses content. Now they are correctly recognized as different (diversity = 1).
+
+**When submitting plans**: You can use either format interchangeably. The system will parse both correctly and calculate semantic diversity accurately.
+
 ## Core expectations
 - Follow the existing TypeScript and Cloudflare Workers architecture; keep imports free of try/catch wrappers.
 - Prefer incremental, well-scoped changes. Update or create tests when behavior changes.
