@@ -618,14 +618,14 @@ console.log('Diversity preview:', suggestions.diversity_preview);
 }
 ```
 
-**Payload Size Limit**: Keep each result under 10KB. If registering many steps, split into multiple calls with the **SAME token** (micro-batching).
+**Payload Size Limit**: With minimal payload (no evidence_refs, 100-char summaries), you can register 20+ steps in a single call (typically <10KB).
 
 #### 3. Session Lifecycle and Token Issues
 
 **Symptom**: `Session terminated` or `Execution token expired`
 
 **Root Causes**:
-- Execution tokens are **reusable for 7 days** - you can call `register_execution_results` multiple times with the same token
+- Execution tokens are **reusable for 7 days**
 - Sessions expire after 24 hours of inactivity
 - Token expires after 7 days
 
@@ -647,11 +647,12 @@ console.log('Diversity preview:', suggestions.diversity_preview);
 3. Start a new session if needed
 ```
 
-**Best Practice (Micro-Batching)**:
-- Register results in small batches (2-3 steps per call) to avoid moderation blocks
-- **Reuse the same token** for multiple batches - no need to regenerate
-- Token remains valid for 7 days from creation
-- Only regenerate token if it expires (>7 days old)
+**Best Practice (Single-Call Strategy)**:
+- ✅ **Register ALL results in ONE SINGLE CALL** to avoid anti-spam pattern detection
+- ❌ **DO NOT call register_execution_results multiple times** (triggers moderation blocks)
+- Token is reusable for 7 days, but you should only need ONE call per execution
+- Multiple calls with same tool = repetitive pattern = connector blocks the request
+- With minimal payload format, 20+ steps fit easily in one call
 
 #### 4. Diversity Axes Validation Failures
 
