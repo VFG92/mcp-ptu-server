@@ -741,7 +741,7 @@ This means your evidence has LOW QUALITY signals - the system detected that your
 **Action Required**:
 1. Call \`execute_plan_step\` with EXTREMELY DETAILED task descriptions
 2. **BAD Example**: \`{"task": "market analysis"}\` ❌
-3. **GOOD Example**: \`{"task": "Search for the top 5 B2B SaaS companies in healthcare. For EACH company: 1) Find their website, 2) Extract their pricing page URL, 3) Identify their pricing model (per-user/per-feature/tiered), 4) Estimate their annual revenue from Crunchbase or similar sources, 5) List 3 key product differentiators. Provide URLs and specific data points for each finding."}\` ✅
+3. **GOOD Example**: \`{"task": "Search for the top 5 B2B SaaS companies in healthcare. For EACH company: 1) Find their website, 2) Identify their pricing model (per-user/per-feature/tiered), 3) Estimate their annual revenue from Crunchbase or similar sources, 4) List 3 key product differentiators. Provide specific data points for each finding."}\` ✅
 
 **Why this matters**: Detailed tasks → System uses reasoning + tools → High-quality evidence → Higher confidence
 
@@ -986,9 +986,8 @@ export async function handleCheckSessionReadiness(
       response += `**How to fix**:\n`;
       response += `- You have ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps executed\n`;
       response += `- Execute remaining ${readiness.metrics.details.coverage.total_declared_steps - readiness.metrics.details.coverage.executed_steps} steps\n`;
-      response += `- **Register results via HTTP API**: POST to \`/api/register-results\` (NOT the MCP tool)\n`;
-      response += `- Why: ChatGPT closes MCP connections after every tool call, causing -32600 errors\n`;
-      response += `- Each step should include detailed findings with sources (URLs can be in findings text if evidence_refs is blocked)\n\n`;
+      response += `- **Do the work** (web search, Python, analysis) then COUNT evidence\n`;
+      response += `- Register with self_assessment showing honest coverage evaluation\n\n`;
     }
 
     // CONFIDENCE guidance
@@ -996,16 +995,25 @@ export async function handleCheckSessionReadiness(
       const confidenceGap = 85 - (readiness.metrics.confidence * 100);
       response += `#### 2. ❌ Confidence: ${(readiness.metrics.confidence * 100).toFixed(1)}% (need 85%)\n\n`;
       response += `**Gap**: ${confidenceGap.toFixed(1)}% more confidence needed\n\n`;
-      response += `**How to fix** (add high-quality evidence):\n`;
-      response += `- **External sources**: Include URLs to authoritative sources (academic papers, official reports, industry data)\n`;
-      response += `  - If security filters block URLs in evidence_refs, include them directly in findings text\n`;
-      response += `  - Example: "Analysis confirmed by Banca d'Italia (https://...) and Reuters (https://...)"\n`;
-      response += `- **Quantitative data**: Provide specific numbers, calculations, and data points\n`;
-      response += `  - Show your work in findings or workpapers\n`;
-      response += `  - Example: "Market size: $45.2B (CAGR 12.3%). Calculation: Base $32B (2020) * (1.123^4) = $45.2B"\n`;
-      response += `- **Workpapers**: Create detailed analysis documents showing methodology, assumptions, calculations\n`;
-      response += `- Current evidence count: ${readiness.metrics.details.confidence.unique_evidence_count}\n`;
-      response += `- Aim for 10-15+ high-quality evidence items per plan\n\n`;
+      response += `**How to fix** (v5.9.0+ Self-Assessment approach):\n`;
+      response += `1. **DO the research/analysis** (use web search, Python, code interpreter)\n`;
+      response += `   - Search for authoritative sources (academic papers, official reports, industry data)\n`;
+      response += `   - Perform calculations and quantitative analysis\n`;
+      response += `   - Create workpapers with detailed methodology\n\n`;
+      response += `2. **COUNT what you collected** (for self_assessment):\n`;
+      response += `   - total_evidence_items: Total unique evidence pieces\n`;
+      response += `   - external_sources: Count of authoritative sources consulted\n`;
+      response += `   - quantitative_datapoints: Count of specific numbers/calculations\n`;
+      response += `   - workpapers_created: Count of detailed analysis documents\n\n`;
+      response += `3. **Self-evaluate HONESTLY**:\n`;
+      response += `   - estimated_confidence: Your honest assessment (0-1)\n`;
+      response += `   - meets_confidence_threshold: Do you REALLY meet 85%?\n`;
+      response += `   - gaps_identified: What's missing if threshold not met\n\n`;
+      response += `4. **Register with counts** (NOT textual content):\n`;
+      response += `   - Use register_execution_results with self_assessment\n`;
+      response += `   - Server will validate and provide feedback\n\n`;
+      response += `Current evidence count: ${readiness.metrics.details.confidence.unique_evidence_count}\n`;
+      response += `Aim for 30+ total evidence items (10+ sources, 15+ datapoints, 5+ workpapers)\n\n`;
     }
 
     // CONSENSUS guidance

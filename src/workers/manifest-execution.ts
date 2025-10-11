@@ -121,7 +121,7 @@ You have received an execution manifest containing ALL steps across ALL plans.
    - Your own reasoning for synthesis and interpretation
 
 2. **Generate "Load Bearing" Evidence**:
-   - **External Sources**: Cite URLs, reports, academic papers with specific claims
+   - **External Sources**: Cite reports, academic papers with specific claims
    - **Quantitative Data**: Show numbers, calculations, datasets with methodology
    - **Workpapers**: Create structured artifacts (tables, charts, calculations)
    - **Comparative Analysis**: Build explicit comparisons with metrics
@@ -144,7 +144,7 @@ You have received an execution manifest containing ALL steps across ALL plans.
 1. Understand the capability being exercised
 2. Perform the analysis using appropriate tools
 3. Generate workpapers (datasets, calculations, comparisons)
-4. Cite external sources with URLs and specific data points
+4. Cite external sources with specific data points
 5. Document your reasoning process
 
 ### Evidence Requirements
@@ -152,7 +152,7 @@ You have received an execution manifest containing ALL steps across ALL plans.
 **CRITICAL**: Your evidence must be independently verifiable.
 
 **Good Evidence Examples**:
-- "According to Gartner's 2024 Market Guide (URL), the market size is $X billion"
+- "According to Gartner's 2024 Market Guide, the market size is $X billion"
 - "Calculation: Revenue = Units × Price = 1M × $50 = $50M (see workpaper)"
 - "Comparison table shows Company A has 2x the market share of Company B (see dataset)"
 
@@ -185,7 +185,7 @@ To successfully finalize this session, you need to meet these thresholds:
    - You must register results for all 15 steps
 
 2. **Confidence**: Quality over quantity
-   - Include URLs to authoritative sources (in findings text if evidence_refs is blocked)
+   - Include citations to authoritative sources
    - Show calculations with numbers and formulas
    - Create workpapers with detailed analysis
    - Aim for 10-15+ high-quality evidence items per plan
@@ -465,7 +465,7 @@ function formatManifest(manifest: ExecutionManifest): string {
   output += '## 🎬 Next Steps\n\n';
   output += '1. Execute ALL steps across ALL plans using your native reasoning and tools\n';
   output += '2. Generate workpapers (datasets, calculations, comparisons) for each analysis\n';
-  output += '3. Cite external sources with URLs and specific data points\n';
+  output += '3. Cite external sources with specific data points\n';
   output += '4. Document your findings and reasoning process\n';
   output += '5. **Call `register_execution_results` MCP tool** with your complete results\n\n';
   output += `**Execution Token**: \`${manifest.execution_token}\` (required in the tool call)\n`;
@@ -816,10 +816,10 @@ export async function handleRegisterExecutionResults(
         let suggestion = '';
         if (code === 'invalid_type' && message.includes('null')) {
           suggestion = ` → Use [] (empty array) instead of null, or omit the field entirely`;
-        } else if (path.includes('evidence_refs') && message.includes('url')) {
-          suggestion = ` → URLs in evidence_refs cause 403 errors. Put URLs in findings text instead`;
+        } else if (path.includes('evidence_refs')) {
+          suggestion = ` → Use only ref_id, type, and reliability in evidence_refs`;
         } else if (code === 'unrecognized_keys') {
-          suggestion = ` → Remove extra fields. Only include: execution_token, results`;
+          suggestion = ` → Remove extra fields. Only include: execution_token, self_assessment, results`;
         }
 
         return `  - Field "${path}": ${message}${suggestion}`;
@@ -832,9 +832,9 @@ export async function handleRegisterExecutionResults(
                 `The payload does not match the required schema. Please fix the following issues:\n\n` +
                 `${errorDetails}\n\n` +
                 `**Common fixes:**\n` +
-                `- Remove extra fields like "session_id" (only "execution_token" and "results" allowed)\n` +
+                `- Remove extra fields (only "execution_token", "self_assessment", and "results" allowed)\n` +
                 `- Change null values to [] (empty arrays) or omit optional fields\n` +
-                `- Move URLs from evidence_refs to findings text to avoid 403 errors\n\n` +
+                `- Use only counts and metrics in self_assessment\n\n` +
                 `**Valid minimal payload:**\n` +
                 `\`\`\`json\n` +
                 `{\n` +
@@ -1053,10 +1053,10 @@ function generateSaliencyReport(session: any, quality_signals: QualitySignals): 
       type: 'external_sources',
       description: 'Citations from authoritative external sources',
       examples: [
-        'Industry reports with URLs (e.g., Gartner, Forrester)',
+        'Industry reports (Gartner, Forrester, IDC)',
         'Company financial data from public sources',
-        'Academic research papers with DOIs',
-        'Government statistics with source URLs'
+        'Academic research papers',
+        'Government statistics'
       ],
       priority: 'critical',
       affected_plans: Array.from(session.plans.keys()),
@@ -1067,12 +1067,12 @@ function generateSaliencyReport(session: any, quality_signals: QualitySignals): 
   if (!quality_signals.has_quantitative_data || quality_signals.quantitative_data_points < 5) {
     missing_evidence_types.push({
       type: 'quantitative_data',
-      description: 'Numerical analysis with calculations and data sources',
+      description: 'Numerical analysis with calculations',
       examples: [
         'Market size calculations with methodology',
         'Revenue estimates with data sources',
         'Growth rate analysis with historical data',
-        'Statistical comparisons with significance tests'
+        'Statistical comparisons'
       ],
       priority: 'high',
       affected_plans: Array.from(session.plans.keys()),
@@ -1107,10 +1107,10 @@ function generateSaliencyReport(session: any, quality_signals: QualitySignals): 
     recommendations.push('Overall evidence quality is below target. Focus on adding external sources and workpapers.');
   }
   if (!quality_signals.has_external_sources) {
-    recommendations.push('Add citations to authoritative sources with URLs.');
+    recommendations.push('Add citations to authoritative sources.');
   }
   if (!quality_signals.has_quantitative_data) {
-    recommendations.push('Include numerical analysis with calculations and data sources.');
+    recommendations.push('Include numerical analysis with calculations.');
   }
   if (!quality_signals.has_workpapers) {
     recommendations.push('Create structured workpapers (datasets, calculations, comparisons).');
