@@ -233,7 +233,7 @@ This server supports parallel reasoning with diversity enforcement for complex a
 
 **Diversity Axes**: data_sources, analytical_models, time_horizons, quality_metrics, risk_perspectives, stakeholder_views
 
-**Quality Thresholds**: Confidence ≥85%, Coverage ≥95%, Consensus ≥80%
+**Quality Thresholds**: Confidence ≥75%, Coverage ≥85%, Consensus ≥70%
 `
     }
   );
@@ -558,13 +558,13 @@ This server supports parallel reasoning with diversity enforcement for complex a
           "   - workpapers_created: Count of detailed analysis documents\n" +
           "   - estimated_confidence: Your HONEST assessment (0-1). Be realistic!\n" +
           "   - estimated_coverage: % of declared steps you actually executed\n" +
-          "   - meets_confidence_threshold: Do you HONESTLY believe you meet 85%?\n" +
-          "   - meets_coverage_threshold: Do you HONESTLY believe you executed 95%?\n" +
+          "   - meets_confidence_threshold: Do you HONESTLY believe you meet 75%?\n" +
+          "   - meets_coverage_threshold: Do you HONESTLY believe you executed 85%?\n" +
           "   - gaps_identified: If thresholds not met, what's missing?\n\n" +
           "2. **Minimal results** (counts only, NO textual content):\n" +
           "   - evidence_count, source_count, data_point_count per step\n" +
           "   - evidence_refs: Just IDs (e.g., 'Source1', 'Calc1'), NO descriptions\n" +
-          "   - summary: Ultra-concise (max 200 chars)\n\n" +
+          "   - summary: Ultra-concise (max 300 chars)\n\n" +
           "**Why this approach**:\n" +
           "✅ 10x smaller payload (only numbers) → NO 403 errors\n" +
           "✅ NO batching needed (payload always small)\n" +
@@ -628,7 +628,7 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.CHECK_SESSION_READINESS,
         description:
-          "STEP 8: Check readiness BEFORE finalize. Verifies: all plans executed, critiques submitted, decisions made, quality metrics (confidence≥85%, coverage≥95%, consensus≥80%). Shows what's missing if not ready.",
+          "STEP 8: Check readiness BEFORE finalize. Verifies: all plans executed, critiques submitted, decisions made, quality metrics (confidence≥75%, coverage≥85%, consensus≥70%). Shows what's missing if not ready.",
         inputSchema: zodToJsonSchema(CheckSessionReadinessSchema) as ToolInput,
       },
       {

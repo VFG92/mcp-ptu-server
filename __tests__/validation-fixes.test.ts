@@ -160,7 +160,7 @@ describe('Validation Fixes', () => {
         session_id: sessionId
       }, manager);
 
-      // Note: Finalization will be blocked because confidence is below 85% threshold
+      // Note: Finalization will be blocked because confidence is below 75% threshold
       // (mock execution doesn't generate real evidence)
       // This test verifies that min_plans requirement is met, but quality thresholds block finalization
       expect(result.content[0].text).toContain('Session Incomplete');
@@ -337,4 +337,3 @@ describe('Validation Fixes', () => {
     });
   });
 });
-

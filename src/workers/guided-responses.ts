@@ -12,6 +12,57 @@
 import type { DiversityAxis, ReasoningPlan } from './parallel-reasoning-mcp.js';
 import { suggestDiversityAxes, COMMON_DIVERSITY_AXES, parseAxisString } from './parallel-reasoning-mcp.js';
 import type { SessionMetrics } from './session-metrics.js';
+import { CONFIDENCE_THRESHOLD, COVERAGE_THRESHOLD, CONSENSUS_THRESHOLD } from './session-metrics.js';
+
+const WORKFLOW_STEPS = [
+  '`init_parallel_reasoning` – initialize session',
+  '`submit_reasoning_plan` – submit diverse plans',
+  '`execute_reasoning_manifest` – generate manifest & execution token',
+  '`register_execution_results` – self-assess & register evidence',
+  '`list_plan_status` – review progress & gaps',
+  '`submit_peer_critique` – peer reviews with falsification tests',
+  '`submit_mediation_decision` – choose best approaches',
+  '`generate_meta_reflection` – synthesize learnings',
+  '`check_session_readiness` – verify thresholds',
+  '`finalize_parallel_reasoning` – finalize session'
+] as const;
+
+export function formatWorkflowChecklist(completedSteps: number): string {
+  const normalized = Math.max(0, Math.min(WORKFLOW_STEPS.length, Math.floor(completedSteps)));
+  const lines = WORKFLOW_STEPS.map((label, index) => {
+    if (index < normalized) {
+      const icon = index === WORKFLOW_STEPS.length - 1 && normalized === WORKFLOW_STEPS.length ? '🏁' : '✅';
+      return `${icon} Step ${index + 1}: ${label}`;
+    }
+    if (index === normalized) {
+      return `➡️ Step ${index + 1}: ${label}`;
+    }
+    return `⬜ Step ${index + 1}: ${label}`;
+  });
+
+  // If all steps completed, ensure at least one line exists
+  if (normalized === WORKFLOW_STEPS.length && lines.length === WORKFLOW_STEPS.length) {
+    lines[WORKFLOW_STEPS.length - 1] = `🏁 Step ${WORKFLOW_STEPS.length}: ${WORKFLOW_STEPS[WORKFLOW_STEPS.length - 1]}`;
+  }
+
+  return `\n## 🧭 Workflow Checklist\n\n${lines.join('\n')}\n`;
+}
+
+function getCompletedStepsForStatus(status: string): number {
+  switch (status) {
+    case 'plans_submitted':
+      return 2;
+    case 'peer_review':
+      return 5;
+    case 'mediation':
+      return 6;
+    case 'finalized':
+      return WORKFLOW_STEPS.length;
+    case 'initialized':
+    default:
+      return 1;
+  }
+}
 
 /**
  * Format session already exists (idempotent behavior)
@@ -50,7 +101,7 @@ ${plans_count < min_plans
 }
 
 ⚠️ Use session_id \`${session_id}\` for all subsequent calls.
-`;
+` + formatWorkflowChecklist(getCompletedStepsForStatus(status));
 }
 
 /**
@@ -105,9 +156,9 @@ You can use ANY axis that makes sense for your task. Here are more examples:
 ## Key Principles
 - **Plans must differ on ≥2 axes** to ensure real diversity, not cosmetic variants
 - **Optimal capability chain length**: 3-5 steps per plan
-  - Shorter chains = fewer \`execute_plan_step\` calls needed to reach 95% coverage
+  - Shorter chains = fewer \`execute_plan_step\` calls needed to reach 85% coverage
   - Longer chains (7+) = more execution time and token usage
-  - Coverage formula: executed_steps / total_declared_steps ≥ 0.95
+  - Coverage formula: executed_steps / total_declared_steps ≥ 0.85
 
 ## Next Steps
 
@@ -136,7 +187,7 @@ You can use ANY axis that makes sense for your task. Here are more examples:
 - Each \`execute_plan_step\` should describe WHAT ANALYSIS to perform, not just a label
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
-`;
+` + formatWorkflowChecklist(1);
 }
 
 /**
@@ -157,7 +208,7 @@ export function formatPlanAccepted(
   const chainLengthWarning = current_plan_chain_length > 7 ? `
 
 ⚠️ **Capability Chain Length Notice**: This plan declares ${current_plan_chain_length} capability steps.
-Longer chains require more \`execute_plan_step\` calls to reach the 95% coverage threshold.
+Longer chains require more \`execute_plan_step\` calls to reach the 85% coverage threshold.
 **Recommendation**: Consider 3-5 steps per plan for optimal execution efficiency.
 ` : '';
 
@@ -230,7 +281,7 @@ After checking readiness, you'll need to:
 `}
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
-`;
+` + formatWorkflowChecklist(needs_more ? 1 : 2);
 }
 
 /**
@@ -296,7 +347,7 @@ If required axis is "Tech Stack: Cloud" and you want a different approach:
 \`\`\`
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
-`;
+` + formatWorkflowChecklist(1);
 }
 
 /**
@@ -361,7 +412,7 @@ Your plan's axes overlap too much with existing plans. You need at least 2 axes 
 - Plan B: ["Tech Stack: Cloud", "Risk: Market-focused"] → Only 1 difference (risk value slightly different)
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
-`;
+` + formatWorkflowChecklist(1);
 }
 
 /**
@@ -400,7 +451,7 @@ Start a new session:
 \`\`\`
 
 ⚠️ **Important**: Save the session_id returned by init and use it for ALL subsequent calls.
-`;
+` + formatWorkflowChecklist(0);
 }
 
 /**
@@ -443,7 +494,7 @@ This will show you:
 
 After checking status, continue with:
 
-### 1. Execute More Capabilities (if coverage < 95%)
+### 1. Execute More Capabilities (if coverage < 85%)
 
 **CRITICAL**: The \`task\` parameter must describe WHAT ANALYSIS TO PERFORM, not just a label.
 
@@ -485,7 +536,7 @@ After checking status, continue with:
 4. **Submit peer critiques** to review other plans
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
-`;
+` + formatWorkflowChecklist(3);
 }
 
 /**
@@ -533,7 +584,7 @@ Submit additional plans with \`submit_reasoning_plan\`.
 ` : ''}
 
 ⚠️ Remember: Use session_id \`${session_id}\` for all calls.
-`;
+` + formatWorkflowChecklist(8);
 }
 
 /**
@@ -563,36 +614,39 @@ export function formatFinalizationSuccess(
 `;
 
     response += `- **Confidence**: ${(metrics.confidence * 100).toFixed(1)}% `;
-    response += metrics.confidence >= 0.85 ? '✅' : '⚠️';
-    response += ` (target: 85%, ${metrics.details.confidence.unique_evidence_count} evidence, `;
+    response += metrics.confidence >= CONFIDENCE_THRESHOLD ? '✅' : '⚠️';
+    response += ` (target: ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}%, ${metrics.details.confidence.unique_evidence_count} evidence, `;
     response += `${metrics.details.confidence.evidence_low_count} quality issues)\n`;
 
     response += `- **Coverage**: ${(metrics.coverage * 100).toFixed(1)}% `;
-    response += metrics.coverage >= 0.95 ? '✅' : '⚠️';
-    response += ` (target: 95%, ${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} steps)\n`;
+    response += metrics.coverage >= COVERAGE_THRESHOLD ? '✅' : '⚠️';
+    response += ` (target: ${(COVERAGE_THRESHOLD * 100).toFixed(0)}%, ${metrics.details.coverage.executed_steps}/${metrics.details.coverage.total_declared_steps} steps)\n`;
 
     response += `- **Consensus**: ${(metrics.consensus * 100).toFixed(1)}% `;
-    response += metrics.consensus >= 0.80 ? '✅' : '⚠️';
-    response += ` (target: 80%, ${metrics.details.consensus.agreements} agreements, `;
+    response += metrics.consensus >= CONSENSUS_THRESHOLD ? '✅' : '⚠️';
+    response += ` (target: ${(CONSENSUS_THRESHOLD * 100).toFixed(0)}%, ${metrics.details.consensus.agreements} agreements, `;
     response += `${metrics.details.consensus.conflicts} conflicts)\n\n`;
 
     // Add recommendations if metrics are below thresholds
-    const hasLowMetrics = metrics.confidence < 0.85 || metrics.coverage < 0.95 || metrics.consensus < 0.80;
+    const hasLowMetrics =
+      metrics.confidence < CONFIDENCE_THRESHOLD ||
+      metrics.coverage < COVERAGE_THRESHOLD ||
+      metrics.consensus < CONSENSUS_THRESHOLD;
 
     if (hasLowMetrics) {
       response += `### 💡 Recommendations\n\n`;
 
-      if (metrics.confidence < 0.85) {
-        const needed = Math.ceil((0.85 - metrics.confidence) / 0.1);
+      if (metrics.confidence < CONFIDENCE_THRESHOLD) {
+        const needed = Math.ceil((CONFIDENCE_THRESHOLD - metrics.confidence) / 0.1);
         response += `- **Improve Confidence**: Add ${needed} more evidence references using \`execute_plan_step\` to strengthen claims\n`;
       }
 
-      if (metrics.coverage < 0.95) {
-        const needed = Math.ceil((0.95 - metrics.coverage) * metrics.details.coverage.total_declared_steps);
+      if (metrics.coverage < COVERAGE_THRESHOLD) {
+        const needed = Math.ceil((COVERAGE_THRESHOLD - metrics.coverage) * metrics.details.coverage.total_declared_steps);
         response += `- **Improve Coverage**: Execute ${needed} more capability steps to complete declared workflows\n`;
       }
 
-      if (metrics.consensus < 0.80) {
+      if (metrics.consensus < CONSENSUS_THRESHOLD) {
         response += `- **Improve Consensus**: Submit additional peer critiques using \`submit_peer_critique\` to resolve conflicts\n`;
       }
 
@@ -610,6 +664,7 @@ You can now use the synthesized insights from the mediation decisions to make yo
 **Workflow Complete** 🎉
 `;
 
+  response += formatWorkflowChecklist(WORKFLOW_STEPS.length);
+
   return response;
 }
-

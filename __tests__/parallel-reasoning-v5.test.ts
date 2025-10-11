@@ -271,8 +271,8 @@ describe('Parallel Reasoning v5.0 - End-to-End Workflow', () => {
       }, manager);
 
       // Note: Finalization will be blocked because:
-      // 1. Coverage is low (1/8 = 12.5% < 95% threshold)
-      // 2. Confidence is low (< 85% threshold)
+      // 1. Coverage is low (1/8 = 12.5% < 85% threshold)
+      // 2. Confidence is low (< 75% threshold)
       // This test verifies that plan execution results are recorded correctly,
       // not that finalization succeeds with incomplete execution
       expect(finalize.content[0].text).toContain('Session Incomplete');

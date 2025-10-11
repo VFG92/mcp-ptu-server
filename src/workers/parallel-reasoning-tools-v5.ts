@@ -37,6 +37,7 @@ import {
 import { handleAnalyzeWithCapabilities, type CapabilitySystemRefs } from './capability-tools.js';
 import * as GuidedResponses from './guided-responses.js';
 import { formatSignals } from './evidence-signals.js';
+import { CONFIDENCE_THRESHOLD, COVERAGE_THRESHOLD, CONSENSUS_THRESHOLD } from './session-metrics.js';
 import {
   createStructuredContent,
   type WorkflowInitializedContent,
@@ -454,14 +455,15 @@ export async function handleSubmitCrossPlanNote(
     manager.submitCrossPlanNote(args.session_id, args.note);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const response = `# ❌ Validation Error\n\n${message}\n\nPlease correct the plan references and try again.`;
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease correct the plan references and try again.` +
+      GuidedResponses.formatWorkflowChecklist(3);
 
     return {
       content: [{ type: 'text', text: response }]
     };
   }
 
-  const response = `# Cross-Plan Note Recorded
+  let response = `# Cross-Plan Note Recorded
 
 **From**: ${args.note.from_plan_id}
 **To**: ${args.note.to_plan_id}
@@ -470,6 +472,8 @@ export async function handleSubmitCrossPlanNote(
 
 This note enables contamination between reasoning paths.
 Plan ${args.note.to_plan_id} can now consider insights from Plan ${args.note.from_plan_id}.`;
+
+  response += GuidedResponses.formatWorkflowChecklist(3);
 
   return {
     content: [{ type: 'text', text: response }]
@@ -492,14 +496,15 @@ export async function handleSubmitPeerCritique(
     manager.submitPeerCritique(args.session_id, args.critique);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const response = `# ❌ Validation Error\n\n${message}\n\nPlease fix the critique and resubmit.`;
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease fix the critique and resubmit.` +
+      GuidedResponses.formatWorkflowChecklist(5);
 
     return {
       content: [{ type: 'text', text: response }]
     };
   }
 
-  const response = `# Peer Critique Recorded
+  let response = `# Peer Critique Recorded
 
 **Reviewer**: ${args.critique.reviewer_plan_id}
 **Reviewed**: ${args.critique.reviewed_plan_id}
@@ -519,6 +524,8 @@ ${i + 1}. **Claim**: ${c.claim}
 ${args.critique.residual_risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
 Critique stored for consensus analysis.`;
+
+  response += GuidedResponses.formatWorkflowChecklist(6);
 
   return {
     content: [{ type: 'text', text: response }]
@@ -554,14 +561,15 @@ export async function handleSubmitMediationDecision(
     manager.submitMediationDecision(args.session_id, args.decision, validateEvidenceIds);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const response = `# ❌ Validation Error\n\n${message}\n\nPlease update the mediation decision with valid plan and evidence references.`;
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease update the mediation decision with valid plan and evidence references.` +
+      GuidedResponses.formatWorkflowChecklist(6);
 
     return {
       content: [{ type: 'text', text: response }]
     };
   }
 
-  const response = `# Mediation Decision Recorded
+  let response = `# Mediation Decision Recorded
 
 **Decision Point**: ${args.decision.decision_point}
 **Chosen From**: ${args.decision.chosen_from_plan}
@@ -572,6 +580,8 @@ export async function handleSubmitMediationDecision(
 **Evidence References**: ${args.decision.evidence_ids.join(', ')}
 
 Decision stored. Continue submitting decisions for all key points.`;
+
+  response += GuidedResponses.formatWorkflowChecklist(7);
 
   return {
     content: [{ type: 'text', text: response }]
@@ -599,7 +609,7 @@ export async function handleListPlanStatus(
 
   if (!status.session) {
     return {
-      content: [{ type: 'text', text: 'Session not found.' }]
+      content: [{ type: 'text', text: 'Session not found.' + GuidedResponses.formatWorkflowChecklist(0) }]
     };
   }
 
@@ -620,6 +630,12 @@ export async function handleListPlanStatus(
   const confidence_pct = readiness.metrics.confidence * 100;
   const consensus_pct = readiness.metrics.consensus * 100;
   const evidence_count = readiness.metrics.details.confidence.unique_evidence_count;
+  const coverageTargetValue = COVERAGE_THRESHOLD * 100;
+  const confidenceTargetValue = CONFIDENCE_THRESHOLD * 100;
+  const consensusTargetValue = CONSENSUS_THRESHOLD * 100;
+  const coverageTargetPct = coverageTargetValue.toFixed(0);
+  const confidenceTargetPct = confidenceTargetValue.toFixed(0);
+  const consensusTargetPct = consensusTargetValue.toFixed(0);
 
   // Build response with READINESS PREVIEW as primary content
   let response = `# 🎯 Readiness Preview & Session Status
@@ -636,9 +652,9 @@ ${readiness.ready ? '✅ **READY TO FINALIZE**' : '⚠️ **NOT READY - Action R
 
 | Metric | Current | Target | Status |
 |--------|---------|--------|--------|
-| **Coverage** | ${coverage_pct.toFixed(1)}% (${total_executed_steps}/${total_declared_steps} steps) | ≥95% | ${readiness.quality_check.coverage_met ? '✅' : '❌'} |
-| **Confidence** | ${confidence_pct.toFixed(1)}% | ≥85% | ${readiness.quality_check.confidence_met ? '✅' : '❌'} |
-| **Consensus** | ${consensus_pct.toFixed(1)}% | ≥80% | ${readiness.quality_check.consensus_met ? '✅' : '❌'} |
+| **Coverage** | ${coverage_pct.toFixed(1)}% (${total_executed_steps}/${total_declared_steps} steps) | ≥${coverageTargetPct}% | ${readiness.quality_check.coverage_met ? '✅' : '❌'} |
+| **Confidence** | ${confidence_pct.toFixed(1)}% | ≥${confidenceTargetPct}% | ${readiness.quality_check.confidence_met ? '✅' : '❌'} |
+| **Consensus** | ${consensus_pct.toFixed(1)}% | ≥${consensusTargetPct}% | ${readiness.quality_check.consensus_met ? '✅' : '❌'} |
 
 ---
 
@@ -667,8 +683,8 @@ ${(() => {
 | **Confidence** | ${estimatedConfidence.toFixed(1)}% | ${actualConfidence.toFixed(1)}% | ${confidenceDiff >= 0 ? '+' : ''}${confidenceDiff.toFixed(1)}% ${Math.abs(confidenceDiff) < 5 ? '✅' : (confidenceDiff > 0 ? '⚠️ Underestimated' : '⚠️ Overestimated')} |
 | **Coverage** | ${estimatedCoverage.toFixed(1)}% | ${actualCoverage.toFixed(1)}% | ${coverageDiff >= 0 ? '+' : ''}${coverageDiff.toFixed(1)}% ${Math.abs(coverageDiff) < 5 ? '✅' : (coverageDiff > 0 ? '⚠️ Underestimated' : '⚠️ Overestimated')} |
 
-${selfAssessment.meets_confidence_threshold !== (actualConfidence >= 85) ? `
-⚠️ **Self-assessment mismatch**: You said you ${selfAssessment.meets_confidence_threshold ? 'meet' : "don't meet"} confidence threshold, but server calculated ${actualConfidence >= 85 ? 'you DO meet it ✅' : "you DON'T meet it ❌"}.
+${selfAssessment.meets_confidence_threshold !== (actualConfidence >= confidenceTargetValue) ? `
+⚠️ **Self-assessment mismatch**: You said you ${selfAssessment.meets_confidence_threshold ? 'meet' : "don't meet"} confidence threshold, but server calculated ${actualConfidence >= confidenceTargetValue ? 'you DO meet it ✅' : "you DON'T meet it ❌"}.
 ` : ''}
 
 ${selfAssessment.gaps_identified && selfAssessment.gaps_identified.length > 0 ? `
@@ -688,11 +704,11 @@ ${selfAssessment.improvement_actions_taken ? `
 ## 🎬 What You Need To Do Now
 
 ${!readiness.quality_check.coverage_met ? `
-### ❌ Coverage Gap: ${(95 - coverage_pct).toFixed(1)}% short
+### ❌ Coverage Gap: ${(coverageTargetValue - coverage_pct).toFixed(1)}% short
 
 **Problem**: You've only executed ${total_executed_steps} out of ${total_declared_steps} declared capability steps.
-**Target**: Execute at least ${Math.ceil(total_declared_steps * 0.95)} steps (95% coverage).
-**Gap**: ${Math.ceil(total_declared_steps * 0.95) - total_executed_steps} more steps needed.
+**Target**: Execute at least ${Math.ceil(total_declared_steps * COVERAGE_THRESHOLD)} steps (${coverageTargetPct}% coverage).
+**Gap**: ${Math.ceil(total_declared_steps * COVERAGE_THRESHOLD) - total_executed_steps} more steps needed.
 
 **Action Required**:
 1. Use \`execute_reasoning_manifest\` to generate execution manifest
@@ -719,7 +735,7 @@ ${!readiness.quality_check.coverage_met ? `
 \`\`\`
 
 ` : ''}${!readiness.quality_check.confidence_met ? `
-### ❌ Confidence Gap: ${(85 - confidence_pct).toFixed(1)}% short
+### ❌ Confidence Gap: ${(confidenceTargetValue - confidence_pct).toFixed(1)}% short
 
 **Problem**: ${evidence_count < 4 ? 'Not enough evidence collected' : 'Evidence quality is too low'}.
 **Current Evidence IDs**: ${evidence_count}
@@ -802,7 +818,7 @@ ${Array.from(session.plans.values()).map(plan => {
   const plan_coverage = declared > 0 ? (executed / declared * 100) : 0;
 
   return `
-### ${plan.plan_id} ${plan_coverage >= 95 ? '✅' : '⚠️'}
+### ${plan.plan_id} ${plan_coverage >= coverageTargetValue ? '✅' : '⚠️'}
 
 - **Coverage**: ${plan_coverage.toFixed(0)}% (${executed}/${declared} steps executed)
 - **Diversity Axes**: ${plan.diversity_axes.join(', ')}
@@ -824,6 +840,8 @@ ${executed < declared ? `
 ---
 
 **💡 Pro Tip**: Call this tool frequently to track progress and identify gaps. Don't wait until the end!`;
+
+  response += GuidedResponses.formatWorkflowChecklist(5);
 
   // Create structured content for UI visualization
   const structuredContent = createStructuredContent<WorkflowStatusContent>(
@@ -878,7 +896,7 @@ ${executed < declared ? `
  *
  * Verifies if session is ready for finalization by checking:
  * - Structural requirements (min plans, all executed)
- * - Quality metrics (confidence ≥85%, coverage ≥95%, consensus ≥80%)
+ * - Quality metrics (confidence ≥75%, coverage ≥85%, consensus ≥70%)
  *
  * Use this BEFORE calling finalize_parallel_reasoning to avoid rejection
  */
@@ -937,9 +955,9 @@ export async function handleCheckSessionReadiness(
       response += ` ⚠️ (you overestimated by ${Math.abs(confidenceDiff).toFixed(1)}%)\n`;
     }
 
-    if (latestAssessment.meets_confidence_threshold !== (actualConfidence >= 85)) {
-      response += `\n⚠️ **Threshold mismatch**: You said you ${latestAssessment.meets_confidence_threshold ? 'meet' : "don't meet"} the 85% threshold, `;
-      response += `but server calculated you ${actualConfidence >= 85 ? 'DO meet it ✅' : "DON'T meet it ❌"}.\n`;
+    if (latestAssessment.meets_confidence_threshold !== (actualConfidence >= confidenceTargetValue)) {
+      response += `\n⚠️ **Threshold mismatch**: You said you ${latestAssessment.meets_confidence_threshold ? 'meet' : "don't meet"} the ${confidenceTargetPct}% threshold, `;
+      response += `but server calculated you ${actualConfidence >= confidenceTargetValue ? 'DO meet it ✅' : "DON'T meet it ❌"}.\n`;
     }
 
     if (latestAssessment.gaps_identified && latestAssessment.gaps_identified.length > 0) {
@@ -955,15 +973,15 @@ export async function handleCheckSessionReadiness(
   response += `### 📊 Quality Metrics\n\n`;
   response += `- **Confidence**: ${(readiness.metrics.confidence * 100).toFixed(1)}% `;
   response += readiness.quality_check.confidence_met ? '✅' : '❌';
-  response += ` (target: 85%, ${readiness.metrics.details.confidence.unique_evidence_count} evidence)\n`;
+  response += ` (target: ${confidenceTargetPct}%, ${readiness.metrics.details.confidence.unique_evidence_count} evidence)\n`;
 
   response += `- **Coverage**: ${(readiness.metrics.coverage * 100).toFixed(1)}% `;
   response += readiness.quality_check.coverage_met ? '✅' : '❌';
-  response += ` (target: 95%, ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps)\n`;
+  response += ` (target: ${coverageTargetPct}%, ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps)\n`;
 
   response += `- **Consensus**: ${(readiness.metrics.consensus * 100).toFixed(1)}% `;
   response += readiness.quality_check.consensus_met ? '✅' : '❌';
-  response += ` (target: 80%, ${readiness.metrics.details.consensus.agreements} agreements, ${readiness.metrics.details.consensus.conflicts} conflicts)\n\n`;
+  response += ` (target: ${consensusTargetPct}%, ${readiness.metrics.details.consensus.agreements} agreements, ${readiness.metrics.details.consensus.conflicts} conflicts)\n\n`;
 
   // Recommendations
   if (readiness.recommendations.length > 0) {
@@ -980,8 +998,8 @@ export async function handleCheckSessionReadiness(
 
     // COVERAGE guidance
     if (!readiness.quality_check.coverage_met) {
-      const coverageGap = 95 - (readiness.metrics.coverage * 100);
-      response += `#### 1. ❌ Coverage: ${(readiness.metrics.coverage * 100).toFixed(1)}% (need 95%)\n\n`;
+      const coverageGap = coverageTargetValue - (readiness.metrics.coverage * 100);
+      response += `#### 1. ❌ Coverage: ${(readiness.metrics.coverage * 100).toFixed(1)}% (need ${coverageTargetPct}%)\n\n`;
       response += `**Gap**: ${coverageGap.toFixed(1)}% more coverage needed\n\n`;
       response += `**How to fix**:\n`;
       response += `- You have ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps executed\n`;
@@ -992,8 +1010,8 @@ export async function handleCheckSessionReadiness(
 
     // CONFIDENCE guidance
     if (!readiness.quality_check.confidence_met) {
-      const confidenceGap = 85 - (readiness.metrics.confidence * 100);
-      response += `#### 2. ❌ Confidence: ${(readiness.metrics.confidence * 100).toFixed(1)}% (need 85%)\n\n`;
+      const confidenceGap = confidenceTargetValue - (readiness.metrics.confidence * 100);
+      response += `#### 2. ❌ Confidence: ${(readiness.metrics.confidence * 100).toFixed(1)}% (need ${confidenceTargetPct}%)\n\n`;
       response += `**Gap**: ${confidenceGap.toFixed(1)}% more confidence needed\n\n`;
       response += `**How to fix** (v5.9.0+ Self-Assessment approach):\n`;
       response += `1. **DO the research/analysis** (use web search, Python, code interpreter)\n`;
@@ -1007,7 +1025,7 @@ export async function handleCheckSessionReadiness(
       response += `   - workpapers_created: Count of detailed analysis documents\n\n`;
       response += `3. **Self-evaluate HONESTLY**:\n`;
       response += `   - estimated_confidence: Your honest assessment (0-1)\n`;
-      response += `   - meets_confidence_threshold: Do you REALLY meet 85%?\n`;
+      response += `   - meets_confidence_threshold: Do you REALLY meet ${confidenceTargetPct}%?\n`;
       response += `   - gaps_identified: What's missing if threshold not met\n\n`;
       response += `4. **Register with counts** (NOT textual content):\n`;
       response += `   - Use register_execution_results with self_assessment\n`;
@@ -1018,8 +1036,8 @@ export async function handleCheckSessionReadiness(
 
     // CONSENSUS guidance
     if (!readiness.quality_check.consensus_met) {
-      const consensusGap = 80 - (readiness.metrics.consensus * 100);
-      response += `#### 3. ❌ Consensus: ${(readiness.metrics.consensus * 100).toFixed(1)}% (need 80%)\n\n`;
+      const consensusGap = consensusTargetValue - (readiness.metrics.consensus * 100);
+      response += `#### 3. ❌ Consensus: ${(readiness.metrics.consensus * 100).toFixed(1)}% (need ${consensusTargetPct}%)\n\n`;
       response += `**Gap**: ${consensusGap.toFixed(1)}% more consensus needed\n\n`;
       response += `**How to fix**:\n`;
       response += `- Submit peer critiques using \`submit_peer_critique\`\n`;

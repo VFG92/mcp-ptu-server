@@ -129,7 +129,7 @@ Within the MCP session the following tools drive the workflow:
 5. `submit_peer_critique` – critique other plans with falsification tests.
 6. `submit_mediation_decision` – make mediation decisions between conflicting plans.
 7. `generate_meta_reflection` – analyze patterns in disagreements.
-8. `check_session_readiness` – verify if session meets quality thresholds (85%/95%/80%) before finalization.
+8. `check_session_readiness` – verify if session meets quality thresholds (75%/85%/70%) before finalization.
 9. `finalize_parallel_reasoning` – close the session, returning quality metrics.
 
 **Step 4 Details** (Self-Assessment):
@@ -143,6 +143,7 @@ Within the MCP session the following tools drive the workflow:
 
 **Monitoring Tools** (call frequently):
 - **`list_plan_status`** – **PRIMARY tool for tracking progress**. Shows current coverage/confidence/consensus %, self-assessment validation, evidence quality report, and actionable next steps.
+- **Workflow checklist in every response** – each MCP tool reply now includes a live checklist that marks completed steps and highlights the next required tool call, so the agent always knows how to continue.
 
 **Utility Tools**:
 - `regenerate_execution_token` – regenerate expired execution token (after 7 days).
@@ -180,7 +181,7 @@ message: "Session terminated"
 
 ### Best practice: Use list_plan_status frequently
 Call `list_plan_status` after submitting plans and during execution to:
-- See current progress toward finalization thresholds (coverage ≥95%, confidence ≥85%, consensus ≥80%)
+- See current progress toward finalization thresholds (coverage ≥85%, confidence ≥75%, consensus ≥70%)
 - Identify specific gaps that need to be filled
 - Get actionable recommendations for next steps
 - Track which plans need more execution
@@ -386,9 +387,9 @@ The server enforces quality thresholds to prevent premature finalization:
 
 | Metric | Threshold | Description |
 |--------|-----------|-------------|
-| **Confidence** | ≥85% | Weighted by evidence volume and quality signals |
-| **Coverage** | ≥95% | Ratio of executed capability steps to plan commitments |
-| **Consensus** | ≥80% | Balance of positive vs. conflicting peer reviews |
+| **Confidence** | ≥75% | Weighted by evidence volume and quality signals |
+| **Coverage** | ≥85% | Ratio of executed capability steps to plan commitments |
+| **Consensus** | ≥70% | Balance of positive vs. conflicting peer reviews |
 
 ### Enforcement behavior
 - `check_session_readiness` reports which thresholds are met/unmet

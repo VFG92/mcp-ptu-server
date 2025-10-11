@@ -4,7 +4,17 @@
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { ParallelReasoningSessionManager } from '../src/workers/parallel-reasoning-mcp.js';
-import { calculateConfidence, calculateCoverage, calculateConsensus, computeSessionMetrics } from '../src/workers/session-metrics.js';
+import {
+  calculateConfidence,
+  calculateCoverage,
+  calculateConsensus,
+  computeSessionMetrics,
+  generateMetricWarnings,
+  CONFIDENCE_THRESHOLD,
+  COVERAGE_THRESHOLD,
+  CONSENSUS_THRESHOLD
+} from '../src/workers/session-metrics.js';
+import type { SessionMetrics } from '../src/workers/session-metrics.js';
 
 describe('Session Quality Metrics', () => {
   let manager: ParallelReasoningSessionManager;
@@ -272,7 +282,7 @@ describe('Session Quality Metrics', () => {
 
       const result = manager.finalizeSession(sessionId);
 
-      // Note: Finalization will be blocked because confidence is below 85% threshold
+      // Note: Finalization will be blocked because confidence is below 75% threshold
       // (confidence formula caps at ~80% with current evidence)
       expect(result.finalized).toBe(false);
       expect(result.metrics).toBeDefined();
@@ -301,5 +311,76 @@ describe('Session Quality Metrics', () => {
       expect(warningText).toContain('Confidence');
     });
   });
-});
 
+  describe('generateMetricWarnings', () => {
+    const baseConfidenceDetails = {
+      unique_evidence_count: 5,
+      evidence_low_count: 1,
+      base: 0.4,
+      bonus: 0.2,
+      penalty: 0.1
+    };
+    const baseConsensusDetails = {
+      agreements: 1,
+      conflicts: 2,
+      total_interactions: 3
+    };
+
+    it('should return targeted warnings when metrics fall below thresholds', () => {
+      const metrics: SessionMetrics = {
+        confidence: Math.max(0, CONFIDENCE_THRESHOLD - 0.15),
+        coverage: Math.max(0, COVERAGE_THRESHOLD - 0.05),
+        consensus: Math.max(0, CONSENSUS_THRESHOLD - 0.2),
+        computed_at: Date.now(),
+        details: {
+          confidence: baseConfidenceDetails,
+          coverage: {
+            total_declared_steps: 20,
+            executed_steps: 16
+          },
+          consensus: baseConsensusDetails
+        }
+      };
+
+      const warnings = generateMetricWarnings(metrics);
+
+      expect(warnings).toHaveLength(3);
+
+      const expectedConfidenceNeeded = Math.ceil((CONFIDENCE_THRESHOLD - metrics.confidence) / 0.1);
+      expect(warnings[0]).toContain('Low Confidence');
+      expect(warnings[0]).toContain(`${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}% threshold`);
+      expect(warnings[0]).toContain(`Add ${expectedConfidenceNeeded} more evidence references`);
+
+      const expectedCoverageNeeded = Math.ceil(
+        (COVERAGE_THRESHOLD - metrics.coverage) * metrics.details.coverage.total_declared_steps
+      );
+      expect(warnings[1]).toContain('Low Coverage');
+      expect(warnings[1]).toContain(`${(COVERAGE_THRESHOLD * 100).toFixed(0)}% threshold`);
+      expect(warnings[1]).toContain(`Execute ${expectedCoverageNeeded} more capability steps`);
+
+      expect(warnings[2]).toContain('Low Consensus');
+      expect(warnings[2]).toContain(`${(CONSENSUS_THRESHOLD * 100).toFixed(0)}% threshold`);
+      expect(warnings[2]).toContain('Resolve conflicts through additional peer reviews or mediation');
+    });
+
+    it('should return no warnings when all thresholds are met', () => {
+      const metrics: SessionMetrics = {
+        confidence: CONFIDENCE_THRESHOLD,
+        coverage: COVERAGE_THRESHOLD,
+        consensus: CONSENSUS_THRESHOLD,
+        computed_at: Date.now(),
+        details: {
+          confidence: baseConfidenceDetails,
+          coverage: {
+            total_declared_steps: 20,
+            executed_steps: Math.ceil(COVERAGE_THRESHOLD * 20)
+          },
+          consensus: baseConsensusDetails
+        }
+      };
+
+      const warnings = generateMetricWarnings(metrics);
+      expect(warnings).toHaveLength(0);
+    });
+  });
+});

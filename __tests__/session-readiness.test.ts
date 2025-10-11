@@ -50,7 +50,7 @@ describe('Session Readiness and Quality Thresholds', () => {
       expected_outputs: ['output']
     });
 
-    // Execute only 5 steps for each plan (50% coverage, below 95% threshold)
+    // Execute only 5 steps for each plan (50% coverage, below 85% threshold)
     for (let i = 0; i < 5; i++) {
       manager.recordPlanResult('test_readiness_001', 'plan_A', {
         step_description: `Step ${i}`,
@@ -122,7 +122,7 @@ describe('Session Readiness and Quality Thresholds', () => {
       expected_outputs: ['output']
     });
 
-    // Execute only 2 steps for each plan (40% coverage, well below 95% threshold)
+    // Execute only 2 steps for each plan (40% coverage, well below 85% threshold)
     for (let i = 0; i < 2; i++) {
       manager.recordPlanResult('test_finalize_block', 'plan_A', {
         step_description: `Step ${i}`,
@@ -193,7 +193,7 @@ describe('Session Readiness and Quality Thresholds', () => {
       expected_outputs: ['output']
     });
 
-    // Execute ALL steps for each plan (100% coverage, above 95% threshold)
+    // Execute ALL steps for each plan (100% coverage, above 85% threshold)
     for (let i = 0; i < 10; i++) {
       manager.recordPlanResult('test_finalize_success', 'plan_A', {
         step_description: `Step ${i}`,
@@ -324,4 +324,3 @@ describe('Session Readiness and Quality Thresholds', () => {
     expect(readiness.recommendations.some(r => r.includes('Coverage') || r.includes('Confidence') || r.includes('Consensus'))).toBe(true);
   });
 });
-

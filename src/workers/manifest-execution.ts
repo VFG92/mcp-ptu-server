@@ -7,6 +7,8 @@
 
 import { z } from 'zod';
 import type { ParallelReasoningSessionManager } from './parallel-reasoning-mcp.js';
+import { CONFIDENCE_THRESHOLD, COVERAGE_THRESHOLD, CONSENSUS_THRESHOLD } from './session-metrics.js';
+import * as GuidedResponses from './guided-responses.js';
 import type {
   ExecutionManifest,
   ExecutionResults,
@@ -87,9 +89,9 @@ export function generateExecutionManifest(
       }))
     })),
     quality_targets: {
-      coverage: 0.95,
-      confidence: 0.85,
-      consensus: 0.80
+      coverage: COVERAGE_THRESHOLD,
+      confidence: CONFIDENCE_THRESHOLD,
+      consensus: CONSENSUS_THRESHOLD
     },
     guidance: generateExecutionGuidance(session_id, session.task_description)
   };
@@ -101,6 +103,11 @@ export function generateExecutionManifest(
  * Generate execution guidance for ChatGPT
  */
 function generateExecutionGuidance(session_id: string, task_description: string): string {
+  const confidenceTargetPct = (CONFIDENCE_THRESHOLD * 100).toFixed(0);
+  const confidenceTargetDecimal = CONFIDENCE_THRESHOLD.toFixed(2);
+  const coverageTargetPct = (COVERAGE_THRESHOLD * 100).toFixed(0);
+  const consensusTargetPct = (CONSENSUS_THRESHOLD * 100).toFixed(0);
+
   return `# 🎯 Execution Manifest for Parallel Reasoning Session
 
 **Session ID**: \`${session_id}\`
@@ -174,9 +181,9 @@ Create structured artifacts for each analysis:
 
 To successfully finalize this session, you need to meet these thresholds:
 
-- **Coverage ≥95%**: Execute ALL declared steps (don't skip any!)
-- **Confidence ≥85%**: Provide high-quality evidence (10-15+ evidence items per plan)
-- **Consensus ≥80%**: Submit peer critiques and mediation decisions
+- **Coverage ≥${coverageTargetPct}%**: Execute ALL declared steps (don't skip any!)
+- **Confidence ≥${confidenceTargetPct}%**: Provide high-quality evidence (10-15+ evidence items per plan)
+- **Consensus ≥${consensusTargetPct}%**: Submit peer critiques and mediation decisions
 
 **How to reach these targets**:
 
@@ -233,10 +240,10 @@ When you've executed ALL steps across ALL plans:
    - How many detailed workpapers did you create? (datasets, analyses)
 
 3. **SELF-EVALUATE quality** (be REALISTIC):
-   - Estimated confidence: 0-1 scale (0.5=weak, 0.7=good, 0.85+=excellent)
+   - Estimated confidence: 0-1 scale (0.5=weak, 0.7=good, ${confidenceTargetDecimal}+=excellent)
    - Estimated coverage: What % of declared steps did you execute?
-   - Do you HONESTLY meet 85% confidence threshold?
-   - Do you HONESTLY meet 95% coverage threshold?
+   - Do you HONESTLY meet ${confidenceTargetPct}% confidence threshold?
+   - Do you HONESTLY meet ${coverageTargetPct}% coverage threshold?
    - If NO: What specific gaps exist?
 
 4. **Call \`register_execution_results\`** with self-assessment:
@@ -273,8 +280,8 @@ When you've executed ALL steps across ALL plans:
 \`\`\`
 
 5. **Server provides feedback**:
-   - If confidence < 85%: "Add X more high-quality sources"
-   - If coverage < 95%: "Execute remaining Y steps"
+   - If confidence < ${confidenceTargetPct}%: "Add X more high-quality sources"
+   - If coverage < ${coverageTargetPct}%: "Execute remaining Y steps"
    - If thresholds met: "Excellent! Proceed to peer critique"
 
 6. **If thresholds NOT met**:
@@ -469,6 +476,7 @@ function formatManifest(manifest: ExecutionManifest): string {
   output += '4. Document your findings and reasoning process\n';
   output += '5. **Call `register_execution_results` MCP tool** with your complete results\n\n';
   output += `**Execution Token**: \`${manifest.execution_token}\` (required in the tool call)\n`;
+  output += GuidedResponses.formatWorkflowChecklist(3);
   
   return output;
 }
@@ -559,12 +567,12 @@ export const RegisterExecutionResultsSchema = z.object({
     workpapers_created: z.number().min(0).describe('Count of detailed analysis documents you created (datasets, calculations, comparisons)'),
 
     // Honest self-evaluation
-    estimated_confidence: z.number().min(0).max(1).describe('Your HONEST assessment of evidence quality (0-1). Be realistic: 0.5=weak, 0.7=good, 0.85+=excellent'),
+    estimated_confidence: z.number().min(0).max(1).describe(`Your HONEST assessment of evidence quality (0-1). Be realistic: 0.5=weak, 0.7=good, ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}%+=excellent`),
     estimated_coverage: z.number().min(0).max(1).describe('Your HONEST assessment of step completion (0-1). What % of declared steps did you actually execute?'),
 
     // Self-verification against thresholds
-    meets_confidence_threshold: z.boolean().describe('Do you HONESTLY believe your evidence quality meets 85% confidence threshold?'),
-    meets_coverage_threshold: z.boolean().describe('Do you HONESTLY believe you executed 95% of declared steps?'),
+    meets_confidence_threshold: z.boolean().describe(`Do you HONESTLY believe your evidence quality meets ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}% confidence threshold?`),
+    meets_coverage_threshold: z.boolean().describe(`Do you HONESTLY believe you executed ${(COVERAGE_THRESHOLD * 100).toFixed(0)}% of declared steps?`),
 
     // If thresholds not met, what's missing?
     gaps_identified: z.array(z.string()).optional().describe('If thresholds not met: list specific gaps (e.g., "Missing external validation for claim X", "No quantitative data for Y")'),
@@ -588,8 +596,8 @@ export const RegisterExecutionResultsSchema = z.object({
       reliability: z.number().min(0).max(1).optional().describe('Your assessment of this evidence reliability (0-1)')
     })).optional().default([]).describe('Minimal evidence references - just IDs and types, NO textual content'),
 
-    // Ultra-concise summary (max 200 chars)
-    summary: z.string().max(200).describe('ULTRA-CONCISE summary of findings (max 200 chars). Example: "12 user journeys analyzed. Conversion gap 15-25%. Sources: 3 external, 5 calculations."')
+    // Ultra-concise summary (max 300 chars)
+    summary: z.string().max(300).describe('ULTRA-CONCISE summary of findings (max 300 chars). Example: "12 user journeys analyzed. Conversion gap 15-25%. Sources: 3 external, 5 calculations."')
   })).describe('Minimal results with counts and references only. Full analysis details stay with you (ChatGPT) - server only needs counts for metrics.')
 });
 
@@ -646,7 +654,9 @@ export async function handleRegisterExecutionResults(
         'Execution token already used. Generate a new manifest with `execute_reasoning_manifest` if you need to register more results.'
       );
     }
-    token.used = true;
+
+    const confidenceTargetPct = (CONFIDENCE_THRESHOLD * 100).toFixed(0);
+    const coverageTargetPct = (COVERAGE_THRESHOLD * 100).toFixed(0);
 
     console.log(`[Self-Assessment] Received self-assessment from ChatGPT:`);
     console.log(`  - Total evidence items: ${args.self_assessment.total_evidence_items}`);
@@ -655,42 +665,65 @@ export async function handleRegisterExecutionResults(
     console.log(`  - Workpapers created: ${args.self_assessment.workpapers_created}`);
     console.log(`  - Estimated confidence: ${(args.self_assessment.estimated_confidence * 100).toFixed(1)}%`);
     console.log(`  - Estimated coverage: ${(args.self_assessment.estimated_coverage * 100).toFixed(1)}%`);
-    console.log(`  - Meets confidence threshold (85%): ${args.self_assessment.meets_confidence_threshold}`);
-    console.log(`  - Meets coverage threshold (95%): ${args.self_assessment.meets_coverage_threshold}`);
+    console.log(`  - Meets confidence threshold (${confidenceTargetPct}%): ${args.self_assessment.meets_confidence_threshold}`);
+    console.log(`  - Meets coverage threshold (${coverageTargetPct}%): ${args.self_assessment.meets_coverage_threshold}`);
 
     // Register all results with self-assessment metadata
-    let registered_count = 0;
-    let failed_count = 0;
+    const newlyRegistered: string[] = [];
+    const updatedResults: string[] = [];
+    const failedResults: string[] = [];
 
     for (const result of args.results) {
       try {
+        const planResults = session.plan_results.get(result.plan_id);
+
+        if (!planResults) {
+          failedResults.push(
+            `${result.plan_id}/${result.step_id}: plan not found in session. Submit plan before registering results.`
+          );
+          console.warn(`[Self-Assessment] Skipping result for unknown plan ${result.plan_id}`);
+          continue;
+        }
+
         // Create evidence ID
         const evidence_id = `evidence_${result.plan_id}_${result.step_id}_${Date.now()}`;
 
-        // Register in plan_results with NEW format (counts instead of content)
-        if (!session.plan_results.has(result.plan_id)) {
-          session.plan_results.set(result.plan_id, []);
-        }
-
-        session.plan_results.get(result.plan_id)!.push({
+        const storedResult = {
           step_id: result.step_id,
           evidence_id,
           // Store minimal data (NEW format)
-          findings: result.summary, // Ultra-concise summary only
+          findings: result.summary,
           evidence_refs: result.evidence_refs || [],
           // Store counts for metrics calculation
           evidence_count: result.evidence_count,
           source_count: result.source_count,
           data_point_count: result.data_point_count,
           timestamp: Date.now()
-        });
+        };
 
-        registered_count++;
+        const existingIndex = planResults.findIndex(existing => existing.step_id === result.step_id);
+
+        if (existingIndex >= 0) {
+          planResults[existingIndex] = storedResult;
+          updatedResults.push(`${result.plan_id}/${result.step_id}`);
+        } else {
+          planResults.push(storedResult);
+          newlyRegistered.push(`${result.plan_id}/${result.step_id}`);
+        }
       } catch (error) {
         console.error(`Failed to register result for ${result.plan_id}/${result.step_id}:`, error);
-        failed_count++;
+        failedResults.push(
+          `${result.plan_id}/${result.step_id}: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
+
+    const registered_count = newlyRegistered.length;
+    const updated_count = updatedResults.length;
+    const failed_count = failedResults.length;
+
+    // Mark token as used only when all results processed successfully
+    token.used = failed_count === 0;
 
     // Store self-assessment in session for later validation
     if (!session.self_assessments) {
@@ -717,17 +750,28 @@ export async function handleRegisterExecutionResults(
     const metrics = manager.computeMetrics(session.session_id);
 
     // Validate self-assessment honesty
-    const confidence_gap = 0.85 - args.self_assessment.estimated_confidence;
-    const coverage_gap = 0.95 - args.self_assessment.estimated_coverage;
+    const confidence_gap = CONFIDENCE_THRESHOLD - args.self_assessment.estimated_confidence;
+    const coverage_gap = COVERAGE_THRESHOLD - args.self_assessment.estimated_coverage;
 
     // Build response with feedback
     let response = `# ✅ Results Registered\n\n`;
     response += `**Session**: \`${session.session_id}\`\n`;
-    response += `**Registered**: ${registered_count} results`;
+    response += `**Registered**: ${registered_count} new result${registered_count === 1 ? '' : 's'}`;
+    if (updated_count > 0) {
+      response += `, ${updated_count} updated`;
+    }
     if (failed_count > 0) {
-      response += ` (${failed_count} failed)`;
+      response += `, ${failed_count} failed`;
     }
     response += `\n\n`;
+
+    if (newlyRegistered.length > 0) {
+      response += `**New entries**: ${newlyRegistered.join(', ')}\n\n`;
+    }
+
+    if (updatedResults.length > 0) {
+      response += `**Updated entries**: ${updatedResults.join(', ')}\n\n`;
+    }
 
     // Self-Assessment Review
     response += `## 🔍 Self-Assessment Review\n\n`;
@@ -740,28 +784,28 @@ export async function handleRegisterExecutionResults(
     response += `**Your self-evaluation**:\n`;
     response += `- Estimated confidence: ${(args.self_assessment.estimated_confidence * 100).toFixed(1)}%`;
     response += args.self_assessment.meets_confidence_threshold ? ' ✅' : ' ⚠️';
-    response += ` (target: 85%)\n`;
+    response += ` (target: ${confidenceTargetPct}%)\n`;
     response += `- Estimated coverage: ${(args.self_assessment.estimated_coverage * 100).toFixed(1)}%`;
     response += args.self_assessment.meets_coverage_threshold ? ' ✅' : ' ⚠️';
-    response += ` (target: 95%)\n\n`;
+    response += ` (target: ${coverageTargetPct}%)\n\n`;
 
     // Calculated metrics
     response += `**Calculated metrics** (server-side validation):\n`;
     response += `- Confidence: ${(metrics.confidence * 100).toFixed(1)}%`;
-    response += metrics.confidence >= 0.85 ? ' ✅' : ' ⚠️';
+    response += metrics.confidence >= CONFIDENCE_THRESHOLD ? ' ✅' : ' ⚠️';
     response += `\n`;
     response += `- Coverage: ${(metrics.coverage * 100).toFixed(1)}%`;
-    response += metrics.coverage >= 0.95 ? ' ✅' : ' ⚠️';
+    response += metrics.coverage >= COVERAGE_THRESHOLD ? ' ✅' : ' ⚠️';
     response += `\n`;
     response += `- Consensus: ${(metrics.consensus * 100).toFixed(1)}%`;
-    response += metrics.consensus >= 0.80 ? ' ✅' : ' ⚠️';
+    response += metrics.consensus >= CONSENSUS_THRESHOLD ? ' ✅' : ' ⚠️';
     response += `\n\n`;
 
     // Feedback based on thresholds
     if (!args.self_assessment.meets_confidence_threshold || confidence_gap > 0) {
       response += `### ⚠️ Confidence Below Threshold\n\n`;
       response += `**Gap**: ${(confidence_gap * 100).toFixed(1)}% more confidence needed\n\n`;
-      response += `**How to improve** (add ${Math.ceil(confidence_gap * 20)} more high-quality evidence items):\n`;
+      response += `**How to improve** (add ${Math.max(1, Math.ceil(confidence_gap * 20))} more high-quality evidence items):\n`;
       response += `- Add more external authoritative sources (academic papers, official reports)\n`;
       response += `- Include more quantitative data points and calculations\n`;
       response += `- Create detailed workpapers showing methodology\n\n`;
@@ -782,10 +826,13 @@ export async function handleRegisterExecutionResults(
     if (!args.self_assessment.meets_coverage_threshold || coverage_gap > 0) {
       response += `### ⚠️ Coverage Below Threshold\n\n`;
       response += `**Gap**: ${(coverage_gap * 100).toFixed(1)}% more coverage needed\n\n`;
-      response += `Execute remaining steps and regenerate token to register additional results.\n\n`;
+      response += `**How to improve**:\n`;
+      response += `- Execute remaining capability steps in your manifest\n`;
+      response += `- Register the missing steps with evidence counts\n`;
+      response += `- Re-run \`register_execution_results\` (token remains active while issues persist)\n\n`;
     }
 
-    if (args.self_assessment.meets_confidence_threshold && args.self_assessment.meets_coverage_threshold) {
+    if (failed_count === 0 && args.self_assessment.meets_confidence_threshold && args.self_assessment.meets_coverage_threshold) {
       response += `### ✅ Excellent Work!\n\n`;
       response += `Your self-assessment indicates high-quality evidence. Proceed to:\n`;
       response += `- **STEP 5**: \`submit_peer_critique\` for peer review\n`;
@@ -794,9 +841,20 @@ export async function handleRegisterExecutionResults(
       response += `- **STEP 8**: \`check_session_readiness\` before finalizing\n\n`;
     }
 
-    // Next steps
-    response += `## 🎯 Next Steps\n\n`;
-    response += `Call \`list_plan_status\` to see detailed evidence quality report.\n`;
+    if (failed_count > 0) {
+      response += `## ⚠️ Registration Issues\n\n`;
+      response += `The execution token remains active because some steps failed to register. Fix the problems below and re-submit only the affected steps:\n\n`;
+      failedResults.forEach(issue => {
+        response += `- ${issue}\n`;
+      });
+      response += `\nWhen ready, call \`register_execution_results\` again with corrected data.`;
+    } else {
+      response += `## 🎯 Next Steps\n\n`;
+      response += `Call \`list_plan_status\` to see detailed evidence quality report.\n`;
+    }
+
+    const checklistStep = failed_count === 0 ? 4 : 3;
+    response += GuidedResponses.formatWorkflowChecklist(checklistStep);
 
     return {
       content: [{
