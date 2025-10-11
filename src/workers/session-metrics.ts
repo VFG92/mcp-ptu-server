@@ -13,19 +13,22 @@ import type { ParallelReasoningSession } from './parallel-reasoning-mcp.js';
  * Quality thresholds for session readiness
  * These are the minimum values required for a session to be considered ready for finalization
  *
- * UPDATED 2025-10-10: Lowered thresholds to be more achievable while maintaining quality
- * - Confidence: 85% → 75% (still requires good evidence)
- * - Coverage: 95% → 85% (still requires most plans executed)
- * - Consensus: 80% → 70% (allows for healthy disagreement)
+ * UPDATED 2025-10-11: Restored to original rigorous thresholds
+ * - Confidence: 85% (requires high-quality evidence with proper self-assessment)
+ * - Coverage: 95% (requires nearly all declared steps executed)
+ * - Consensus: 80% (requires strong agreement across plans)
+ *
+ * Note: With improved bonus calculations and penalty removal for self-assessment,
+ * these thresholds are now achievable with proper evidence collection.
  */
-export const CONFIDENCE_THRESHOLD = 0.75;  // 75% (was 85%)
-export const COVERAGE_THRESHOLD = 0.85;    // 85% (was 95%)
-export const CONSENSUS_THRESHOLD = 0.70;   // 70% (was 80%)
+export const CONFIDENCE_THRESHOLD = 0.85;  // 85% (restored from 75%)
+export const COVERAGE_THRESHOLD = 0.95;    // 95% (restored from 85%)
+export const CONSENSUS_THRESHOLD = 0.80;   // 80% (restored from 70%)
 
 export interface SessionMetrics {
-  confidence: number;  // 0-1, threshold: 0.85
-  coverage: number;    // 0-1, threshold: 0.95
-  consensus: number;   // 0-1, threshold: 0.80
+  confidence: number;  // 0-1, threshold: 0.85 (85%)
+  coverage: number;    // 0-1, threshold: 0.95 (95%)
+  consensus: number;   // 0-1, threshold: 0.80 (80%)
   computed_at: number;
   details: {
     confidence: {
@@ -180,24 +183,28 @@ export function calculateConfidence(session: ParallelReasoningSession): {
 
   qualityBonus = Math.min(0.25, qualityBonus);  // INCREASED from 0.2
 
-  // Count evidence_low signals
+  // Count evidence_low signals ONLY if no self-assessment
+  // When self-assessment is present, we trust ChatGPT's declared counts
   let evidenceLowCount = 0;
 
-  for (const plan of session.plans.values()) {
-    if (plan.signals?.signals.some((s: any) => s.type === 'evidence_low')) {
-      evidenceLowCount++;
+  if (!hasSelfAssessment) {
+    // Only apply penalties when using legacy textual analysis
+    for (const plan of session.plans.values()) {
+      if (plan.signals?.signals.some((s: any) => s.type === 'evidence_low')) {
+        evidenceLowCount++;
+      }
     }
-  }
 
-  for (const critique of session.peer_critiques) {
-    if (critique.signals?.signals.some((s: any) => s.type === 'evidence_low')) {
-      evidenceLowCount++;
+    for (const critique of session.peer_critiques) {
+      if (critique.signals?.signals.some((s: any) => s.type === 'evidence_low')) {
+        evidenceLowCount++;
+      }
     }
-  }
 
-  for (const decision of session.mediation_decisions) {
-    if (decision.signals?.signals.some((s: any) => s.type === 'evidence_low')) {
-      evidenceLowCount++;
+    for (const decision of session.mediation_decisions) {
+      if (decision.signals?.signals.some((s: any) => s.type === 'evidence_low')) {
+        evidenceLowCount++;
+      }
     }
   }
 

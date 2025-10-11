@@ -22,7 +22,7 @@ Were incorrectly considered identical (diversity = 0) because the parser removed
 ### Evidence Quality & Moderation Prevention
 
 **Problem Solved**: ChatGPT was experiencing two critical issues:
-1. **Confidence too low**: Even with quality evidence (ISTAT, WEF, Excelsior citations), confidence stayed below 75%
+1. **Confidence too low**: Even with quality evidence (ISTAT, WEF, Excelsior citations), confidence stayed below 85%
 2. **Moderation blocks**: Using real source names in `evidence_refs.ref_id` triggered OpenAI 403 errors
 
 **Solution Implemented**:
@@ -109,10 +109,10 @@ Were incorrectly considered identical (diversity = 0) because the parser removed
    - `workpapers_created`: Detailed analysis documents
 
 3. **SELF-EVALUATE quality** (be REALISTIC):
-   - `estimated_confidence`: 0-1 scale (0.5=weak, 0.7=good, 0.75+=excellent)
+   - `estimated_confidence`: 0-1 scale (0.5=weak, 0.7=good, 0.85+=excellent)
    - `estimated_coverage`: % of declared steps executed
-   - `meets_confidence_threshold`: Do you HONESTLY meet 75%?
-   - `meets_coverage_threshold`: Do you HONESTLY meet 85%?
+   - `meets_confidence_threshold`: Do you HONESTLY meet 85%?
+   - `meets_coverage_threshold`: Do you HONESTLY meet 95%?
    - `gaps_identified`: If NO, what specific gaps exist?
 
 4. **Call `register_execution_results`** with self-assessment

@@ -899,7 +899,7 @@ export class ParallelReasoningSessionManager {
    * Validates:
    * - Minimum plans requirement
    * - All plans have execution results
-   * - Quality metrics meet thresholds (75% confidence, 85% coverage, 70% consensus)
+   * - Quality metrics meet thresholds (85% confidence, 95% coverage, 80% consensus)
    */
   checkSessionReadiness(session_id: string): {
     ready: boolean;
