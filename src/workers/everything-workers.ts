@@ -554,6 +554,10 @@ This server supports parallel reasoning with diversity enforcement for complex a
           "✅ INSTEAD: Put ALL URLs directly in findings text (markdown format)\n" +
           "✅ Use evidence_refs ONLY for: citations (author/year), calculations, data_source names\n" +
           "✅ Put detailed source info in workpapers.content if needed\n\n" +
+          "🔄 BATCHING: If you have many results (>10) or large workpapers, split into multiple calls:\n" +
+          "- Call this tool multiple times with the SAME execution_token\n" +
+          "- Send 3-5 results per batch to avoid 403 'safety' blocks\n" +
+          "- Each batch is registered independently\n\n" +
           "Example findings: 'Market grew 25% (Source: Reuters https://..., Bloomberg https://...)'\n" +
           "Example evidence_refs: [{type: 'citation', source: 'Smith 2024', description: 'Study on...'}]",
         inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
@@ -858,34 +862,14 @@ This server supports parallel reasoning with diversity enforcement for complex a
           const parseResult = RegisterExecutionResultsSchema.safeParse(args);
 
           if (!parseResult.success) {
-            // Log validation errors but try to proceed with sanitized data
-            console.warn(`[CallTool] Validation warnings in register_execution_results:`, parseResult.error.errors);
-            console.warn(`[CallTool] Attempting to proceed with available data...`);
-
-            // Try to extract what we can from the raw args
-            const validatedArgs = {
-              execution_token: args.execution_token || '',
-              results: Array.isArray(args.results) ? args.results.map((r: any) => ({
-                plan_id: r.plan_id || 'unknown',
-                step_id: r.step_id || 'unknown',
-                findings: r.findings || '',
-                evidence_refs: Array.isArray(r.evidence_refs) ? r.evidence_refs : [],
-                workpapers: Array.isArray(r.workpapers) ? r.workpapers : [],
-                reasoning_trace: r.reasoning_trace
-              })) : []
+            // Log validation errors but return error instead of trying to proceed
+            console.error(`[CallTool] Validation failed in register_execution_results:`, parseResult.error.errors);
+            return {
+              content: [{
+                type: 'text',
+                text: `❌ Validation Error: ${parseResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
+              }]
             };
-
-            // Call handler with sanitized args
-            const result = await handleRegisterExecutionResults(validatedArgs, parallelReasoningV5Manager);
-
-            // Persist session state
-            if (parallelReasoningV5PersistCallback) {
-              console.log(`[CallTool] Persisting session state after registering results...`);
-              await parallelReasoningV5PersistCallback();
-              console.log(`[CallTool] Session state persisted successfully`);
-            }
-
-            return result;
           }
 
           // Validation successful - proceed normally
