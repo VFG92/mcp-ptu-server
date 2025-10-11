@@ -12,9 +12,11 @@ An MCP-compliant Cloudflare Worker that helps ChatGPT coordinate structured, mul
 - ✅ Plans using parentheses format now correctly differentiate from each other
 
 **Fixed: Confidence Calculation & Moderation Blocks**
-- ✅ Increased evidence quality bonuses to make 75% threshold more achievable
+- ✅ Increased evidence quality bonuses to make 85% threshold achievable
+- ✅ Disabled automatic penalties when self-assessment is present (trust ChatGPT's counts)
 - ✅ Added regex validation to enforce synthetic IDs (Source1, Calc1, Data1, WP1)
 - ✅ Prevented moderation blocks by rejecting real source names (ISTAT, WEF, Excelsior)
+- ✅ Reduced payload size (removed evidence_refs, max 100 char summary) to avoid connector blocks
 - ✅ Reduced summary max length from 300 to 200 chars to minimize moderation risk
 - ✅ Updated tool descriptions with CRITICAL anti-moderation rules
 
@@ -156,7 +158,7 @@ Within the MCP session the following tools drive the workflow:
 5. `submit_peer_critique` – critique other plans with falsification tests.
 6. `submit_mediation_decision` – make mediation decisions between conflicting plans.
 7. `generate_meta_reflection` – analyze patterns in disagreements.
-8. `check_session_readiness` – verify if session meets quality thresholds (75%/85%/70%) before finalization.
+8. `check_session_readiness` – verify if session meets quality thresholds (85%/95%/80%) before finalization.
 9. `finalize_parallel_reasoning` – close the session, returning quality metrics.
 
 **Step 4 Details** (Self-Assessment):
@@ -208,7 +210,7 @@ message: "Session terminated"
 
 ### Best practice: Use list_plan_status frequently
 Call `list_plan_status` after submitting plans and during execution to:
-- See current progress toward finalization thresholds (coverage ≥85%, confidence ≥75%, consensus ≥70%)
+- See current progress toward finalization thresholds (coverage ≥95%, confidence ≥85%, consensus ≥80%)
 - Identify specific gaps that need to be filled
 - Get actionable recommendations for next steps
 - Track which plans need more execution
@@ -414,9 +416,9 @@ The server enforces quality thresholds to prevent premature finalization:
 
 | Metric | Threshold | Description |
 |--------|-----------|-------------|
-| **Confidence** | ≥75% | Weighted by evidence volume and quality signals |
-| **Coverage** | ≥85% | Ratio of executed capability steps to plan commitments |
-| **Consensus** | ≥70% | Balance of positive vs. conflicting peer reviews |
+| **Confidence** | ≥85% | Weighted by evidence volume and quality signals (self-assessment based) |
+| **Coverage** | ≥95% | Ratio of executed capability steps to plan commitments |
+| **Consensus** | ≥80% | Balance of positive vs. conflicting peer reviews |
 
 ### Enforcement behavior
 - `check_session_readiness` reports which thresholds are met/unmet

@@ -150,8 +150,8 @@ Were incorrectly considered identical (diversity = 0) because the parser removed
 
 **Server Response**:
 - ✅ If thresholds met: "Excellent! Proceed to peer critique"
-- ⚠️ If confidence < 75%: "Add X more high-quality sources"
-- ⚠️ If coverage < 85%: "Execute remaining Y steps"
+- ⚠️ If confidence < 85%: "Add X more high-quality sources"
+- ⚠️ If coverage < 95%: "Execute remaining Y steps"
 
 **Workflow Checklist**:
 - Every MCP response now includes a live checklist that marks completed steps and highlights the next required tool call, ensuring ChatGPT stays on the manifest workflow until finalization.
@@ -185,13 +185,13 @@ Use the following prompt to exercise the server end-to-end:
 > 7. Submit peer critiques using `submit_peer_critique` with falsification tests
 > 8. Submit mediation decisions using `submit_mediation_decision`
 > 9. **Call `generate_meta_reflection`** to analyze patterns
-> 10. Call `check_session_readiness` to verify thresholds (75%/85%/70%)
+> 10. Call `check_session_readiness` to verify thresholds (85%/95%/80%)
 > 11. Call `finalize_parallel_reasoning` when ready
 >
 > **CRITICAL - Self-Assessment**:
 > - Be HONEST about evidence quality (don't inflate numbers)
-> - If confidence < 75%: Add more high-quality sources BEFORE registering
-> - If coverage < 85%: Execute remaining steps
+> - If confidence < 85%: Add more high-quality sources BEFORE registering
+> - If coverage < 95%: Execute remaining steps
 > - Server validates your self-assessment and provides feedback
 >
 > **IMPORTANT FOR TRACKING PROGRESS**:
@@ -393,7 +393,7 @@ ConnectorClientError: 403: "Server returned 403: 'Invocation is blocked on safet
 **Key principle**: ChatGPT is responsible for honest self-evaluation. Server validates and guides.
 
 **Impact**:
-- ChatGPT can now reach 75%+ confidence by DOING research and COUNTING evidence
+- ChatGPT can now reach 85%+ confidence by DOING research and COUNTING evidence
 - NO 403 errors (payload contains only numbers)
 - Self-assessment encourages honest quality evaluation
 - Auto-correction loop (ChatGPT knows if evidence insufficient)
@@ -417,7 +417,7 @@ This would score:
 - Quality bonus: +0.08 (sources) + 0.075 (datapoints) + 0.02 (workpapers) = +0.175
 - **Total: 0.875 (87.5%)** from comprehensive self-assessment
 
-**75%+ confidence easily achievable** by doing thorough research and counting evidence.
+**85%+ confidence easily achievable** by doing thorough research and counting evidence.
 
 ## Recent Improvements (2025-10-10)
 
@@ -435,7 +435,7 @@ This would score:
 - `src/workers/everything-workers.ts` (line 532): Updated tool description
 
 ### 2. Quality Metrics Guidance ✅
-**Problem**: ChatGPT struggled to reach coverage (85%), confidence (75%), and consensus (70%) thresholds without understanding HOW to improve.
+**Problem**: ChatGPT struggled to reach coverage (95%), confidence (85%), and consensus (80%) thresholds without understanding HOW to improve.
 
 **Solution**: Added progressive, detailed guidance at multiple levels:
 
@@ -1000,9 +1000,9 @@ The server enforces strict quality thresholds to prevent premature finalization 
 ### Quality metrics and thresholds
 | Metric | Threshold | Formula |
 |--------|-----------|---------|
-| **Confidence** | ≥75% | Base (50%) + Evidence bonus (max +30%) - Quality penalty (max -40%) |
-| **Coverage** | ≥85% | Executed steps / Declared capability chain steps |
-| **Consensus** | ≥70% | Normalized from peer critique agreement scores |
+| **Confidence** | ≥85% | Base (40%) + Evidence bonus (max +35%) + Quality bonus (max +25%) - Quality penalty (max -40%, disabled with self-assessment) |
+| **Coverage** | ≥95% | Executed steps / Declared capability chain steps |
+| **Consensus** | ≥80% | Normalized from peer critique agreement scores |
 
 ### Workflow enforcement
 1. **Pre-finalization check**: Always call `check_session_readiness` before `finalize_parallel_reasoning`
@@ -1157,9 +1157,9 @@ All quality metrics are now enhanced:
 - **Consensus**: Rewards constructive disagreement with falsification tests
 
 **Thresholds** (enforced at finalization):
-- Confidence ≥ 75%
-- Coverage ≥ 85%
-- Consensus ≥ 70%
+- Confidence ≥ 85%
+- Coverage ≥ 95%
+- Consensus ≥ 80%
 
 ## Code reference map
 - `src/workers/examples/capability-integration-example.ts` – capability orchestration, evidence handling, and tournament kernel reference.
