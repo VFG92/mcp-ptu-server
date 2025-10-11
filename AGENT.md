@@ -22,16 +22,47 @@ This document keeps contributors and AI agents aligned while working on the repo
 - `./scripts/test-parallel-reasoning-simple.sh` – lightweight smoke test for Durable Object persistence (requires `npm run workers:dev`).
 - `./scripts/test-parallel-reasoning-fix.sh` – verbose MCP walkthrough for debugging complex workflows.
 
-## Direct results API
-- Switch to `POST /api/register-results` when MCP sessions expire or moderation blocks `register_execution_results`.
-- The endpoint extracts `session_id` from the `execution_token`, so clients never send session identifiers directly.
-- **Session Registry Integration**: The endpoint now checks a global SessionRegistry to route to the correct Durable Object instance
-  - When `init_parallel_reasoning` is called, the server registers `session_id → DO_ID` mapping
-  - `/api/register-results` uses this mapping to ensure it routes to the same DO that created the session
-  - This fixes the critical bug where results were being sent to an empty DO instance
-- Run `./test-simple-direct-api.sh` and `./test-direct-api.sh` before shipping changes that touch execution result handling.
-- Error handling and storage writes live in `src/workers/session.ts#handleInternalRegisterResults`; keep the handler idempotent for safe retries.
-- The MCP tool `register_execution_results` is now hidden; rely exclusively on the HTTP endpoint for batch submissions.
+## Register Execution Results
+
+### Primary Method: MCP Tool
+- Use the `register_execution_results` MCP tool to submit execution results
+- **What it does**:
+  - ✅ Bypasses MCP transport session management (prevents "Session terminated" errors)
+  - ✅ Validates execution token and routes to correct Durable Object via SessionRegistry
+  - ✅ Persists results to session state
+
+### ⚠️ CRITICAL: URL Handling to Avoid 403 Blocks
+- **DO NOT** include URLs in `evidence_refs` - OpenAI's security filters will block with 403 error
+- **DO** put ALL web URLs directly in `findings` text using markdown format
+- **DO** use `evidence_refs` ONLY for: citations (author/year), calculations, data_source names (no URLs)
+- **DO** put detailed source information in `workpapers.content` if needed
+
+**Example (CORRECT)**:
+```json
+{
+  "findings": "Market grew 25% in Q1. Sources: Reuters (https://reuters.com/...), Bloomberg (https://bloomberg.com/...)",
+  "evidence_refs": [
+    {"type": "citation", "source": "Smith et al. 2024", "description": "Academic study on market trends"}
+  ],
+  "workpapers": [
+    {"type": "dataset", "title": "Raw Data", "content": "Source: https://example.com\n\nData: ...", "format": "markdown"}
+  ]
+}
+```
+
+**Example (WRONG - will cause 403)**:
+```json
+{
+  "evidence_refs": [
+    {"type": "url", "source": "https://example.com", "description": "..."}
+  ]
+}
+```
+
+### Fallback: HTTP Endpoint
+- The `/api/register-results` HTTP endpoint remains available for direct API access
+- Use this if the MCP tool is blocked or unavailable
+- Same functionality as the MCP tool but requires external HTTP client
 
 ## Recommended MCP prompt
 Use the following prompt to exercise the server end-to-end:

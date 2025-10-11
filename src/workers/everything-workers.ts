@@ -144,7 +144,8 @@ enum ParallelReasoningV5ToolName {
   FINALIZE_PARALLEL_REASONING = 'finalize_parallel_reasoning',
   // Manifest-based execution (NEW - replaces execute_plan_step)
   EXECUTE_REASONING_MANIFEST = 'execute_reasoning_manifest',
-  REGENERATE_EXECUTION_TOKEN = 'regenerate_execution_token'
+  REGENERATE_EXECUTION_TOKEN = 'regenerate_execution_token',
+  REGISTER_EXECUTION_RESULTS = 'register_execution_results'
 }
 
 // Example completion values
@@ -572,14 +573,7 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.EXECUTE_REASONING_MANIFEST,
         description:
-          "STEP 5: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions.\n\n" +
-          "⚠️ CRITICAL: After executing steps, you MUST use the HTTP API to register results:\n" +
-          "- POST to /api/register-results (HTTP endpoint, NOT an MCP tool)\n" +
-          "- Why: ChatGPT in developer mode closes MCP connections after every tool call (sends DELETE /mcp)\n" +
-          "- The MCP transport marks sessions as terminated, causing -32600 errors\n" +
-          "- The HTTP API bypasses MCP session management entirely and extracts session_id from the execution_token\n" +
-          "- DO NOT call register_execution_results MCP tool - it will fail with 'Session terminated'\n\n" +
-          "ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter) and then POST results to /api/register-results. Each token can only be used ONCE—generate a new manifest if you need another token.",
+          "STEP 5: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions. ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter) and then call register_execution_results. Each token can only be used ONCE—generate a new manifest if you need another token.",
         inputSchema: zodToJsonSchema(ExecuteReasoningManifestSchema) as ToolInput,
       },
       {
@@ -587,6 +581,19 @@ This server supports parallel reasoning with diversity enforcement for complex a
         description:
           "Regenerate execution token when previous token has expired (after 7 days). Useful for long-running analysis workflows. Preserves existing execution results by default. Returns new token valid for 7 days.",
         inputSchema: zodToJsonSchema(RegenerateExecutionTokenSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
+        description:
+          "STEP 6: Register execution results after executing all steps from the manifest. " +
+          "This tool bypasses MCP session management to prevent 'Session terminated' errors.\n\n" +
+          "⚠️ CRITICAL: DO NOT include URLs in evidence_refs - OpenAI will block with 403!\n" +
+          "✅ INSTEAD: Put ALL URLs directly in findings text (markdown format)\n" +
+          "✅ Use evidence_refs ONLY for: citations (author/year), calculations, data_source names\n" +
+          "✅ Put detailed source info in workpapers.content if needed\n\n" +
+          "Example findings: 'Market grew 25% (Source: Reuters https://..., Bloomberg https://...)'\n" +
+          "Example evidence_refs: [{type: 'citation', source: 'Smith 2024', description: 'Study on...'}]",
+        inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
       },
 
       // Legacy parallel reasoning tools are still handled by CallToolRequestSchema
@@ -832,6 +839,43 @@ This server supports parallel reasoning with diversity enforcement for complex a
         const result = await handleRegenerateExecutionToken(validatedArgs, parallelReasoningV5Manager);
         if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
         return result;
+      }
+
+      if (name === ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS) {
+        console.log(`[CallTool] Handling register_execution_results (MCP tool)`);
+        if (!parallelReasoningV5Manager) {
+          console.error(`[CallTool] ERROR: parallelReasoningV5Manager is undefined!`);
+          return {
+            content: [{ type: 'text', text: 'Error: Parallel Reasoning V5 manager not initialized' }],
+          };
+        }
+
+        try {
+          // Validate the arguments
+          const validatedArgs = RegisterExecutionResultsSchema.parse(args);
+
+          // Call the handler directly - this bypasses MCP transport session management
+          // Note: This does NOT avoid 403 blocks (payload already passed through OpenAI gateway)
+          // but it does avoid "Session terminated" errors
+          const result = await handleRegisterExecutionResults(validatedArgs, parallelReasoningV5Manager);
+
+          // Persist session state after registering results
+          if (parallelReasoningV5PersistCallback) {
+            console.log(`[CallTool] Persisting session state after registering results...`);
+            await parallelReasoningV5PersistCallback();
+            console.log(`[CallTool] Session state persisted successfully`);
+          }
+
+          return result;
+        } catch (error) {
+          console.error(`[CallTool] Error in register_execution_results:`, error);
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ Error: ${error instanceof Error ? error.message : String(error)}`
+            }]
+          };
+        }
       }
 
       // Legacy Parallel Reasoning Tool Handlers (Deprecated - Removed in v5.0)

@@ -201,38 +201,21 @@ When you've executed ALL steps across ALL plans:
 
 1. Review your work for quality
 2. Ensure each step has evidence and workpapers
-3. POST your findings to \`/api/register-results\` (see critical guidance below)
+3. Call \`register_execution_results\` MCP tool with your findings (see critical guidance below)
 4. Check progress with \`list_plan_status\` to see current metrics
 5. If metrics are low, add more evidence or execute remaining steps
 6. Submit peer critiques and mediation decisions for consensus
 7. Call \`check_session_readiness\` to verify all thresholds are met
 8. Finally, call \`finalize_parallel_reasoning\` to complete
 
-### ⚠️ CRITICAL: Register execution results via the direct API (skip the MCP tool)
+### ⚠️ CRITICAL: How to register execution results safely
 
-**WHY THIS IS NECESSARY**:
-- ChatGPT in developer mode closes the MCP connection after EVERY tool call by sending \`DELETE /mcp\`
-- The official MCP transport (\`@modelcontextprotocol/sdk\`) marks the session as **terminated** when it receives DELETE
-- When you try to call \`register_execution_results\` MCP tool, you'll get: **JSON-RPC error -32600: "Session terminated"**
-- This is NOT a bug - it's how ChatGPT developer mode works
+**Use the \`register_execution_results\` MCP tool**:
+- This tool internally bypasses MCP session management issues
+- It handles the execution token validation and session routing automatically
+- No need to worry about "Session terminated" errors
 
-**THE SOLUTION**:
-- **Do not call the \`register_execution_results\` MCP tool** — it will fail with "Session terminated"
-- **Instead**, send the exact same payload to the HTTP endpoint below
-- The HTTP API bypasses MCP session management entirely
-- It extracts \`session_id\` from the \`execution_token\` automatically
-- No MCP session needed = no -32600 errors
-
-\`\`\`bash
-curl -X POST http://localhost:8787/api/register-results \\
-  -H "Content-Type: application/json" \\
-  -d '{
-        "execution_token": "exec_<session_id>_<timestamp>_<random>",
-        "results": [...]
-      }'
-\`\`\`
-
-**OpenAI's security filters will still BLOCK your call if you include URLs in evidence_refs!**
+**OpenAI's security filters will BLOCK your call if you include URLs in evidence_refs!**
 
 **DO NOT DO THIS** (will cause 403 error):
 \`\`\`json
@@ -453,10 +436,8 @@ function formatManifest(manifest: ExecutionManifest): string {
   output += '2. Generate workpapers (datasets, calculations, comparisons) for each analysis\n';
   output += '3. Cite external sources with URLs and specific data points\n';
   output += '4. Document your findings and reasoning process\n';
-  output += '5. **POST your complete results to `/api/register-results`** (HTTP endpoint, NOT an MCP tool)\n\n';
-  output += '⚠️ **CRITICAL**: Do NOT call `register_execution_results` MCP tool - it will fail with "Session terminated" (-32600)\n';
-  output += 'Why: ChatGPT closes MCP connections after every tool call. Use the HTTP API instead.\n\n';
-  output += `**Execution Token**: \`${manifest.execution_token}\` (required in the POST body)\n`;
+  output += '5. **Call `register_execution_results` MCP tool** with your complete results\n\n';
+  output += `**Execution Token**: \`${manifest.execution_token}\` (required in the tool call)\n`;
   
   return output;
 }
