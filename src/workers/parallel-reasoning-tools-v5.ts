@@ -910,6 +910,14 @@ export async function handleCheckSessionReadiness(
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const readiness = manager.checkSessionReadiness(args.session_id);
 
+  // Define threshold values for display
+  const confidenceTargetValue = CONFIDENCE_THRESHOLD * 100;
+  const confidenceTargetPct = confidenceTargetValue.toFixed(0);
+  const coverageTargetValue = COVERAGE_THRESHOLD * 100;
+  const coverageTargetPct = coverageTargetValue.toFixed(0);
+  const consensusTargetValue = CONSENSUS_THRESHOLD * 100;
+  const consensusTargetPct = consensusTargetValue.toFixed(0);
+
   let response = `# 🔍 Session Readiness Check\n\n`;
   response += `**Session ID**: \`${args.session_id}\`\n\n`;
 

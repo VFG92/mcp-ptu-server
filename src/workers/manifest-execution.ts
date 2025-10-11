@@ -701,7 +701,7 @@ export async function handleRegisterExecutionResults(
           timestamp: Date.now()
         };
 
-        const existingIndex = planResults.findIndex(existing => existing.step_id === result.step_id);
+        const existingIndex = planResults.findIndex((existing: typeof storedResult) => existing.step_id === result.step_id);
 
         if (existingIndex >= 0) {
           planResults[existingIndex] = storedResult;
