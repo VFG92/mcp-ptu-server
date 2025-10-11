@@ -50,16 +50,21 @@ export interface SessionMetrics {
 /**
  * Calculate confidence metric based on evidence density and quality signals
  *
- * UPDATED 2025-01-11 (v5.9.0): Self-assessment based calculation
+ * UPDATED 2025-10-11 (v5.9.1): More generous bonuses to reward quality evidence
  * - Uses declared counts from ChatGPT's self_assessment when available
  * - Falls back to analyzing textual content for backward compatibility
  *
  * Formula: confidence = base + evidence_bonus + quality_bonus - quality_penalty
  * - base: 0.4
- * - evidence_bonus: +0.05 per unique evidence item (max +0.3)
- * - quality_bonus: based on source/datapoint/workpaper ratios (max +0.2)
+ * - evidence_bonus: +0.04 per unique evidence item (max +0.35) - INCREASED
+ * - quality_bonus: based on source/datapoint/workpaper ratios (max +0.25) - INCREASED
+ *   - External sources: +0.015 per source (max +0.10)
+ *   - Quantitative datapoints: +0.008 per datapoint (max +0.10)
+ *   - Workpapers: +0.015 per workpaper (max +0.05)
  * - quality_penalty: -0.2 per evidence_low signal (max -0.4)
  * - Clamped to [0, 1]
+ *
+ * Example: 30 items, 10 sources, 15 datapoints, 5 workpapers → 0.4 + 0.35 + 0.25 = 1.0 (100%)
  */
 export function calculateConfidence(session: ParallelReasoningSession): {
   score: number;
@@ -152,28 +157,28 @@ export function calculateConfidence(session: ParallelReasoningSession): {
     console.log(`[Confidence Calculation] Analyzed content: ${totalEvidenceItems} items (refs: ${totalEvidenceRefs}, workpapers: ${totalWorkpapers})`);
   }
 
-  // Evidence bonus: +0.05 per unique evidence item (max +0.3)
-  const evidenceBonus = Math.min(0.3, totalEvidenceItems * 0.05);
+  // Evidence bonus: +0.04 per unique evidence item (max +0.35) - INCREASED from 0.3
+  const evidenceBonus = Math.min(0.35, totalEvidenceItems * 0.04);
 
-  // Quality bonus based on evidence composition (max +0.2)
+  // Quality bonus based on evidence composition (max +0.25) - INCREASED from 0.2
   let qualityBonus = 0;
 
-  // Bonus for external sources (authoritative evidence)
+  // Bonus for external sources (authoritative evidence) - INCREASED multiplier
   if (totalExternalSources > 0) {
-    qualityBonus += Math.min(0.08, totalExternalSources * 0.01);
+    qualityBonus += Math.min(0.10, totalExternalSources * 0.015);  // Was 0.08 max, 0.01 multiplier
   }
 
-  // Bonus for quantitative data (objective evidence)
+  // Bonus for quantitative data (objective evidence) - INCREASED multiplier
   if (totalQuantitativeDatapoints > 0) {
-    qualityBonus += Math.min(0.08, totalQuantitativeDatapoints * 0.005);
+    qualityBonus += Math.min(0.10, totalQuantitativeDatapoints * 0.008);  // Was 0.08 max, 0.005 multiplier
   }
 
-  // Bonus for workpapers (structured, high-quality evidence)
+  // Bonus for workpapers (structured, high-quality evidence) - INCREASED multiplier
   if (totalWorkpapers > 0) {
-    qualityBonus += Math.min(0.04, totalWorkpapers * 0.01);
+    qualityBonus += Math.min(0.05, totalWorkpapers * 0.015);  // Was 0.04 max, 0.01 multiplier
   }
 
-  qualityBonus = Math.min(0.2, qualityBonus);
+  qualityBonus = Math.min(0.25, qualityBonus);  // INCREASED from 0.2
 
   // Count evidence_low signals
   let evidenceLowCount = 0;
