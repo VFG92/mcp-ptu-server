@@ -549,6 +549,9 @@ This server supports parallel reasoning with diversity enforcement for complex a
         name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
         description:
           "STEP 4: Register execution results with SELF-ASSESSMENT.\n\n" +
+          "🚨 **BREAKING CHANGE (2025-10-11)**: evidence_refs field REMOVED from schema!\n" +
+          "❌ DO NOT send evidence_refs array (will cause validation error)\n" +
+          "✅ ONLY send: evidence_count, source_count, data_point_count, summary\n\n" +
           "🎯 NEW APPROACH: Instead of sending textual content, you COUNT evidence and SELF-EVALUATE quality.\n\n" +
           "**What to send**:\n" +
           "1. **Self-assessment** (be HONEST):\n" +

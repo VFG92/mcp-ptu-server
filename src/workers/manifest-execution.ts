@@ -693,9 +693,8 @@ export async function handleRegisterExecutionResults(
         const storedResult = {
           step_id: result.step_id,
           evidence_id,
-          // Store minimal data (NEW format)
+          // Store minimal data (NEW format - evidence_refs REMOVED)
           findings: result.summary,
-          evidence_refs: result.evidence_refs || [],
           // Store counts for metrics calculation
           evidence_count: result.evidence_count,
           source_count: result.source_count,
