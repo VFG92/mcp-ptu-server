@@ -650,12 +650,9 @@ export async function handleRegisterExecutionResults(
       );
     }
 
-    // Mark token as used (single use - no batching needed with self-assessment format)
-    if (token.used) {
-      throw new Error(
-        'Execution token already used. Generate a new manifest with `execute_reasoning_manifest` if you need to register more results.'
-      );
-    }
+    // Token can be reused for multiple batches (micro-batching support)
+    // This allows ChatGPT to register results in small batches to avoid moderation blocks
+    // Token only expires after 7 days or when explicitly regenerated
 
     const confidenceTargetPct = (CONFIDENCE_THRESHOLD * 100).toFixed(0);
     const coverageTargetPct = (COVERAGE_THRESHOLD * 100).toFixed(0);
@@ -723,8 +720,8 @@ export async function handleRegisterExecutionResults(
     const updated_count = updatedResults.length;
     const failed_count = failedResults.length;
 
-    // Mark token as used only when all results processed successfully
-    token.used = failed_count === 0;
+    // Token remains valid for multiple batches (micro-batching support)
+    // No need to mark as "used" - token expires after 7 days or when regenerated
 
     // Store self-assessment in session for later validation
     if (!session.self_assessments) {

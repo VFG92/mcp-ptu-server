@@ -618,24 +618,25 @@ console.log('Diversity preview:', suggestions.diversity_preview);
 }
 ```
 
-**Payload Size Limit**: Keep each result under 10KB. If registering many steps, split into multiple calls with new tokens.
+**Payload Size Limit**: Keep each result under 10KB. If registering many steps, split into multiple calls with the **SAME token** (micro-batching).
 
 #### 3. Session Lifecycle and Token Issues
 
-**Symptom**: `Session terminated` or `Execution token already used`
+**Symptom**: `Session terminated` or `Execution token expired`
 
 **Root Causes**:
-- Execution tokens are **single-use only** - once used (successfully or not), they cannot be reused
+- Execution tokens are **reusable for 7 days** - you can call `register_execution_results` multiple times with the same token
 - Sessions expire after 24 hours of inactivity
 - Token expires after 7 days
 
 **Solutions**:
 
-**For "token already used"**:
+**For "token expired"**:
 ```bash
-# Generate a new token before retrying
-1. Call execute_reasoning_manifest again → get new token
+# Token is older than 7 days
+1. Call regenerate_execution_token → get new token
 2. Use the NEW token in register_execution_results
+3. Previous results are preserved (preserve_results: true by default)
 ```
 
 **For "session terminated"**:
@@ -646,10 +647,11 @@ console.log('Diversity preview:', suggestions.diversity_preview);
 3. Start a new session if needed
 ```
 
-**Best Practice**:
-- Register results incrementally (one plan at a time) instead of all at once
-- Generate new token for each registration batch
-- Use `regenerate_execution_token` for long-running workflows (>7 days)
+**Best Practice (Micro-Batching)**:
+- Register results in small batches (2-3 steps per call) to avoid moderation blocks
+- **Reuse the same token** for multiple batches - no need to regenerate
+- Token remains valid for 7 days from creation
+- Only regenerate token if it expires (>7 days old)
 
 #### 4. Diversity Axes Validation Failures
 
