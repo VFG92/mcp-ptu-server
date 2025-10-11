@@ -201,12 +201,14 @@ When you've executed ALL steps across ALL plans:
 
 1. Review your work for quality
 2. Ensure each step has evidence and workpapers
-3. Call \`register_execution_results\` MCP tool with your findings (see critical guidance below)
+3. **STEP 4**: Call \`register_execution_results\` MCP tool with your findings (see critical guidance below)
 4. Check progress with \`list_plan_status\` to see current metrics
 5. If metrics are low, add more evidence or execute remaining steps
-6. Submit peer critiques and mediation decisions for consensus
-7. Call \`check_session_readiness\` to verify all thresholds are met
-8. Finally, call \`finalize_parallel_reasoning\` to complete
+6. **STEP 5**: Submit peer critiques (each plan reviews others)
+7. **STEP 6**: Submit mediation decisions for disagreements
+8. **STEP 7**: Generate meta-reflection
+9. **STEP 8**: Call \`check_session_readiness\` to verify all thresholds are met
+10. **STEP 9**: Finally, call \`finalize_parallel_reasoning\` to complete
 
 ### ⚠️ CRITICAL: How to register execution results safely
 

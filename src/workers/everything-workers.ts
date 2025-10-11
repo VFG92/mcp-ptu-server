@@ -49,8 +49,10 @@ import {
 import {
   ExecuteReasoningManifestSchema,
   RegenerateExecutionTokenSchema,
+  RegisterExecutionResultsSchema,
   handleExecuteReasoningManifest,
-  handleRegenerateExecutionToken
+  handleRegenerateExecutionToken,
+  handleRegisterExecutionResults
 } from './manifest-execution.js';
 
 // Import parallel reasoning session type
@@ -530,50 +532,11 @@ This server supports parallel reasoning with diversity enforcement for complex a
           "STEP 2: Submit reasoning plans (min 3-4). Each must differ on ≥2 diversity axes. Include plan_id, description, diversity_axes, capability_chain (5-10 steps recommended for robustness), rationale, expected_outputs. After all plans: execute_reasoning_manifest.",
         inputSchema: zodToJsonSchema(SubmitReasoningPlanSchema) as ToolInput,
       },
-      // REMOVED: execute_plan_step (deprecated - use manifest-based workflow)
-      // REMOVED: submit_cross_plan_note (deprecated - not needed in manifest workflow)
-      {
-        name: ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE,
-        description:
-          "STEP 7: Submit peer critiques AFTER registering results. Each plan reviews others with claims_challenged (evidence_ids, falsification_test), residual_risks, agreement_score. After all critiques: submit_mediation_decision.",
-        inputSchema: zodToJsonSchema(SubmitPeerCritiqueSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningV5ToolName.SUBMIT_MEDIATION_DECISION,
-        description:
-          "STEP 8: Mediate disagreements AFTER peer critiques. For each decision_point, choose best approach (chosen_from_plan) with rationale, evidence_ids, confidence. After all decisions: generate_meta_reflection.",
-        inputSchema: zodToJsonSchema(SubmitMediationDecisionSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningV5ToolName.LIST_PLAN_STATUS,
-        description:
-          "Check session status: coverage/confidence/consensus %, gaps, next steps. Call FREQUENTLY after each major step to track progress.",
-        inputSchema: zodToJsonSchema(ListPlanStatusSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningV5ToolName.CHECK_SESSION_READINESS,
-        description:
-          "STEP 9: Check readiness BEFORE finalize. Verifies: all plans executed, critiques submitted, decisions made, quality metrics (confidence≥85%, coverage≥95%, consensus≥80%). Shows what's missing if not ready.",
-        inputSchema: zodToJsonSchema(CheckSessionReadinessSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningV5ToolName.GENERATE_META_REFLECTION,
-        description:
-          "STEP 9: Generate meta-reflection AFTER mediation, BEFORE check_readiness. Analyzes disagreement patterns, residual uncertainty, decision confidence. Provides synthesis insights.",
-        inputSchema: zodToJsonSchema(GenerateMetaReflectionSchema) as ToolInput,
-      },
-      {
-        name: ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING,
-        description:
-          "STEP 10 (FINAL): Finalize session. REQUIREMENTS: all plans executed, all critiques submitted, all decisions made, meta-reflection generated, quality≥thresholds. ALWAYS call check_session_readiness first. Returns synthesis report.",
-        inputSchema: zodToJsonSchema(FinalizeParallelReasoningSchema) as ToolInput,
-      },
-
-      // NEW: Manifest-based execution tools
+      // STEP 3: Manifest-based execution tools
       {
         name: ParallelReasoningV5ToolName.EXECUTE_REASONING_MANIFEST,
         description:
-          "STEP 5: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions. ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter) and then call register_execution_results. Each token can only be used ONCE—generate a new manifest if you need another token.",
+          "STEP 3: Generate execution manifest after submitting all plans. Returns a manifest with execution token and step-by-step instructions. ChatGPT must execute ALL steps using native tools (web search, Python, code interpreter) and then call register_execution_results. Each token can only be used ONCE—generate a new manifest if you need another token.",
         inputSchema: zodToJsonSchema(ExecuteReasoningManifestSchema) as ToolInput,
       },
       {
@@ -585,7 +548,7 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
         description:
-          "STEP 6: Register execution results after executing all steps from the manifest. " +
+          "STEP 4: Register execution results after executing all steps from the manifest. " +
           "This tool bypasses MCP session management to prevent 'Session terminated' errors.\n\n" +
           "⚠️ CRITICAL: DO NOT include URLs in evidence_refs - OpenAI will block with 403!\n" +
           "✅ INSTEAD: Put ALL URLs directly in findings text (markdown format)\n" +
@@ -594,6 +557,46 @@ This server supports parallel reasoning with diversity enforcement for complex a
           "Example findings: 'Market grew 25% (Source: Reuters https://..., Bloomberg https://...)'\n" +
           "Example evidence_refs: [{type: 'citation', source: 'Smith 2024', description: 'Study on...'}]",
         inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
+      },
+
+      // STEP 5-9: Review and finalization
+      // REMOVED: execute_plan_step (deprecated - use manifest-based workflow)
+      // REMOVED: submit_cross_plan_note (deprecated - not needed in manifest workflow)
+      {
+        name: ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE,
+        description:
+          "STEP 5: Submit peer critiques AFTER registering results. Each plan reviews others with claims_challenged (evidence_ids, falsification_test), residual_risks, agreement_score. After all critiques: submit_mediation_decision.",
+        inputSchema: zodToJsonSchema(SubmitPeerCritiqueSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.SUBMIT_MEDIATION_DECISION,
+        description:
+          "STEP 6: Mediate disagreements AFTER peer critiques. For each decision_point, choose best approach (chosen_from_plan) with rationale, evidence_ids, confidence. After all decisions: generate_meta_reflection.",
+        inputSchema: zodToJsonSchema(SubmitMediationDecisionSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.LIST_PLAN_STATUS,
+        description:
+          "Check session status: coverage/confidence/consensus %, gaps, next steps. Call FREQUENTLY after each major step to track progress.",
+        inputSchema: zodToJsonSchema(ListPlanStatusSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.GENERATE_META_REFLECTION,
+        description:
+          "STEP 7: Generate meta-reflection AFTER mediation, BEFORE check_readiness. Analyzes disagreement patterns, residual uncertainty, decision confidence. Provides synthesis insights.",
+        inputSchema: zodToJsonSchema(GenerateMetaReflectionSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.CHECK_SESSION_READINESS,
+        description:
+          "STEP 8: Check readiness BEFORE finalize. Verifies: all plans executed, critiques submitted, decisions made, quality metrics (confidence≥85%, coverage≥95%, consensus≥80%). Shows what's missing if not ready.",
+        inputSchema: zodToJsonSchema(CheckSessionReadinessSchema) as ToolInput,
+      },
+      {
+        name: ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING,
+        description:
+          "STEP 9 (FINAL): Finalize session. REQUIREMENTS: all plans executed, all critiques submitted, all decisions made, meta-reflection generated, quality≥thresholds. ALWAYS call check_session_readiness first. Returns synthesis report.",
+        inputSchema: zodToJsonSchema(FinalizeParallelReasoningSchema) as ToolInput,
       },
 
       // Legacy parallel reasoning tools are still handled by CallToolRequestSchema
