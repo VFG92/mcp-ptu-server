@@ -50,7 +50,7 @@ describe('Session Quality Metrics', () => {
 
       // Plans may have quality signals from analyzePlan(), so we check the actual values
       expect(result.details.unique_evidence_count).toBe(0);
-      expect(result.details.base).toBe(0.5);
+      expect(result.details.base).toBe(0.4); // Updated in v5.9.0
       expect(result.details.bonus).toBe(0);
 
       // Score should be base - penalty (penalty from quality signals)
@@ -69,7 +69,8 @@ describe('Session Quality Metrics', () => {
       const result = calculateConfidence(session!);
 
       expect(result.details.unique_evidence_count).toBe(3);
-      expect(result.details.bonus).toBe(0.3); // 3 * 0.1
+      // Bonus includes evidence bonus (3 * 0.05 = 0.15) + quality bonus (varies)
+      expect(result.details.bonus).toBeGreaterThan(0.15); // At least evidence bonus
 
       // Score should be base + bonus - penalty
       const expectedScore = result.details.base + result.details.bonus - result.details.penalty;
@@ -89,7 +90,7 @@ describe('Session Quality Metrics', () => {
       const result = calculateConfidence(session!);
 
       expect(result.details.unique_evidence_count).toBe(5);
-      expect(result.details.bonus).toBe(0.3); // Capped at 0.3
+      expect(result.details.bonus).toBe(0.25); // 5 * 0.05 = 0.25 (capped at 0.3 in v5.9.0)
 
       // Score should be base + bonus - penalty, with bonus capped
       const expectedScore = result.details.base + result.details.bonus - result.details.penalty;

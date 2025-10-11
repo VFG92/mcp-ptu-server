@@ -642,6 +642,49 @@ ${readiness.ready ? '✅ **READY TO FINALIZE**' : '⚠️ **NOT READY - Action R
 
 ---
 
+${(session as any).self_assessments && (session as any).self_assessments.length > 0 ? `
+## 🔍 Your Self-Assessment vs Server Validation
+
+${(() => {
+  const selfAssessment = (session as any).self_assessments[(session as any).self_assessments.length - 1];
+  const estimatedConfidence = selfAssessment.estimated_confidence * 100;
+  const actualConfidence = confidence_pct;
+  const confidenceDiff = actualConfidence - estimatedConfidence;
+  const estimatedCoverage = selfAssessment.estimated_coverage * 100;
+  const actualCoverage = coverage_pct;
+  const coverageDiff = actualCoverage - estimatedCoverage;
+
+  return `
+**Your declared evidence**:
+- Total evidence items: ${selfAssessment.total_evidence_items}
+- External sources: ${selfAssessment.external_sources}
+- Quantitative datapoints: ${selfAssessment.quantitative_datapoints}
+- Workpapers created: ${selfAssessment.workpapers_created}
+
+**Your self-evaluation vs Server calculation**:
+| Metric | You Estimated | Server Calculated | Difference |
+|--------|---------------|-------------------|------------|
+| **Confidence** | ${estimatedConfidence.toFixed(1)}% | ${actualConfidence.toFixed(1)}% | ${confidenceDiff >= 0 ? '+' : ''}${confidenceDiff.toFixed(1)}% ${Math.abs(confidenceDiff) < 5 ? '✅' : (confidenceDiff > 0 ? '⚠️ Underestimated' : '⚠️ Overestimated')} |
+| **Coverage** | ${estimatedCoverage.toFixed(1)}% | ${actualCoverage.toFixed(1)}% | ${coverageDiff >= 0 ? '+' : ''}${coverageDiff.toFixed(1)}% ${Math.abs(coverageDiff) < 5 ? '✅' : (coverageDiff > 0 ? '⚠️ Underestimated' : '⚠️ Overestimated')} |
+
+${selfAssessment.meets_confidence_threshold !== (actualConfidence >= 85) ? `
+⚠️ **Self-assessment mismatch**: You said you ${selfAssessment.meets_confidence_threshold ? 'meet' : "don't meet"} confidence threshold, but server calculated ${actualConfidence >= 85 ? 'you DO meet it ✅' : "you DON'T meet it ❌"}.
+` : ''}
+
+${selfAssessment.gaps_identified && selfAssessment.gaps_identified.length > 0 ? `
+**Gaps you identified**:
+${selfAssessment.gaps_identified.map((gap: string) => `- ${gap}`).join('\n')}
+` : ''}
+
+${selfAssessment.improvement_actions_taken ? `
+**Improvements you made**: ${selfAssessment.improvement_actions_taken}
+` : ''}
+`;
+})()}
+
+---
+` : ''}
+
 ## 🎬 What You Need To Do Now
 
 ${!readiness.quality_check.coverage_met ? `
@@ -873,6 +916,40 @@ export async function handleCheckSessionReadiness(
     response += ` (missing: ${readiness.structural_check.missing_plans.join(', ')})`;
   }
   response += `\n\n`;
+
+  // Self-Assessment Validation (if available)
+  const session = manager.getSession(args.session_id);
+  const selfAssessments = session ? (session as any).self_assessments : null;
+  if (selfAssessments && selfAssessments.length > 0) {
+    const latestAssessment = selfAssessments[selfAssessments.length - 1];
+    const estimatedConfidence = latestAssessment.estimated_confidence * 100;
+    const actualConfidence = readiness.metrics.confidence * 100;
+    const confidenceDiff = actualConfidence - estimatedConfidence;
+
+    response += `### 🔍 Self-Assessment Validation\n\n`;
+    response += `**Your self-evaluation vs Server calculation**:\n`;
+    response += `- **Confidence**: You estimated ${estimatedConfidence.toFixed(1)}%, Server calculated ${actualConfidence.toFixed(1)}%`;
+    if (Math.abs(confidenceDiff) < 5) {
+      response += ` ✅ (accurate self-assessment)\n`;
+    } else if (confidenceDiff > 0) {
+      response += ` ⚠️ (you underestimated by ${confidenceDiff.toFixed(1)}%)\n`;
+    } else {
+      response += ` ⚠️ (you overestimated by ${Math.abs(confidenceDiff).toFixed(1)}%)\n`;
+    }
+
+    if (latestAssessment.meets_confidence_threshold !== (actualConfidence >= 85)) {
+      response += `\n⚠️ **Threshold mismatch**: You said you ${latestAssessment.meets_confidence_threshold ? 'meet' : "don't meet"} the 85% threshold, `;
+      response += `but server calculated you ${actualConfidence >= 85 ? 'DO meet it ✅' : "DON'T meet it ❌"}.\n`;
+    }
+
+    if (latestAssessment.gaps_identified && latestAssessment.gaps_identified.length > 0) {
+      response += `\n**Gaps you identified**:\n`;
+      latestAssessment.gaps_identified.forEach((gap: string) => {
+        response += `- ${gap}\n`;
+      });
+    }
+    response += `\n`;
+  }
 
   // Quality metrics
   response += `### 📊 Quality Metrics\n\n`;

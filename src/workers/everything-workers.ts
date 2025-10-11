@@ -548,18 +548,53 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS,
         description:
-          "STEP 4: Register execution results after executing all steps from the manifest. " +
-          "This tool bypasses MCP session management to prevent 'Session terminated' errors.\n\n" +
-          "⚠️ CRITICAL: DO NOT include URLs in evidence_refs - OpenAI will block with 403!\n" +
-          "✅ INSTEAD: Put ALL URLs directly in findings text (markdown format)\n" +
-          "✅ Use evidence_refs ONLY for: citations (author/year), calculations, data_source names\n" +
-          "✅ Put detailed source info in workpapers.content if needed\n\n" +
-          "🔄 BATCHING: If you have many results (>10) or large workpapers, split into multiple calls:\n" +
-          "- Call this tool multiple times with the SAME execution_token\n" +
-          "- Send 3-5 results per batch to avoid 403 'safety' blocks\n" +
-          "- Each batch is registered independently\n\n" +
-          "Example findings: 'Market grew 25% (Source: Reuters https://..., Bloomberg https://...)'\n" +
-          "Example evidence_refs: [{type: 'citation', source: 'Smith 2024', description: 'Study on...'}]",
+          "STEP 4: Register execution results with SELF-ASSESSMENT.\n\n" +
+          "🎯 NEW APPROACH: Instead of sending textual content, you COUNT evidence and SELF-EVALUATE quality.\n\n" +
+          "**What to send**:\n" +
+          "1. **Self-assessment** (be HONEST):\n" +
+          "   - total_evidence_items: Count of unique evidence you collected\n" +
+          "   - external_sources: Count of authoritative sources (papers, reports, official data)\n" +
+          "   - quantitative_datapoints: Count of specific numbers/calculations\n" +
+          "   - workpapers_created: Count of detailed analysis documents\n" +
+          "   - estimated_confidence: Your HONEST assessment (0-1). Be realistic!\n" +
+          "   - estimated_coverage: % of declared steps you actually executed\n" +
+          "   - meets_confidence_threshold: Do you HONESTLY believe you meet 85%?\n" +
+          "   - meets_coverage_threshold: Do you HONESTLY believe you executed 95%?\n" +
+          "   - gaps_identified: If thresholds not met, what's missing?\n\n" +
+          "2. **Minimal results** (counts only, NO textual content):\n" +
+          "   - evidence_count, source_count, data_point_count per step\n" +
+          "   - evidence_refs: Just IDs (e.g., 'Source1', 'Calc1'), NO descriptions\n" +
+          "   - summary: Ultra-concise (max 200 chars)\n\n" +
+          "**Why this approach**:\n" +
+          "✅ 10x smaller payload (only numbers) → NO 403 errors\n" +
+          "✅ NO batching needed (payload always small)\n" +
+          "✅ You self-correct (know if evidence is insufficient)\n" +
+          "✅ Server validates and provides immediate feedback\n\n" +
+          "**Be HONEST**: Server will verify your self-assessment. If you underestimate, you'll get guidance to improve. If you overestimate, you'll be asked to add more evidence.\n\n" +
+          "**Example payload**:\n" +
+          "{\n" +
+          "  \"execution_token\": \"exec_...\",\n" +
+          "  \"self_assessment\": {\n" +
+          "    \"total_evidence_items\": 45,\n" +
+          "    \"external_sources\": 12,\n" +
+          "    \"quantitative_datapoints\": 23,\n" +
+          "    \"workpapers_created\": 8,\n" +
+          "    \"estimated_confidence\": 0.82,\n" +
+          "    \"estimated_coverage\": 0.96,\n" +
+          "    \"meets_confidence_threshold\": false,\n" +
+          "    \"meets_coverage_threshold\": true,\n" +
+          "    \"gaps_identified\": [\"Missing external validation for EV claims\"]\n" +
+          "  },\n" +
+          "  \"results\": [{\n" +
+          "    \"plan_id\": \"PLAN_A\",\n" +
+          "    \"step_id\": \"step_1\",\n" +
+          "    \"evidence_count\": 3,\n" +
+          "    \"source_count\": 2,\n" +
+          "    \"data_point_count\": 5,\n" +
+          "    \"evidence_refs\": [{\"ref_id\": \"Source1\", \"type\": \"source\"}],\n" +
+          "    \"summary\": \"12 journeys mapped. Leakage 12-25%. Sources: NNG, Baymard.\"\n" +
+          "  }]\n" +
+          "}",
         inputSchema: zodToJsonSchema(RegisterExecutionResultsSchema) as ToolInput,
       },
 

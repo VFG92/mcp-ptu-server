@@ -113,11 +113,11 @@ describe('everything workers server', () => {
     const toolsResponse = await listToolsHandler!.handler({ params: {} });
     expect(Array.isArray(toolsResponse.tools)).toBe(true);
 
-    // v5.2.0: Only parallel reasoning tools exposed (manifest-based workflow)
+    // v5.9.0: Parallel reasoning tools with self-assessment
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'init_parallel_reasoning')).toBe(true);
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'submit_reasoning_plan')).toBe(true);
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'execute_reasoning_manifest')).toBe(true);
-    expect(toolsResponse.tools.some((tool: any) => tool.name === 'register_execution_results')).toBe(false);
+    expect(toolsResponse.tools.some((tool: any) => tool.name === 'register_execution_results')).toBe(true); // NOW EXPOSED with self-assessment format
     expect(toolsResponse.tools.some((tool: any) => tool.name === 'generate_meta_reflection')).toBe(true);
 
     // Deprecated tools should NOT be exposed

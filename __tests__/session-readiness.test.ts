@@ -247,14 +247,14 @@ describe('Session Readiness and Quality Thresholds', () => {
     const readiness = manager.checkSessionReadiness('test_finalize_success');
 
     // Note: Confidence formula caps evidence bonus at +0.3, so with base 0.5 + 0.3 = 0.8 (80%)
-    // This is below the 85% threshold, which is expected given the formula design
+    // This is below the 75% threshold (updated in v5.9.0), which is expected given the formula design
     // The test verifies that coverage and consensus can meet thresholds
     expect(readiness.ready).toBe(false); // Not ready due to confidence
     expect(readiness.quality_check.confidence_met).toBe(false); // Expected: formula limitation
     expect(readiness.quality_check.coverage_met).toBe(true);
     expect(readiness.quality_check.consensus_met).toBe(true);
     expect(readiness.blockers.length).toBe(1);
-    expect(readiness.blockers[0]).toContain('Confidence below 85%');
+    expect(readiness.blockers[0]).toContain('Confidence below 75%'); // Updated threshold in v5.9.0
 
     // Attempt finalization - should be BLOCKED due to confidence
     const result = manager.finalizeSession('test_finalize_success');

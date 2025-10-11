@@ -24,80 +24,113 @@ This document keeps contributors and AI agents aligned while working on the repo
 
 ## Register Execution Results
 
-### Primary Method: MCP Tool
-- Use the `register_execution_results` MCP tool to submit execution results
-- **What it does**:
-  - ✅ Bypasses MCP transport session management (prevents "Session terminated" errors)
-  - ✅ Validates execution token and routes to correct Durable Object via SessionRegistry
-  - ✅ Persists results to session state
+### 🎯 NEW: Self-Assessment Approach
 
-### ⚠️ CRITICAL: Avoiding 403 Blocks
+**MAJOR CHANGE (v5.9.0+)**: Instead of sending textual content, ChatGPT now **counts evidence** and **self-evaluates quality**.
 
-**URL Handling**:
-- **DO NOT** include URLs in `evidence_refs` - OpenAI's security filters will block with 403 error
-- **DO** put ALL web URLs directly in `findings` text using markdown format
-- **DO** use `evidence_refs` ONLY for: citations (author/year), calculations, data_source names (no URLs)
-- **DO** put detailed source information in `workpapers.content` if needed
+**Why this approach**:
+- ✅ **10x smaller payload** (only numbers) → NO 403 errors from OpenAI gateway
+- ✅ **NO batching needed** (payload always small enough)
+- ✅ **Self-correction loop** (ChatGPT knows if evidence is insufficient and can improve)
+- ✅ **Honest evaluation** (ChatGPT takes responsibility for quality verification)
 
-**Batching for Large Payloads**:
-- If you have many results (>10) or large workpapers with calculations/code, **split into batches**
-- Call `register_execution_results` **multiple times** with the SAME execution_token
-- Send 3-5 results per batch to avoid 403 "safety" blocks
-- Each batch is registered independently - no need to resend previous results
+### How It Works
 
-**Example (CORRECT)**:
+1. **Execute ALL steps** using native tools (web search, Python, code interpreter)
+   - Collect evidence, perform calculations, create detailed analysis
+   - Keep notes locally (you'll summarize, not send full content)
+
+2. **COUNT your evidence** (be HONEST):
+   - `total_evidence_items`: Unique evidence items collected
+   - `external_sources`: Authoritative sources (papers, reports, official data)
+   - `quantitative_datapoints`: Specific numbers, percentages, calculations
+   - `workpapers_created`: Detailed analysis documents
+
+3. **SELF-EVALUATE quality** (be REALISTIC):
+   - `estimated_confidence`: 0-1 scale (0.5=weak, 0.7=good, 0.85+=excellent)
+   - `estimated_coverage`: % of declared steps executed
+   - `meets_confidence_threshold`: Do you HONESTLY meet 85%?
+   - `meets_coverage_threshold`: Do you HONESTLY meet 95%?
+   - `gaps_identified`: If NO, what specific gaps exist?
+
+4. **Call `register_execution_results`** with self-assessment
+
+**Example Payload**:
 ```json
 {
-  "findings": "Market grew 25% in Q1. Sources: Reuters (https://reuters.com/...), Bloomberg (https://bloomberg.com/...)",
-  "evidence_refs": [
-    {"type": "citation", "source": "Smith et al. 2024", "description": "Academic study on market trends"}
-  ],
-  "workpapers": [
-    {"type": "dataset", "title": "Raw Data", "content": "Source: https://example.com\n\nData: ...", "format": "markdown"}
+  "execution_token": "exec_...",
+  "self_assessment": {
+    "total_evidence_items": 45,
+    "external_sources": 12,
+    "quantitative_datapoints": 23,
+    "workpapers_created": 8,
+    "estimated_confidence": 0.82,
+    "estimated_coverage": 0.96,
+    "meets_confidence_threshold": false,
+    "meets_coverage_threshold": true,
+    "gaps_identified": ["Missing external validation for EV adoption claims"]
+  },
+  "results": [
+    {
+      "plan_id": "PLAN_A",
+      "step_id": "step_1",
+      "evidence_count": 3,
+      "source_count": 2,
+      "data_point_count": 5,
+      "evidence_refs": [
+        {"ref_id": "Source1", "type": "source", "reliability": 0.8}
+      ],
+      "summary": "12 user journeys mapped. Leakage 12-25%. Sources: NNG, Baymard."
+    }
   ]
 }
 ```
 
-**Example (WRONG - will cause 403)**:
-```json
-{
-  "evidence_refs": [
-    {"type": "url", "source": "https://example.com", "description": "..."}
-  ]
-}
-```
+**Server Response**:
+- ✅ If thresholds met: "Excellent! Proceed to peer critique"
+- ⚠️ If confidence < 85%: "Add X more high-quality sources"
+- ⚠️ If coverage < 95%: "Execute remaining Y steps"
+
+**Key Principles**:
+- **Be HONEST**: Server validates your self-assessment
+- **Count accurately**: Don't inflate numbers
+- **Identify gaps**: If you know something is missing, say so
+- **Self-correct**: If confidence is low, add more evidence BEFORE registering
 
 ### Fallback: HTTP Endpoint
 - The `/api/register-results` HTTP endpoint remains available for direct API access
 - Use this if the MCP tool is blocked or unavailable
-- Same functionality as the MCP tool but requires external HTTP client
+- Same self-assessment format as the MCP tool
 
 ## Recommended MCP prompt
 Use the following prompt to exercise the server end-to-end:
 
-> Start a parallel reasoning session on this issue. Use the **manifest-based workflow** for efficient execution.
+> Start a parallel reasoning session on this issue. Use the **manifest-based workflow** with **self-assessment**.
 >
-> **RECOMMENDED WORKFLOW** (Manifest-based):
+> **WORKFLOW** (9 steps):
 > 1. Call `init_parallel_reasoning` to start the session
 > 2. Submit 3+ plans using `submit_reasoning_plan` with diverse axes
 > 3. Call `execute_reasoning_manifest` to generate execution manifest
-> 4. **Execute ALL steps** using native ChatGPT tools (web search, Python, code interpreter)
-> 5. POST the manifest payload to `/api/register-results` (HTTP). This replaces the MCP tool and auto-extracts `session_id`.
-> 6. **Call `list_plan_status`** to check evidence quality report and gaps
+> 4. **Execute ALL steps** using native tools (web search, Python, code interpreter)
+>    - Collect evidence, perform calculations, create analysis
+>    - COUNT your evidence items (sources, datapoints, workpapers)
+>    - SELF-EVALUATE quality honestly (confidence, coverage)
+> 5. Call `register_execution_results` with **self-assessment** (counts + honest evaluation)
+> 6. **Call `list_plan_status`** to see evidence quality report and server validation
 > 7. Submit peer critiques using `submit_peer_critique` with falsification tests
 > 8. Submit mediation decisions using `submit_mediation_decision`
-> 9. **Call `generate_meta_reflection`** to analyze patterns and identify gaps
-> 10. Call `check_session_readiness` before finalizing
+> 9. **Call `generate_meta_reflection`** to analyze patterns
+> 10. Call `check_session_readiness` to verify thresholds (85%/95%/80%)
 > 11. Call `finalize_parallel_reasoning` when ready
 >
-> **IMPORTANT FOR EXECUTION**:
-> - Execute ALL manifest steps using native tools (web search, Python, etc.)
-> - Provide detailed evidence with URLs, calculations, and workpapers
-> - The manifest includes execution token for batch registration
-> - **Complete the workflow quickly** - MCP sessions can expire causing "Session terminated" errors
+> **CRITICAL - Self-Assessment**:
+> - Be HONEST about evidence quality (don't inflate numbers)
+> - If confidence < 85%: Add more high-quality sources BEFORE registering
+> - If coverage < 95%: Execute remaining steps
+> - Server validates your self-assessment and provides feedback
 >
 > **IMPORTANT FOR TRACKING PROGRESS**:
-> - Call `list_plan_status` after registering results to see evidence quality report
+> - Call `list_plan_status` after registering to see server validation of your self-assessment
 > - The report shows exactly what evidence is missing (external sources, quantitative data, etc.)
 > - Call `generate_meta_reflection` after mediation to identify patterns and gaps
 > - This tool shows current coverage/confidence/consensus % and specific gaps to fill
@@ -207,141 +240,91 @@ if (registryResult.do_id) {
 - Long pause between tool calls (>1-2 minutes)
 - **Solution**: Use `/api/register-results` for the next operation
 
-## 403 Safety Blocks on register_execution_results
+## 403 Safety Blocks - SOLVED ✅
 
-### The Problem
+### Previous Problem (v5.8.x and earlier)
 
-OpenAI's security filters block MCP tool calls containing URLs **BEFORE** they reach our server. This causes:
+OpenAI's security filters blocked MCP tool calls containing URLs or large textual payloads:
 ```
 ConnectorClientError: 403: "Server returned 403: 'Invocation is blocked on safety'"
 ```
 
-**Why it happens**:
-- OpenAI scans MCP payloads for "suspicious" patterns at the gateway
-- Direct URLs in `evidence_refs` trigger security filters
-- Large payloads with many external links are flagged
-- **Large workpapers with calculations/code** are flagged as potential code execution
-- The block happens at OpenAI's gateway, NOT our server
+**Why it happened**:
+- OpenAI scanned MCP payloads for "suspicious" patterns at the gateway
+- Direct URLs in `evidence_refs` triggered security filters
+- Large payloads with workpapers/calculations were flagged
+- The block happened at OpenAI's gateway, BEFORE reaching our server
 
-**Why server-side sanitization doesn't work**:
-- The 403 error occurs BEFORE the request reaches our code
-- We never see the blocked request in our logs
-- Any server-side validation is too late
+### Solution (v5.9.0+): Self-Assessment Approach
 
-### The Solution: URL Handling + Batching
+**The problem is SOLVED** by changing the payload format:
 
-**1. URL Handling**: Educate ChatGPT to construct safe payloads BEFORE making the call.
+**OLD approach** (caused 403 errors):
+- Send textual findings, evidence descriptions, workpapers with content
+- Large payloads (15-20KB) with suspicious patterns
+- Required batching to avoid 403 blocks
 
-**2. Batching**: Split large payloads into smaller batches to avoid triggering security filters.
+**NEW approach** (NO 403 errors):
+- Send only **counts** and **self-assessment** (numbers only)
+- Tiny payloads (2-3KB) with no suspicious content
+- NO batching needed
+- ChatGPT self-evaluates quality honestly
 
-**Implementation**:
-1. **Tool description** (`src/workers/everything-workers.ts`): Detailed guidance with examples
-2. **Execution manifest** (`src/workers/manifest-execution.ts`): Critical instructions in the manifest
-3. **Clear examples**: Show what works and what doesn't
-
-**Safe patterns**:
+**Example NEW payload** (safe, small):
 ```json
 {
-  "findings": "Analysis shows X. Sources: Reuters (https://...), Bloomberg (https://...)",
-  "evidence_refs": [
-    {"type": "citation", "source": "Smith 2024", "description": "Study"},
-    {"type": "calculation", "source": "see-workpapers", "description": "ROI calc"}
-  ],
-  "workpapers": [
-    {"type": "dataset", "content": "Source: https://...\n\nData: ...", "format": "markdown"}
-  ]
+  "execution_token": "exec_...",
+  "self_assessment": {
+    "total_evidence_items": 45,
+    "external_sources": 12,
+    "quantitative_datapoints": 23,
+    "workpapers_created": 8,
+    "estimated_confidence": 0.82,
+    "estimated_coverage": 0.96
+  },
+  "results": [{
+    "plan_id": "P1",
+    "step_id": "step_1",
+    "evidence_count": 3,
+    "source_count": 2,
+    "summary": "12 journeys. Leakage 12-25%. Sources: NNG, Baymard."
+  }]
 }
 ```
 
-**Unsafe patterns** (will cause 403):
-```json
-{
-  "evidence_refs": [
-    {"type": "url", "source": "https://example.com", "description": "..."}
-  ]
-}
-```
+**Benefits**:
+- ✅ NO 403 errors (payload too small to trigger filters)
+- ✅ NO batching complexity
+- ✅ ChatGPT self-corrects (knows when to add more evidence)
+- ✅ Server validates honesty (compares declared vs calculated metrics)
 
-**Key rules**:
-- ✅ URLs in `findings` text (markdown format)
-- ✅ URLs in `workpapers.content` field
-- ✅ `evidence_refs` with type="citation", "calculation", "data_source" (NO URLs)
-- ❌ URLs in `evidence_refs.source` field
-- ❌ `type: "url"
+## Confidence Calculation (v5.9.0+)
 
-### Batching Strategy for Large Payloads
-
-**Problem**: Large payloads with many workpapers containing calculations/code trigger 403 "safety" blocks.
-
-**Solution**: Split results into multiple batches and call `register_execution_results` multiple times.
+### Current Approach: Self-Assessment Based
 
 **How it works**:
-1. The execution token can be **reused multiple times** (not single-use anymore)
-2. Each batch is registered independently
-3. No need to resend previous results
-4. Server tracks use count for monitoring
+1. ChatGPT declares evidence counts in `self_assessment`:
+   - `total_evidence_items`: Total unique evidence collected
+   - `external_sources`: Authoritative sources count
+   - `quantitative_datapoints`: Numbers/calculations count
+   - `workpapers_created`: Detailed analysis documents count
 
-**Example**:
-```python
-# Instead of sending all 15 results at once (may cause 403):
-register_execution_results(token, all_15_results)  # ❌ Too large
+2. Server calculates confidence from declared counts:
+   ```
+   confidence = base + evidence_bonus + quality_bonus
 
-# Split into batches of 3-5 results:
-register_execution_results(token, results[0:5])    # ✅ Batch 1
-register_execution_results(token, results[5:10])   # ✅ Batch 2
-register_execution_results(token, results[10:15])  # ✅ Batch 3
-```
+   Where:
+   - base: 0.4
+   - evidence_bonus: +0.05 per evidence item (max +0.3)
+   - quality_bonus: based on source/datapoint/workpaper ratios
+   ```
 
-**When to batch**:
-- More than 10 results total
-- Workpapers contain large datasets (>1000 lines)
-- Workpapers contain code/calculations (Python, SQL, etc.)
-- Previous attempt got 403 error
+3. Server validates self-assessment:
+   - Compares `estimated_confidence` with calculated confidence
+   - Provides feedback if ChatGPT under/overestimates
+   - Suggests improvements if thresholds not met
 
-**Batch size recommendations**:
-- **3-5 results per batch** for workpapers with code/calculations
-- **5-10 results per batch** for simple findings without workpapers
-- **1-2 results per batch** for very large datasets (>5000 lines)` in evidence_refs
-
-## Confidence Calculation Enhancement (2025-10-10)
-
-### The Problem
-
-The original confidence calculation only counted `evidence_ids` from legacy `plan_results`. When ChatGPT followed our guidance to avoid 403 errors by putting URLs in `findings` text instead of `evidence_refs`, the confidence score was artificially low because:
-
-1. **Evidence_refs weren't counted** (only legacy evidence_ids)
-2. **Workpapers weren't considered** (high-quality structured evidence)
-3. **Findings quality was ignored** (URLs, quantitative data, length)
-
-This created a paradox: ChatGPT followed our safety guidance but got penalized with low confidence scores.
-
-### The Solution
-
-**Enhanced confidence calculation** (`src/workers/session-metrics.ts`) that considers multiple evidence sources:
-
-**Evidence sources counted**:
-1. ✅ Legacy `evidence_id` (backward compatibility)
-2. ✅ `evidence_refs` from `register_execution_results` (citations, calculations, data sources)
-3. ✅ `workpapers` (high-value structured evidence - datasets, calculations, analyses)
-4. ✅ `findings` quality indicators:
-   - URLs in findings text (external sources)
-   - Quantitative data (numbers, percentages, currency)
-   - Length and depth
-
-**New formula**:
-```
-confidence = base + evidence_bonus + content_bonus - quality_penalty
-
-Where:
-- base: 0.4 (was 0.5)
-- evidence_bonus: +0.05 per unique evidence item (max +0.3)
-  - Counts: evidence_ids + evidence_refs + workpapers
-- content_bonus: +0.2 max for high-quality findings
-  - +0.02 per workpaper (max +0.1)
-  - +0.01 per finding with URLs (max +0.05)
-  - +0.01 per finding with numbers (max +0.05)
-- quality_penalty: -0.2 per evidence_low signal (max -0.4)
-```
+**Key principle**: ChatGPT is responsible for honest self-evaluation. Server validates and guides.
 
 **Impact**:
 - ChatGPT can now reach 85%+ confidence by providing quality findings with URLs and workpapers

@@ -60,16 +60,28 @@ describe('Saliency Report Integration', () => {
     const manifest = generateExecutionManifest(sessionId, manager);
     const execution_token = manifest.execution_token;
 
-    // Register execution results with low-quality evidence
+    // Register execution results with low-quality evidence (NEW format)
     const result = await handleRegisterExecutionResults({
       execution_token,
+      self_assessment: {
+        total_evidence_items: 0,
+        external_sources: 0,
+        quantitative_datapoints: 0,
+        workpapers_created: 0,
+        estimated_confidence: 0.2,
+        estimated_coverage: 1.0,
+        meets_confidence_threshold: false,
+        meets_coverage_threshold: true
+      },
       results: [
         {
           plan_id: 'plan_A',
           step_id: 'market_research',
-          findings: 'Basic market research output',
+          evidence_count: 0,
+          source_count: 0,
+          data_point_count: 0,
           evidence_refs: [],
-          workpapers: []
+          summary: 'Basic market research output'
         }
       ]
     }, manager);
@@ -87,13 +99,25 @@ describe('Saliency Report Integration', () => {
 
     await handleRegisterExecutionResults({
       execution_token: manifest.execution_token,
+      self_assessment: {
+        total_evidence_items: 0,
+        external_sources: 0,
+        quantitative_datapoints: 0,
+        workpapers_created: 0,
+        estimated_confidence: 0.2,
+        estimated_coverage: 1.0,
+        meets_confidence_threshold: false,
+        meets_coverage_threshold: true
+      },
       results: [
         {
           plan_id: 'plan_A',
           step_id: 'market_research',
-          findings: 'Basic output without external sources',
+          evidence_count: 0,
+          source_count: 0,
+          data_point_count: 0,
           evidence_refs: [],
-          workpapers: []
+          summary: 'Basic output without external sources'
         }
       ]
     }, manager);
@@ -113,13 +137,25 @@ describe('Saliency Report Integration', () => {
 
     await handleRegisterExecutionResults({
       execution_token: manifest.execution_token,
+      self_assessment: {
+        total_evidence_items: 0,
+        external_sources: 0,
+        quantitative_datapoints: 0,
+        workpapers_created: 0,
+        estimated_confidence: 0.2,
+        estimated_coverage: 1.0,
+        meets_confidence_threshold: false,
+        meets_coverage_threshold: true
+      },
       results: [
         {
           plan_id: 'plan_A',
           step_id: 'market_research',
-          findings: 'Output without citations',
+          evidence_count: 0,
+          source_count: 0,
+          data_point_count: 0,
           evidence_refs: [],
-          workpapers: []
+          summary: 'Output without citations'
         }
       ]
     }, manager);
@@ -139,13 +175,25 @@ describe('Saliency Report Integration', () => {
 
     await handleRegisterExecutionResults({
       execution_token: manifest.execution_token,
+      self_assessment: {
+        total_evidence_items: 0,
+        external_sources: 0,
+        quantitative_datapoints: 0,
+        workpapers_created: 0,
+        estimated_confidence: 0.2,
+        estimated_coverage: 1.0,
+        meets_confidence_threshold: false,
+        meets_coverage_threshold: true
+      },
       results: [
         {
           plan_id: 'plan_A',
           step_id: 'market_research',
-          findings: 'Basic output',
+          evidence_count: 0,
+          source_count: 0,
+          data_point_count: 0,
           evidence_refs: [],
-          workpapers: []
+          summary: 'Basic output'
         }
       ]
     }, manager);
@@ -173,20 +221,30 @@ describe('Saliency Report Integration', () => {
 
     await handleRegisterExecutionResults({
       execution_token: manifest.execution_token,
+      self_assessment: {
+        total_evidence_items: 8,
+        external_sources: 3,
+        quantitative_datapoints: 3,
+        workpapers_created: 2,
+        estimated_confidence: 0.9,
+        estimated_coverage: 1.0,
+        meets_confidence_threshold: true,
+        meets_coverage_threshold: true
+      },
       results: [
         {
           plan_id: 'plan_A',
           step_id: 'market_research',
-          findings: 'Comprehensive analysis with citations:\n- Source 1: https://example.com/report1\n- Source 2: https://example.com/report2\n- Source 3: https://example.com/report3\n\nQuantitative data:\n- Market size: $5B (source: Gartner)\n- Growth rate: 15% CAGR\n- Market share: 25%\n\nWorkpaper: [dataset.csv]\nCalculations: ROI = (Revenue - Cost) / Cost = 150%',
+          evidence_count: 8,
+          source_count: 3,
+          data_point_count: 3,
           evidence_refs: [
-            { description: 'Report 1', type: 'url', source: 'https://example.com/report1', reliability_score: 0.9 },
-            { description: 'Report 2', type: 'url', source: 'https://example.com/report2', reliability_score: 0.9 },
-            { description: 'Report 3', type: 'url', source: 'https://example.com/report3', reliability_score: 0.9 }
+            { ref_id: 'Report1', type: 'source', reliability: 0.9 },
+            { ref_id: 'Report2', type: 'source', reliability: 0.9 },
+            { ref_id: 'Report3', type: 'source', reliability: 0.9 },
+            { ref_id: 'Calc1', type: 'calculation', reliability: 0.95 }
           ],
-          workpapers: [
-            { title: 'Market Data', type: 'dataset', content: 'Market size: $5B, Growth: 15%', format: 'markdown' },
-            { title: 'ROI Calculation', type: 'calculation', content: 'ROI = 150%', format: 'markdown' }
-          ]
+          summary: 'Comprehensive analysis. 3 sources, 3 datapoints, 2 workpapers. Market: $5B, Growth: 15%, ROI: 150%.'
         }
       ]
     }, manager);
@@ -207,16 +265,29 @@ describe('Saliency Report Integration', () => {
 
     await handleRegisterExecutionResults({
       execution_token: manifest.execution_token,
+      self_assessment: {
+        total_evidence_items: 2,
+        external_sources: 2,
+        quantitative_datapoints: 0,
+        workpapers_created: 0,
+        estimated_confidence: 0.4,
+        estimated_coverage: 1.0,
+        meets_confidence_threshold: false,
+        meets_coverage_threshold: true,
+        gaps_identified: ['No quantitative data', 'No workpapers']
+      },
       results: [
         {
           plan_id: 'plan_A',
           step_id: 'market_research',
-          findings: 'Analysis with some external sources:\n- https://example.com/source1\n- https://example.com/source2\n\nBut no quantitative data or workpapers.',
+          evidence_count: 2,
+          source_count: 2,
+          data_point_count: 0,
           evidence_refs: [
-            { description: 'Source 1', type: 'url', source: 'https://example.com/source1' },
-            { description: 'Source 2', type: 'url', source: 'https://example.com/source2' }
+            { ref_id: 'Source1', type: 'source', reliability: 0.7 },
+            { ref_id: 'Source2', type: 'source', reliability: 0.7 }
           ],
-          workpapers: []
+          summary: 'Analysis with 2 external sources but no quantitative data.'
         }
       ]
     }, manager);
@@ -239,13 +310,26 @@ describe('Saliency Report Integration', () => {
 
     await handleRegisterExecutionResults({
       execution_token: manifest.execution_token,
+      self_assessment: {
+        total_evidence_items: 0,
+        external_sources: 0,
+        quantitative_datapoints: 0,
+        workpapers_created: 0,
+        estimated_confidence: 0.2,
+        estimated_coverage: 1.0,
+        meets_confidence_threshold: false,
+        meets_coverage_threshold: true,
+        gaps_identified: ['No evidence collected']
+      },
       results: [
         {
           plan_id: 'plan_A',
           step_id: 'market_research',
-          findings: 'Basic output',
+          evidence_count: 0,
+          source_count: 0,
+          data_point_count: 0,
           evidence_refs: [],
-          workpapers: []
+          summary: 'Basic output with no evidence.'
         }
       ]
     }, manager);

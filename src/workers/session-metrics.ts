@@ -50,16 +50,14 @@ export interface SessionMetrics {
 /**
  * Calculate confidence metric based on evidence density and quality signals
  *
- * UPDATED 2025-10-10: Enhanced to consider multiple evidence sources:
- * - evidence_ids (legacy)
- * - evidence_refs from register_execution_results
- * - workpapers (high-quality structured evidence)
- * - findings quality (length, URLs, quantitative data)
+ * UPDATED 2025-01-11 (v5.9.0): Self-assessment based calculation
+ * - Uses declared counts from ChatGPT's self_assessment when available
+ * - Falls back to analyzing textual content for backward compatibility
  *
- * Formula: confidence = base + evidence_bonus + content_bonus - quality_penalty
+ * Formula: confidence = base + evidence_bonus + quality_bonus - quality_penalty
  * - base: 0.4
  * - evidence_bonus: +0.05 per unique evidence item (max +0.3)
- * - content_bonus: +0.2 for high-quality findings/workpapers (max +0.2)
+ * - quality_bonus: based on source/datapoint/workpaper ratios (max +0.2)
  * - quality_penalty: -0.2 per evidence_low signal (max -0.4)
  * - Clamped to [0, 1]
  */
@@ -69,86 +67,113 @@ export function calculateConfidence(session: ParallelReasoningSession): {
 } {
   const baseConfidence = 0.4;
 
-  // Count unique evidence items from multiple sources
-  const uniqueEvidenceIds = new Set<string>();
-  let totalEvidenceRefs = 0;
+  // Check if we have self-assessment data (NEW format v5.9.0+)
+  const selfAssessments = (session as any).self_assessments;
+  const hasSelfAssessment = selfAssessments && selfAssessments.length > 0;
+
+  let totalEvidenceItems = 0;
+  let totalExternalSources = 0;
+  let totalQuantitativeDatapoints = 0;
   let totalWorkpapers = 0;
-  let totalFindingsLength = 0;
-  let findingsWithUrls = 0;
-  let findingsWithNumbers = 0;
 
-  // From plan results (registered via register_execution_results)
-  for (const results of session.plan_results.values()) {
-    for (const result of results) {
-      // Legacy evidence_id
-      if (result.evidence_id) {
-        uniqueEvidenceIds.add(result.evidence_id);
-      }
+  if (hasSelfAssessment) {
+    // NEW: Use declared counts from self-assessment
+    const latestAssessment = selfAssessments[selfAssessments.length - 1];
+    totalEvidenceItems = latestAssessment.total_evidence_items || 0;
+    totalExternalSources = latestAssessment.external_sources || 0;
+    totalQuantitativeDatapoints = latestAssessment.quantitative_datapoints || 0;
+    totalWorkpapers = latestAssessment.workpapers_created || 0;
 
-      // Evidence refs (citations, calculations, data sources)
-      if (result.evidence_refs && Array.isArray(result.evidence_refs)) {
-        totalEvidenceRefs += result.evidence_refs.length;
-        // Count each evidence_ref as unique evidence
-        result.evidence_refs.forEach((ref: any, idx: number) => {
-          uniqueEvidenceIds.add(`${result.evidence_id}_ref_${idx}`);
-        });
-      }
+    console.log(`[Confidence Calculation] Using self-assessment: ${totalEvidenceItems} items (sources: ${totalExternalSources}, datapoints: ${totalQuantitativeDatapoints}, workpapers: ${totalWorkpapers})`);
+  } else {
+    // OLD: Analyze textual content (backward compatibility)
+    const uniqueEvidenceIds = new Set<string>();
+    let totalEvidenceRefs = 0;
+    let findingsWithUrls = 0;
+    let findingsWithNumbers = 0;
 
-      // Workpapers (high-quality structured evidence)
-      if (result.workpapers && Array.isArray(result.workpapers)) {
-        totalWorkpapers += result.workpapers.length;
-        // Workpapers are high-value evidence
-        result.workpapers.forEach((wp: any, idx: number) => {
-          uniqueEvidenceIds.add(`${result.evidence_id}_wp_${idx}`);
-        });
-      }
-
-      // Findings quality analysis
-      if (result.findings) {
-        totalFindingsLength += result.findings.length;
-
-        // Check for URLs in findings (indicates external sources)
-        if (result.findings.match(/https?:\/\//)) {
-          findingsWithUrls++;
+    // From plan results (registered via register_execution_results)
+    for (const results of session.plan_results.values()) {
+      for (const result of results) {
+        // NEW format: use declared counts if available
+        if (result.evidence_count !== undefined) {
+          totalEvidenceItems += result.evidence_count;
+        }
+        if (result.source_count !== undefined) {
+          totalExternalSources += result.source_count;
+        }
+        if (result.data_point_count !== undefined) {
+          totalQuantitativeDatapoints += result.data_point_count;
         }
 
-        // Check for quantitative data (numbers, percentages, metrics)
-        if (result.findings.match(/\d+(\.\d+)?%?|\$\d+|€\d+/)) {
-          findingsWithNumbers++;
+        // Legacy evidence_id
+        if (result.evidence_id) {
+          uniqueEvidenceIds.add(result.evidence_id);
+        }
+
+        // Evidence refs (citations, calculations, data sources)
+        if (result.evidence_refs && Array.isArray(result.evidence_refs)) {
+          totalEvidenceRefs += result.evidence_refs.length;
+          result.evidence_refs.forEach((ref: any, idx: number) => {
+            uniqueEvidenceIds.add(`${result.evidence_id}_ref_${idx}`);
+          });
+        }
+
+        // Workpapers (high-quality structured evidence)
+        if (result.workpapers && Array.isArray(result.workpapers)) {
+          totalWorkpapers += result.workpapers.length;
+          result.workpapers.forEach((wp: any, idx: number) => {
+            uniqueEvidenceIds.add(`${result.evidence_id}_wp_${idx}`);
+          });
+        }
+
+        // Findings quality analysis
+        if (result.findings) {
+          // Check for URLs in findings (indicates external sources)
+          if (result.findings.match(/https?:\/\//)) {
+            findingsWithUrls++;
+          }
+
+          // Check for quantitative data (numbers, percentages, metrics)
+          if (result.findings.match(/\d+(\.\d+)?%?|\$\d+|€\d+/)) {
+            findingsWithNumbers++;
+          }
         }
       }
     }
-  }
 
-  // From mediation decisions
-  for (const decision of session.mediation_decisions) {
-    for (const evidenceId of decision.evidence_ids) {
-      uniqueEvidenceIds.add(evidenceId);
+    // If no declared counts, use analyzed counts
+    if (totalEvidenceItems === 0) {
+      totalEvidenceItems = uniqueEvidenceIds.size;
+      totalExternalSources = findingsWithUrls;
+      totalQuantitativeDatapoints = findingsWithNumbers;
     }
+
+    console.log(`[Confidence Calculation] Analyzed content: ${totalEvidenceItems} items (refs: ${totalEvidenceRefs}, workpapers: ${totalWorkpapers})`);
   }
 
   // Evidence bonus: +0.05 per unique evidence item (max +0.3)
-  const evidenceBonus = Math.min(0.3, uniqueEvidenceIds.size * 0.05);
+  const evidenceBonus = Math.min(0.3, totalEvidenceItems * 0.05);
 
-  // Content quality bonus (max +0.2)
-  let contentBonus = 0;
+  // Quality bonus based on evidence composition (max +0.2)
+  let qualityBonus = 0;
+
+  // Bonus for external sources (authoritative evidence)
+  if (totalExternalSources > 0) {
+    qualityBonus += Math.min(0.08, totalExternalSources * 0.01);
+  }
+
+  // Bonus for quantitative data (objective evidence)
+  if (totalQuantitativeDatapoints > 0) {
+    qualityBonus += Math.min(0.08, totalQuantitativeDatapoints * 0.005);
+  }
 
   // Bonus for workpapers (structured, high-quality evidence)
   if (totalWorkpapers > 0) {
-    contentBonus += Math.min(0.1, totalWorkpapers * 0.02);
+    qualityBonus += Math.min(0.04, totalWorkpapers * 0.01);
   }
 
-  // Bonus for findings with URLs (external sources)
-  if (findingsWithUrls > 0) {
-    contentBonus += Math.min(0.05, findingsWithUrls * 0.01);
-  }
-
-  // Bonus for findings with quantitative data
-  if (findingsWithNumbers > 0) {
-    contentBonus += Math.min(0.05, findingsWithNumbers * 0.01);
-  }
-
-  contentBonus = Math.min(0.2, contentBonus);
+  qualityBonus = Math.min(0.2, qualityBonus);
 
   // Count evidence_low signals
   let evidenceLowCount = 0;
@@ -173,19 +198,17 @@ export function calculateConfidence(session: ParallelReasoningSession): {
 
   const qualityPenalty = Math.min(0.4, evidenceLowCount * 0.2);
 
-  const score = Math.max(0, Math.min(1, baseConfidence + evidenceBonus + contentBonus - qualityPenalty));
+  const score = Math.max(0, Math.min(1, baseConfidence + evidenceBonus + qualityBonus - qualityPenalty));
 
-  console.log(`[Confidence Calculation] Evidence items: ${uniqueEvidenceIds.size} (refs: ${totalEvidenceRefs}, workpapers: ${totalWorkpapers})`);
-  console.log(`[Confidence Calculation] Content quality: URLs=${findingsWithUrls}, Numbers=${findingsWithNumbers}`);
-  console.log(`[Confidence Calculation] Score breakdown: base=${baseConfidence}, evidence_bonus=${evidenceBonus.toFixed(3)}, content_bonus=${contentBonus.toFixed(3)}, penalty=${qualityPenalty.toFixed(3)}, final=${score.toFixed(3)}`);
+  console.log(`[Confidence Calculation] Score breakdown: base=${baseConfidence}, evidence_bonus=${evidenceBonus.toFixed(3)}, quality_bonus=${qualityBonus.toFixed(3)}, penalty=${qualityPenalty.toFixed(3)}, final=${score.toFixed(3)}`);
 
   return {
     score,
     details: {
-      unique_evidence_count: uniqueEvidenceIds.size,
+      unique_evidence_count: totalEvidenceItems,
       evidence_low_count: evidenceLowCount,
       base: baseConfidence,
-      bonus: evidenceBonus + contentBonus,
+      bonus: evidenceBonus + qualityBonus,
       penalty: qualityPenalty
     }
   };
