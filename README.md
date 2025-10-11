@@ -10,10 +10,18 @@ An MCP-compliant Cloudflare Worker that helps ChatGPT coordinate structured, mul
 - ✅ Added support for `Key (value)` format in diversity axes (e.g., `Metodologia (econometrico)`)
 - ✅ Fixed semantic diversity calculation returning 0 for clearly different plans
 - ✅ Plans using parentheses format now correctly differentiate from each other
-- ✅ Updated wrangler to 4.42.2
-- ✅ Resolved all TypeScript compilation errors
 
-**Impact**: Plans that were incorrectly rejected as "too similar" are now properly accepted, enabling more diverse parallel reasoning workflows.
+**Fixed: Confidence Calculation & Moderation Blocks**
+- ✅ Increased evidence quality bonuses to make 75% threshold more achievable
+- ✅ Added regex validation to enforce synthetic IDs (Source1, Calc1, Data1, WP1)
+- ✅ Prevented moderation blocks by rejecting real source names (ISTAT, WEF, Excelsior)
+- ✅ Reduced summary max length from 300 to 200 chars to minimize moderation risk
+- ✅ Updated tool descriptions with CRITICAL anti-moderation rules
+
+**Impact**:
+- ChatGPT can now reach quality thresholds more easily with proper evidence
+- Prevents 403 moderation errors by enforcing synthetic IDs in payloads
+- Clearer guidance helps ChatGPT self-correct and avoid common mistakes
 
 ### 🎯 Self-Assessment Approach (v5.9.0+) - NO MORE 403 ERRORS!
 
