@@ -146,18 +146,18 @@ export interface ParsedAxis {
  *
  * Supports formats:
  * - "Key: Value" → {key: "key", value: "value"}
+ * - "Key (Value)" → {key: "key", value: "value"}
  * - "Key" → {key: "key", value: ""}
  * - "Key: Value1 vs Value2 vs Value3" → {key: "key", value: "value1 vs value2 vs value3"}
- * - "Key description (details)" → {key: "key", value: ""}
- * - "Key verso X (Y vs Z)" → {key: "key", value: ""}
+ * - "Key (Value1 vs Value2)" → {key: "key", value: "value1 vs value2"}
  *
  * Examples:
  * - "Tech Stack: Hybrid" → {key: "tech_stack", value: "hybrid"}
+ * - "Metodologia (econometrico)" → {key: "metodologia", value: "econometrico"}
  * - "data_sources" → {key: "data_sources", value: ""}
  * - "Risk: Market vs Operational" → {key: "risk", value: "market vs operational"}
- * - "Postura verso l'AGCM (accettazione vs contestazione)" → {key: "postura", value: ""}
  * - "Postura: accettazione" → {key: "postura", value: "accettazione"}
- * - "Ampiezza del rimedio economico ai clienti" → {key: "ampiezza", value: ""}
+ * - "Narrativa di scenario (baseline ISTAT)" → {key: "narrativa_scenario", value: "baseline istat"}
  * - "Rimedio: ampio" → {key: "rimedio", value: "ampio"}
  */
 export function parseAxisString(axis: string): ParsedAxis {
@@ -174,7 +174,18 @@ export function parseAxisString(axis: string): ParsedAxis {
     return { key, value, original: trimmed };
   }
 
-  // No colon found - extract main key from entire string
+  // Try to match "Key (value)" pattern (value in parentheses)
+  const parenMatch = trimmed.match(/^([^(]+)\(([^)]+)\)$/);
+
+  if (parenMatch) {
+    // Extract key from the part before parentheses
+    const keyPart = parenMatch[1].trim();
+    const key = extractMainKey(keyPart);
+    const value = parenMatch[2].trim().toLowerCase();
+    return { key, value, original: trimmed };
+  }
+
+  // No colon or parentheses found - extract main key from entire string
   const key = extractMainKey(trimmed);
   return { key, value: '', original: trimmed };
 }
@@ -185,19 +196,23 @@ export function parseAxisString(axis: string): ParsedAxis {
  * Strategy: Extract all significant nouns and create multiple possible keys.
  * This allows matching both "Grado di apertura" with "Grado" or "Apertura".
  *
+ * Note: This function is called AFTER parseAxisString has already extracted values from
+ * "Key (value)" or "Key: value" patterns, so parentheses here are only for descriptions,
+ * not values.
+ *
  * Examples:
- * - "Postura verso l'AGCM (accettazione vs contestazione)" → "postura"
- * - "Ampiezza del rimedio economico" → "ampiezza|rimedio"
- * - "Velocità di implementazione vs robustezza" → "velocità|implementazione"
- * - "Tonalità della comunicazione (penitente vs assertiva)" → "tonalità|comunicazione"
- * - "Grado di apertura dei dati" → "grado|apertura"
- * - "Propensione al rischio" → "propensione|rischio"
+ * - "Postura verso l'AGCM" → "postura"
+ * - "Ampiezza del rimedio economico" → "ampiezza_rimedio"
+ * - "Velocità di implementazione vs robustezza" → "velocità_implementazione"
+ * - "Tonalità della comunicazione" → "tonalità_comunicazione"
+ * - "Grado di apertura dei dati" → "grado_apertura"
+ * - "Propensione al rischio" → "propensione_rischio"
  * - "Tech Stack" → "tech_stack"
  */
 function extractMainKey(text: string): string {
   let cleaned = text.trim();
 
-  // Remove everything in parentheses
+  // Remove everything in parentheses (only for descriptions, not values)
   cleaned = cleaned.replace(/\([^)]*\)/g, '');
 
   // Remove "vs" and everything after it

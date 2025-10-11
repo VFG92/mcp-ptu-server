@@ -43,6 +43,32 @@ describe('Semantic Diversity Parsing', () => {
       expect(result1.key).toBe(result2.key);
       expect(result1.value).toBe(result2.value);
     });
+
+    it('should parse "Key (Value)" format correctly', () => {
+      const result = parseAxisString('Metodologia (econometrico)');
+      expect(result.key).toBe('metodologia');
+      expect(result.value).toBe('econometrico');
+      expect(result.original).toBe('Metodologia (econometrico)');
+    });
+
+    it('should parse "Key (Value)" with complex values', () => {
+      const result = parseAxisString('Narrativa di scenario (baseline ISTAT / WEF median automation)');
+      expect(result.key).toBe('narrativa_scenario');
+      expect(result.value).toBe('baseline istat / wef median automation');
+    });
+
+    it('should parse "Key (Value1 vs Value2)" format', () => {
+      const result = parseAxisString('Assunzioni (moderata vs alta)');
+      expect(result.key).toBe('assunzioni');
+      expect(result.value).toBe('moderata vs alta');
+    });
+
+    it('should differentiate between "Key: Value" and "Key (Value)"', () => {
+      const result1 = parseAxisString('Metodologia: econometrico');
+      const result2 = parseAxisString('Metodologia (econometrico)');
+      expect(result1.key).toBe(result2.key);
+      expect(result1.value).toBe(result2.value);
+    });
   });
 
   describe('compareAxesSemantically', () => {
@@ -121,6 +147,43 @@ describe('Semantic Diversity Parsing', () => {
       // Time Horizon: only in plan2 (1)
       // Total: 3
       expect(calculateSemanticDiversity(plan1, plan2)).toBe(3);
+    });
+
+    it('should differentiate plans with parentheses format', () => {
+      const plan1 = ['Metodologia (econometrico)', 'Narrativa di scenario (baseline ISTAT)'];
+      const plan2 = ['Metodologia (sistemi dinamici)', 'Narrativa di scenario (downside WEF)'];
+      // Both axes have same keys but different values
+      expect(calculateSemanticDiversity(plan1, plan2)).toBe(2);
+    });
+
+    it('should return 0 for same axes in parentheses format', () => {
+      const plan1 = ['Metodologia (econometrico)', 'Granularità temporale (annuale)'];
+      const plan2 = ['Metodologia (econometrico)', 'Granularità temporale (annuale)'];
+      expect(calculateSemanticDiversity(plan1, plan2)).toBe(0);
+    });
+
+    it('should handle mixed colon and parentheses formats', () => {
+      const plan1 = ['Metodologia: econometrico', 'Narrativa (baseline)'];
+      const plan2 = ['Metodologia (sistemi dinamici)', 'Narrativa: downside'];
+      // Both axes have same keys but different values
+      expect(calculateSemanticDiversity(plan1, plan2)).toBe(2);
+    });
+
+    it('should handle real-world Italian scenario', () => {
+      const planEcon = [
+        'Metodologia (econometrico)',
+        'Narrativa di scenario (baseline ISTAT / WEF median automation)',
+        'Granularità temporale (annuale)',
+        'Assunzioni su elasticità occupazione/automazione (moderata −0,25)'
+      ];
+      const planSystems = [
+        'Metodologia (sistemi dinamici)',
+        'Narrativa di scenario (downside WEF-high automation)',
+        'Granularità temporale (semestrale)',
+        'Assunzioni su elasticità occupazione/automazione (alta −0,45)'
+      ];
+      // All 4 axes have same keys but different values
+      expect(calculateSemanticDiversity(planEcon, planSystems)).toBe(4);
     });
 
     it('should handle case insensitivity', () => {
