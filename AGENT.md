@@ -25,6 +25,10 @@ This document keeps contributors and AI agents aligned while working on the repo
 ## Direct results API
 - Switch to `POST /api/register-results` when MCP sessions expire or moderation blocks `register_execution_results`.
 - The endpoint extracts `session_id` from the `execution_token`, so clients never send session identifiers directly.
+- **Session Registry Integration**: The endpoint now checks a global SessionRegistry to route to the correct Durable Object instance
+  - When `init_parallel_reasoning` is called, the server registers `session_id → DO_ID` mapping
+  - `/api/register-results` uses this mapping to ensure it routes to the same DO that created the session
+  - This fixes the critical bug where results were being sent to an empty DO instance
 - Run `./test-simple-direct-api.sh` and `./test-direct-api.sh` before shipping changes that touch execution result handling.
 - Error handling and storage writes live in `src/workers/session.ts#handleInternalRegisterResults`; keep the handler idempotent for safe retries.
 - The MCP tool `register_execution_results` is now hidden; rely exclusively on the HTTP endpoint for batch submissions.
@@ -100,18 +104,39 @@ Use the following prompt to exercise the server end-to-end:
 **Why it works**:
 - Bypasses MCP transport entirely
 - Extracts `session_id` from `execution_token` (no MCP session needed)
+- **Uses SessionRegistry to route to correct DO** (critical fix - see below)
 - Routes directly to Durable Object via worker
 - Avoids `-32600 "Session terminated"` errors completely
 
-**Implementation** (src/workers/index.ts:214):
+**Implementation** (src/workers/index.ts:256-305):
 ```typescript
 // Extract session_id from execution_token
-const token = body.params.arguments.execution_token;
-const match = token.match(/^exec_(.+)_\d+$/);
-if (match) {
-  sessionId = match[1]; // Direct routing, no MCP session
+const match = execution_token.match(/^exec_(.+?)_(\d+)(?:_[a-z0-9]+)?$/i);
+const sessionId = match[1];
+
+// Check SessionRegistry for the mapping
+const registryId = getDurableObjectId(c.env.SESSION_REGISTRY, 'global-session-registry');
+const registryStub = c.env.SESSION_REGISTRY.get(registryId);
+const registryResult = await registryStub.fetch(
+  new Request('http://internal/get-mapping', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId })
+  })
+);
+
+// Use mapped DO ID if found, otherwise use session_id directly
+let doId: DurableObjectId;
+if (registryResult.do_id) {
+  doId = getDurableObjectId(c.env.MCP_SESSION, registryResult.do_id);
+} else {
+  doId = getDurableObjectId(c.env.MCP_SESSION, sessionId);
 }
 ```
+
+**Critical Fix: Session Registry Integration**:
+- **Problem**: Previously, `/api/register-results` would create a NEW DO based on `session_id`, which was different from the DO that created the session
+- **Solution**: When `init_parallel_reasoning` is called, the server registers `session_id → DO_ID` mapping in SessionRegistry
+- **Result**: `/api/register-results` now routes to the SAME DO that created the session, so the execution token is found and results are registered correctly
 
 **When to Use Each Approach**:
 - ✅ **MCP tools**: Lightweight operations (init, submit plans, status checks, critiques)

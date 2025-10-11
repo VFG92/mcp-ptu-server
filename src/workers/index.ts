@@ -280,8 +280,28 @@ app.post('/api/register-results', async (c) => {
     const sessionId = match[1];
     console.log(`[API] Extracted session_id: ${sessionId}`);
 
-    // Get Durable Object stub using the helper function
-    const doId = getDurableObjectId(c.env.MCP_SESSION, sessionId);
+    // First, check SessionRegistry for the mapping
+    const registryId = getDurableObjectId(c.env.SESSION_REGISTRY, 'global-session-registry');
+    const registryStub = c.env.SESSION_REGISTRY.get(registryId);
+
+    const registryRequest = new Request('http://internal/get-mapping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId })
+    });
+
+    const registryResponse = await registryStub.fetch(registryRequest);
+    const registryResult = await registryResponse.json() as { do_id?: string };
+
+    let doId: DurableObjectId;
+    if (registryResult.do_id) {
+      console.log(`[API] Found mapping in registry: ${sessionId} → ${registryResult.do_id.substring(0, 16)}...`);
+      doId = getDurableObjectId(c.env.MCP_SESSION, registryResult.do_id);
+    } else {
+      console.log(`[API] No mapping found in registry, using session_id directly: ${sessionId}`);
+      doId = getDurableObjectId(c.env.MCP_SESSION, sessionId);
+    }
+
     const stub = c.env.MCP_SESSION.get(doId);
 
     // Call the DO directly with a special internal endpoint

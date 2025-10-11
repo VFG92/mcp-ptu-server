@@ -149,6 +149,15 @@ export class SessionRegistry {
       });
     }
 
+    // POST /get-mapping - Get mapping (for internal use)
+    if (method === 'POST' && url.pathname === '/get-mapping') {
+      const body = await request.json() as { session_id: string };
+      const doId = await this.getDoId(body.session_id);
+      return new Response(JSON.stringify({ do_id: doId }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     // POST /register - Register new mapping
     if (method === 'POST' && url.pathname === '/register') {
       const body = await request.json() as { customSessionId: string; durableObjectId: string };

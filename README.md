@@ -4,6 +4,12 @@ An MCP-compliant Cloudflare Worker that helps ChatGPT coordinate structured, mul
 
 ## 🆕 What's New (January 2025)
 
+### Critical Bug Fix: Session Registry Integration
+- **Fixed**: `/api/register-results` now correctly routes to the same Durable Object that created the session
+- **How it works**: When `init_parallel_reasoning` is called, the server registers a mapping `session_id → DO_ID` in a global SessionRegistry
+- **Impact**: ChatGPT can now successfully register execution results after generating a manifest, completing the full workflow
+- **Technical details**: The `/api/register-results` endpoint now checks the SessionRegistry before creating a DO, ensuring it routes to the correct instance
+
 ### Enhanced Evidence Quality Guidance
 - **Saliency Report Integration**: `list_plan_status` now shows exactly what evidence is missing (external sources, quantitative data, workpapers) with concrete examples
 - **Batch Evidence Registration**: New manifest-based workflow for efficient evidence registration
