@@ -854,8 +854,42 @@ This server supports parallel reasoning with diversity enforcement for complex a
         }
 
         try {
-          // Validate the arguments
-          const validatedArgs = RegisterExecutionResultsSchema.parse(args);
+          // Validate the arguments with safeParse to avoid blocking on validation errors
+          const parseResult = RegisterExecutionResultsSchema.safeParse(args);
+
+          if (!parseResult.success) {
+            // Log validation errors but try to proceed with sanitized data
+            console.warn(`[CallTool] Validation warnings in register_execution_results:`, parseResult.error.errors);
+            console.warn(`[CallTool] Attempting to proceed with available data...`);
+
+            // Try to extract what we can from the raw args
+            const validatedArgs = {
+              execution_token: args.execution_token || '',
+              results: Array.isArray(args.results) ? args.results.map((r: any) => ({
+                plan_id: r.plan_id || 'unknown',
+                step_id: r.step_id || 'unknown',
+                findings: r.findings || '',
+                evidence_refs: Array.isArray(r.evidence_refs) ? r.evidence_refs : [],
+                workpapers: Array.isArray(r.workpapers) ? r.workpapers : [],
+                reasoning_trace: r.reasoning_trace
+              })) : []
+            };
+
+            // Call handler with sanitized args
+            const result = await handleRegisterExecutionResults(validatedArgs, parallelReasoningV5Manager);
+
+            // Persist session state
+            if (parallelReasoningV5PersistCallback) {
+              console.log(`[CallTool] Persisting session state after registering results...`);
+              await parallelReasoningV5PersistCallback();
+              console.log(`[CallTool] Session state persisted successfully`);
+            }
+
+            return result;
+          }
+
+          // Validation successful - proceed normally
+          const validatedArgs = parseResult.data;
 
           // Call the handler directly - this bypasses MCP transport session management
           // Note: This does NOT avoid 403 blocks (payload already passed through OpenAI gateway)

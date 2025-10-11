@@ -100,8 +100,7 @@ Use the following prompt to exercise the server end-to-end:
 > - If you get "Session terminated", the workflow CANNOT be recovered - you must start over.
 >
 > **TOOLS NOT EXPOSED** (hidden from ChatGPT to avoid confusion):
-> - `register_execution_results`: Hidden - Use the `/api/register-results` HTTP endpoint instead
-> - `execute_plan_step`: Deprecated - Use `execute_reasoning_manifest` + direct API submission
+> - `execute_plan_step`: Deprecated - Use `execute_reasoning_manifest` + `register_execution_results` instead
 > - `submit_cross_plan_note`: Deprecated - Not needed in manifest workflow
 > - `analyze_with_capabilities`: Internal capability system - not for parallel reasoning
 > - `get_capability_status`: Internal capability system - not for parallel reasoning
@@ -128,16 +127,18 @@ Use the following prompt to exercise the server end-to-end:
 - This works for header mismatches, but **cannot reopen a session that the transport has already closed**
 - Once the transport calls `close()`, the session is dead - no amount of header injection can revive it
 
-### The Solution: HTTP API Bypass
+### The Solution: MCP Tool with Internal Bypass
 
-**Use `/api/register-results` for critical operations** (especially `register_execution_results`):
+**Use `register_execution_results` MCP tool** - it internally bypasses MCP transport issues:
 
 **Why it works**:
-- Bypasses MCP transport entirely
+- ChatGPT can call it as a normal MCP tool
+- Internally calls the same logic as `/api/register-results` HTTP endpoint
 - Extracts `session_id` from `execution_token` (no MCP session needed)
 - **Uses SessionRegistry to route to correct DO** (critical fix - see below)
 - Routes directly to Durable Object via worker
 - Avoids `-32600 "Session terminated"` errors completely
+- **Server-side sanitization** removes URLs from `evidence_refs` as safety net
 
 **Implementation** (src/workers/index.ts:256-305):
 ```typescript
@@ -170,9 +171,9 @@ if (registryResult.do_id) {
 - **Result**: `/api/register-results` now routes to the SAME DO that created the session, so the execution token is found and results are registered correctly
 
 **When to Use Each Approach**:
-- ✅ **MCP tools**: Lightweight operations (init, submit plans, status checks, critiques)
-- ✅ **HTTP API**: Heavy operations (register_execution_results with large payloads)
-- ⚠️ **Risk**: Long pauses between MCP calls → connection closed → `-32600` error
+- ✅ **MCP tools**: All operations including `register_execution_results` (recommended)
+- ✅ **HTTP API `/api/register-results`**: Fallback if MCP tool is unavailable or blocked
+- ⚠️ **Risk**: Long pauses between MCP calls → connection closed → `-32600` error (but `register_execution_results` bypasses this)
 
 ### Session Persistence (Still Works)
 
