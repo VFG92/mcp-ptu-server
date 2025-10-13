@@ -197,6 +197,46 @@ describe('Oracle Tools', () => {
       const response2 = JSON.parse(result2.content[0].text);
       expect(response2.from_cache).toBe(true);
     });
+
+    it('should NOT cache equivalent operations with different expected_result', async () => {
+      const expr: AlgebraicExpression = {
+        type: 'variable',
+        value: 'x'
+      };
+
+      const expected1: AlgebraicExpression = {
+        type: 'variable',
+        value: 'y'
+      };
+
+      const expected2: AlgebraicExpression = {
+        type: 'variable',
+        value: 'z'
+      };
+
+      const result1 = await handleVerifyAlgebraicClaim({
+        claim_id: 'test-cas-equiv-1',
+        operation: 'equivalent',
+        expression: expr,
+        expected_result: expected1
+      });
+
+      const result2 = await handleVerifyAlgebraicClaim({
+        claim_id: 'test-cas-equiv-2',
+        operation: 'equivalent',
+        expression: expr,
+        expected_result: expected2
+      });
+
+      const response1 = JSON.parse(result1.content[0].text);
+      const response2 = JSON.parse(result2.content[0].text);
+
+      // Should not use cache because expected_result is different
+      expect(response2.from_cache).toBeUndefined();
+      // Both should be NOT_EQUIVALENT
+      expect(response1.result).toBe('NOT_EQUIVALENT');
+      expect(response2.result).toBe('NOT_EQUIVALENT');
+    });
   });
 
   describe('verify_proof_sketch (Proof checker)', () => {
@@ -275,6 +315,46 @@ describe('Oracle Tools', () => {
       const response = JSON.parse(result.content[0].text);
       expect(response.result).toBe('INVALID');
       expect(response.error_message).toContain('not derived');
+    });
+
+    it('should verify modus ponens correctly', async () => {
+      const validProof: ProofSketch = {
+        premises: ['A', 'A -> B'],
+        conclusion: 'B',
+        steps: [
+          { formula: 'A', justification: 'premise' },
+          { formula: 'A -> B', justification: 'premise' },
+          { formula: 'B', justification: 'modus_ponens' }
+        ]
+      };
+
+      const result = await handleVerifyProofSketch({
+        claim_id: 'test-modus-ponens',
+        proof: validProof
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.result).toBe('VALID');
+    });
+
+    it('should reject invalid modus ponens', async () => {
+      const invalidProof: ProofSketch = {
+        premises: ['A'],
+        conclusion: 'B',
+        steps: [
+          { formula: 'A', justification: 'premise' },
+          { formula: 'B', justification: 'modus_ponens' }  // Missing "A -> B"
+        ]
+      };
+
+      const result = await handleVerifyProofSketch({
+        claim_id: 'test-invalid-modus-ponens',
+        proof: invalidProof
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.result).toBe('INVALID');
+      expect(response.error_message).toContain('Modus ponens failed');
     });
 
     it('should use cache for duplicate proofs', async () => {

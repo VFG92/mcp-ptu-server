@@ -239,9 +239,10 @@ The server includes optional oracle tools for formal verification of critical cl
 
 **2. Computer Algebra System (`verify_algebraic_claim`)**
 - Input: Algebraic expression in structured AST format
-- Output: SIMPLIFIED/EQUIVALENT/NOT_EQUIVALENT with witness hash
+- Output: SIMPLIFIED/EXPANDED/FACTORED/SOLVED/EQUIVALENT/NOT_EQUIVALENT with witness hash
 - Use case: Verify algebraic equivalences and simplifications
-- Operations: simplify, factor, expand, solve, equivalent
+- Operations: simplify, factor (limited), expand, solve (limited), equivalent
+- **Note**: factor and solve have limited capabilities due to Math.js constraints
 - Example:
   ```json
   {
@@ -259,10 +260,13 @@ The server includes optional oracle tools for formal verification of critical cl
   ```
 
 **3. Proof Checker (`verify_proof_sketch`)**
-- Input: Proof sketch with premises, conclusion, and justification steps
+- Input: Proof sketch with premises, conclusion, and justification steps (structured object, not Metamath syntax)
 - Output: VALID/INVALID with witness hash
 - Use case: Verify propositional logic proofs
-- Supported rules: premise, modus_ponens, and_intro, and_elim, or_intro, or_elim, implies_intro, implies_elim
+- Supported rules:
+  - **Fully verified**: premise, modus_ponens, and_intro, and_elim, or_intro
+  - **Simplified (no assumption tracking)**: or_elim, implies_intro, implies_elim
+- **Note**: Rules requiring assumption contexts (or_elim, implies_intro, implies_elim) are accepted but not fully verified
 - Example:
   ```json
   {

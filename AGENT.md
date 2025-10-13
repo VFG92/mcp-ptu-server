@@ -153,9 +153,28 @@ Were incorrectly considered identical (diversity = 0) because the parser removed
 - ✅ **Strict input formats**: No free-form strings accepted
 - ✅ **FORMAT_UNSUPPORTED**: Clear error for invalid inputs
 - ✅ **Hard timeout**: <8ms CPU per oracle call
-- ✅ **Deduplication**: Automatic caching to avoid re-verification
+- ✅ **Deduplication**: Automatic caching to avoid re-verification (cache key includes operation and expected_result)
 - ✅ **Witness-based evidence**: Returns synthetic hashes, not full proofs
 - ✅ **Zero text in reports**: Only structured data and hashes
+
+### Oracle Limitations (Important!)
+
+**SAT Solver**:
+- Only handles formulas with ≤10 variables (brute-force)
+- Returns UNKNOWN for larger formulas
+- Z3 solver is installed but not used (to minimize bundle size)
+
+**Computer Algebra System**:
+- `factor`: Limited factorization (Math.js constraint)
+- `solve`: Simplified implementation, not full equation solver
+- `expand`: Uses Math.js simplify with expand rules
+- `equivalent`: Compares simplified forms (may miss some equivalences)
+
+**Proof Checker**:
+- **Fully verified rules**: premise, modus_ponens, and_intro, and_elim, or_intro
+- **Simplified rules** (no assumption tracking): or_elim, implies_intro, implies_elim
+- Uses regex pattern matching for formula parsing (not full AST)
+- Formulas must use exact syntax: "A -> B", "A AND B", "A OR B"
 
 ### Oracle Integration
 

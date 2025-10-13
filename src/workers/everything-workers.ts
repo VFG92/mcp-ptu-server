@@ -693,13 +693,13 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: 'verify_algebraic_claim',
         description:
-          "Tool MCP per simplify/factor/equivalence. Input: AST strutturato. Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
+          "Tool MCP per simplify/factor/expand/solve/equivalence. Input: AST strutturato. Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
         inputSchema: zodToJsonSchema(VerifyAlgebraicClaimSchema) as ToolInput,
       },
       {
         name: 'verify_proof_sketch',
         description:
-          "Tool MCP per verifica proof sketch. Input: Metamath syntax. Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
+          "Tool MCP per verifica proof sketch. Input: structured proof object (premises, conclusion, steps with justifications). Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
         inputSchema: zodToJsonSchema(VerifyProofSketchSchema) as ToolInput,
       },
 
