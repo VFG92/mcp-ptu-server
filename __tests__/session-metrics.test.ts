@@ -79,8 +79,8 @@ describe('Session Quality Metrics', () => {
       const result = calculateConfidence(session!);
 
       expect(result.details.unique_evidence_count).toBe(3);
-      // Bonus includes evidence bonus (3 * 0.05 = 0.15) + quality bonus (varies)
-      expect(result.details.bonus).toBeGreaterThan(0.15); // At least evidence bonus
+      // Bonus includes evidence bonus (3 * 0.04 = 0.12) + quality bonus (varies) - UPDATED v5.9.1
+      expect(result.details.bonus).toBeGreaterThan(0.10); // At least evidence bonus (adjusted for new multiplier)
 
       // Score should be base + bonus - penalty
       const expectedScore = result.details.base + result.details.bonus - result.details.penalty;
@@ -90,8 +90,8 @@ describe('Session Quality Metrics', () => {
       expect(result.score).toBeGreaterThan(result.details.base - result.details.penalty);
     });
 
-    it('should cap evidence bonus at 0.3', () => {
-      // Add 5 results (should cap at 3)
+    it('should cap evidence bonus at 0.35', () => {
+      // Add 5 results
       for (let i = 1; i <= 5; i++) {
         manager.recordPlanResult(sessionId, 'plan-a', { task: `Task ${i}`, confidence: 0.8 });
       }
@@ -100,7 +100,7 @@ describe('Session Quality Metrics', () => {
       const result = calculateConfidence(session!);
 
       expect(result.details.unique_evidence_count).toBe(5);
-      expect(result.details.bonus).toBe(0.25); // 5 * 0.05 = 0.25 (capped at 0.3 in v5.9.0)
+      expect(result.details.bonus).toBe(0.2); // 5 * 0.04 = 0.20 (capped at 0.35 in v5.9.1)
 
       // Score should be base + bonus - penalty, with bonus capped
       const expectedScore = result.details.base + result.details.bonus - result.details.penalty;

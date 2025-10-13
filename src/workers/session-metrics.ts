@@ -29,6 +29,7 @@ export interface SessionMetrics {
   confidence: number;  // 0-1, threshold: 0.85 (85%)
   coverage: number;    // 0-1, threshold: 0.95 (95%)
   consensus: number;   // 0-1, threshold: 0.80 (80%)
+  oracle_validation_rate?: number;  // 0-1, % of critical claims validated by oracles (optional)
   computed_at: number;
   details: {
     confidence: {
@@ -46,6 +47,13 @@ export interface SessionMetrics {
       agreements: number;
       conflicts: number;
       total_interactions: number;
+    };
+    oracle_validation?: {
+      total_claims: number;
+      oracle_verified_claims: number;
+      sat_verifications: number;
+      cas_verifications: number;
+      proof_verifications: number;
     };
   };
 }
@@ -383,22 +391,74 @@ export function calculateConsensus(session: ParallelReasoningSession): {
 }
 
 /**
+ * Calculate oracle validation rate based on peer critiques
+ *
+ * Counts how many claims in peer critiques have been verified by oracles
+ */
+export function calculateOracleValidationRate(session: ParallelReasoningSession): {
+  rate: number;
+  details: {
+    total_claims: number;
+    oracle_verified_claims: number;
+    sat_verifications: number;
+    cas_verifications: number;
+    proof_verifications: number;
+  };
+} {
+  let totalClaims = 0;
+  let oracleVerifiedClaims = 0;
+  let satVerifications = 0;
+  let casVerifications = 0;
+  let proofVerifications = 0;
+
+  // Count claims in peer critiques
+  for (const critique of session.peer_critiques) {
+    for (const claim of critique.claims_challenged) {
+      totalClaims++;
+      if ((claim as any).oracle_verified) {
+        oracleVerifiedClaims++;
+        const oracleType = (claim as any).oracle_verified.oracle_type;
+        if (oracleType === 'sat') satVerifications++;
+        else if (oracleType === 'cas') casVerifications++;
+        else if (oracleType === 'proof') proofVerifications++;
+      }
+    }
+  }
+
+  const rate = totalClaims > 0 ? oracleVerifiedClaims / totalClaims : 0;
+
+  return {
+    rate,
+    details: {
+      total_claims: totalClaims,
+      oracle_verified_claims: oracleVerifiedClaims,
+      sat_verifications: satVerifications,
+      cas_verifications: casVerifications,
+      proof_verifications: proofVerifications
+    }
+  };
+}
+
+/**
  * Compute all session metrics
  */
 export function computeSessionMetrics(session: ParallelReasoningSession): SessionMetrics {
   const confidence = calculateConfidence(session);
   const coverage = calculateCoverage(session);
   const consensus = calculateConsensus(session);
-  
+  const oracleValidation = calculateOracleValidationRate(session);
+
   return {
     confidence: confidence.score,
     coverage: coverage.score,
     consensus: consensus.score,
+    oracle_validation_rate: oracleValidation.rate,
     computed_at: Date.now(),
     details: {
       confidence: confidence.details,
       coverage: coverage.details,
-      consensus: consensus.details
+      consensus: consensus.details,
+      oracle_validation: oracleValidation.details
     }
   };
 }
@@ -503,27 +563,34 @@ export function calculatePlanDepthMetrics(session: ParallelReasoningSession): Pl
   const metrics: PlanDepthMetrics[] = [];
 
   // Calculate total steps across all plans (for exploration term)
-  const totalSteps = session.plans.reduce((sum, plan) => {
-    const executedSteps = session.execution_results?.filter(r => r.plan_id === plan.plan_id).length || 0;
-    return sum + executedSteps;
-  }, 0);
+  let totalSteps = 0;
+  for (const [plan_id, plan] of session.plans) {
+    const results = session.plan_results.get(plan_id);
+    const executedSteps = results ? results.length : 0;
+    totalSteps += executedSteps;
+  }
 
   // Avoid division by zero
   if (totalSteps === 0) {
-    return session.plans.map(plan => ({
-      plan_id: plan.plan_id,
-      current_depth: 0,
-      max_depth: plan.capability_chain.length,
-      marginal_benefit: 0,
-      exploration_bonus: Infinity,  // Unexplored plans have infinite exploration bonus
-      uct_score: Infinity,
-      recommendation: 'expand' as const
-    }));
+    const plansArray: PlanDepthMetrics[] = [];
+    for (const [plan_id, plan] of session.plans) {
+      plansArray.push({
+        plan_id: plan_id,
+        current_depth: 0,
+        max_depth: plan.capability_chain.length,
+        marginal_benefit: 0,
+        exploration_bonus: Infinity,  // Unexplored plans have infinite exploration bonus
+        uct_score: Infinity,
+        recommendation: 'expand' as const
+      });
+    }
+    return plansArray;
   }
 
-  for (const plan of session.plans) {
+  for (const [plan_id, plan] of session.plans) {
     const maxDepth = plan.capability_chain.length;
-    const executedSteps = session.execution_results?.filter(r => r.plan_id === plan.plan_id).length || 0;
+    const results = session.plan_results.get(plan_id);
+    const executedSteps = results ? results.length : 0;
     const currentDepth = executedSteps;
 
     // Calculate marginal benefit (Δconfidence per step)
@@ -550,7 +617,7 @@ export function calculatePlanDepthMetrics(session: ParallelReasoningSession): Pl
     }
 
     metrics.push({
-      plan_id: plan.plan_id,
+      plan_id: plan_id,
       current_depth: currentDepth,
       max_depth: maxDepth,
       marginal_benefit: marginalBenefit,

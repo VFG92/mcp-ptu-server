@@ -433,7 +433,14 @@ export const PeerCritiqueSchema = z.object({
     evidence_ids: z.array(z.string()).describe('Evidence IDs supporting this challenge'),
     challenge: z.string().describe('Detailed challenge explaining why this claim may be weak or incorrect'),
     falsification_test: z.string().describe('REQUIRED: Falsification test - describe a specific scenario or test that would disprove this claim. Example: "If market growth is <5% in Q1 2025, this claim is falsified."'),
-    counterfactual_scenario: z.string().describe('REQUIRED: Counterfactual scenario - describe what would happen if the key driver/assumption behind this claim did not hold. Example: "If driver X (market growth) does not hold, the plan would need to pivot to cost reduction strategy instead of growth strategy." This prevents overfitting to the preferred hypothesis.')
+    counterfactual_scenario: z.string().describe('REQUIRED: Counterfactual scenario - describe what would happen if the key driver/assumption behind this claim did not hold. Example: "If driver X (market growth) does not hold, the plan would need to pivot to cost reduction strategy instead of growth strategy." This prevents overfitting to the preferred hypothesis.'),
+    oracle_verified: z.object({
+      claim_id: z.string(),
+      oracle_type: z.enum(['sat', 'cas', 'proof']),
+      result: z.string(),
+      witness_hash: z.string().optional(),
+      timestamp: z.number()
+    }).optional().describe('Optional oracle verification result for this claim')
   })).min(3).describe('Minimum 3 claims must be challenged with falsification tests and counterfactual scenarios. This ensures rigorous peer review and prevents superficial critiques.'),
   residual_risks: z.array(z.string()),
   agreement_score: z.number().min(0).max(1),

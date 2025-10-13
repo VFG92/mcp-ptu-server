@@ -25,6 +25,8 @@
     "@modelcontextprotocol/server-memory": "*",
     "@modelcontextprotocol/server-sequential-thinking": "*",
     "hono": "^4.9.9",
+    "mathjs": "^15.0.0",
+    "z3-solver": "^4.15.3",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {

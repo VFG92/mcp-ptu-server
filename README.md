@@ -200,7 +200,118 @@ Target runtime: Node.js 20+ locally and Cloudflare Workers (Wrangler 4.40+). Upd
 10. `finalize_parallel_reasoning`
 11. Utility helpers such as `regenerate_execution_token`
 
+### Oracle tools (Optional Formal Verification)
+12. `verify_logical_claim` - SAT solver for propositional logic (CNF DIMACS-like format)
+13. `verify_algebraic_claim` - Computer Algebra System for symbolic math (AST format)
+14. `verify_proof_sketch` - Proof checker for propositional logic proofs
+
+**Oracle Features**:
+- ✅ **Strict input formats**: CNF DIMACS-like for SAT, structured AST for CAS, proof steps for checker
+- ✅ **Hard timeout**: <8ms CPU per oracle call
+- ✅ **Deduplication**: Automatic caching to avoid re-verification of identical claims
+- ✅ **Witness-based evidence**: Returns synthetic witness hashes, not full proofs
+- ✅ **FORMAT_UNSUPPORTED**: Clear error for invalid inputs
+- ✅ **Oracle validation rate**: Tracked in session metrics (% of claims verified by oracles)
+
 Each response includes a workflow checklist that tracks progress toward readiness thresholds (confidence ≥ 85%, coverage ≥ 95%, consensus ≥ 80%).
+
+## Oracle Tools (Optional Formal Verification)
+
+The server includes optional oracle tools for formal verification of critical claims during peer review:
+
+### Available Oracles
+
+**1. SAT Solver (`verify_logical_claim`)**
+- Input: CNF formula in DIMACS-like format
+- Output: SAT/UNSAT/UNKNOWN with witness hash
+- Use case: Verify logical consistency of propositional claims
+- Example:
+  ```json
+  {
+    "claim_id": "claim-1",
+    "formula": {
+      "num_vars": 3,
+      "num_clauses": 2,
+      "clauses": [[1, -2], [2, 3]]
+    }
+  }
+  ```
+
+**2. Computer Algebra System (`verify_algebraic_claim`)**
+- Input: Algebraic expression in structured AST format
+- Output: SIMPLIFIED/EQUIVALENT/NOT_EQUIVALENT with witness hash
+- Use case: Verify algebraic equivalences and simplifications
+- Operations: simplify, factor, expand, solve, equivalent
+- Example:
+  ```json
+  {
+    "claim_id": "claim-2",
+    "operation": "simplify",
+    "expression": {
+      "type": "operator",
+      "operator": "+",
+      "operands": [
+        {"type": "number", "value": 2},
+        {"type": "number", "value": 3}
+      ]
+    }
+  }
+  ```
+
+**3. Proof Checker (`verify_proof_sketch`)**
+- Input: Proof sketch with premises, conclusion, and justification steps
+- Output: VALID/INVALID with witness hash
+- Use case: Verify propositional logic proofs
+- Supported rules: premise, modus_ponens, and_intro, and_elim, or_intro, or_elim, implies_intro, implies_elim
+- Example:
+  ```json
+  {
+    "claim_id": "claim-3",
+    "proof": {
+      "premises": ["A", "A -> B"],
+      "conclusion": "B",
+      "steps": [
+        {"formula": "A", "justification": "premise"},
+        {"formula": "A -> B", "justification": "premise"},
+        {"formula": "B", "justification": "modus_ponens"}
+      ]
+    }
+  }
+  ```
+
+### Oracle Integration with Peer Critiques
+
+Oracles can be used during peer review to formally verify challenged claims:
+
+```json
+{
+  "reviewer_plan_id": "plan_A",
+  "reviewed_plan_id": "plan_B",
+  "claims_challenged": [
+    {
+      "claim": "Market size is $50B",
+      "evidence_ids": ["ev1"],
+      "challenge": "Data is outdated",
+      "falsification_test": "If Q1 2025 growth is <5%, claim is falsified",
+      "counterfactual_scenario": "If market is $30B, reduce headcount by 40%",
+      "oracle_verified": {
+        "claim_id": "claim-1",
+        "oracle_type": "sat",
+        "result": "SAT",
+        "witness_hash": "a3f5b2c1...",
+        "timestamp": 1234567890
+      }
+    }
+  ]
+}
+```
+
+### Oracle Validation Metrics
+
+The `oracle_validation_rate` metric tracks the percentage of critical claims that have been formally verified:
+- Shown in `list_plan_status` responses
+- Included in finalization reports
+- Calculated as: `oracle_verified_claims / total_claims`
 
 ## Examples & further reading
 - `examples/parallel-reasoning-v5-example.ts` – Complete manifest workflow showcasing self-assessment registration.
@@ -208,5 +319,7 @@ Each response includes a workflow checklist that tracks progress toward readines
 - `examples/capability-integration-example.ts` – Capability orchestration and evidence handling primer.
 - `src/workers/everything-workers.ts` – Tool registry and descriptions surfaced to MCP clients.
 - `src/workers/session-metrics.ts` – Implementation of consensus, confidence, coverage, and saliency calculations.
+- `src/workers/oracle-tools.ts` – Oracle implementations for formal verification.
+- `__tests__/oracle-tools.test.ts` – Oracle test suite with format validation and performance tests.
 
 For more background on the Model Context Protocol, visit [modelcontextprotocol.io](https://modelcontextprotocol.io).

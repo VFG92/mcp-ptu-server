@@ -123,10 +123,59 @@ Were incorrectly considered identical (diversity = 0) because the parser removed
 }
 ```
 
+## Oracle Tools (Optional Formal Verification)
+
+**NEW (v5.11.0)**: The server now includes optional oracle tools for formal verification of critical claims.
+
+### Available Oracles
+
+1. **SAT Solver** (`verify_logical_claim`)
+   - Input: CNF formula in DIMACS-like format
+   - Output: SAT/UNSAT/UNKNOWN with witness hash
+   - Timeout: <8ms CPU
+   - Deduplication: Automatic caching by goal hash
+
+2. **Computer Algebra System** (`verify_algebraic_claim`)
+   - Input: Algebraic expression in structured AST format
+   - Output: SIMPLIFIED/EQUIVALENT/NOT_EQUIVALENT with witness hash
+   - Operations: simplify, factor, expand, solve, equivalent
+   - Timeout: <8ms CPU
+   - Uses Math.js for symbolic computation
+
+3. **Proof Checker** (`verify_proof_sketch`)
+   - Input: Proof sketch with premises, conclusion, and justification steps
+   - Output: VALID/INVALID with witness hash
+   - Supported rules: premise, modus_ponens, and_intro, and_elim, or_intro, or_elim, implies_intro, implies_elim
+   - Timeout: <8ms CPU
+
+### Oracle Design Principles
+
+- ✅ **Strict input formats**: No free-form strings accepted
+- ✅ **FORMAT_UNSUPPORTED**: Clear error for invalid inputs
+- ✅ **Hard timeout**: <8ms CPU per oracle call
+- ✅ **Deduplication**: Automatic caching to avoid re-verification
+- ✅ **Witness-based evidence**: Returns synthetic hashes, not full proofs
+- ✅ **Zero text in reports**: Only structured data and hashes
+
+### Oracle Integration
+
+Oracles are **optional** and can be used during peer review:
+- Add `oracle_verified` field to `claims_challenged` in peer critiques
+- Server tracks `oracle_validation_rate` in session metrics
+- Shown in `list_plan_status` and finalization reports
+
+### Implementation Files
+
+- `src/workers/oracle-tools.ts` - Oracle implementations
+- `__tests__/oracle-tools.test.ts` - Test suite (15 tests, all passing)
+- `src/workers/parallel-reasoning-mcp.ts` - Extended PeerCritiqueSchema with oracle_verified field
+- `src/workers/session-metrics.ts` - Added oracle_validation_rate metric
+
 ## Core expectations
 - Keep changes incremental and well scoped; update or add tests whenever behavior shifts.
 - Follow the existing TypeScript + Cloudflare Workers architecture. **Do not** wrap imports in `try/catch` blocks.
 - Maintain concise, accurate documentation. Update this guide and `README.md` whenever workflows or guardrails change.
+- **Oracle tools**: When modifying oracle tools, ensure strict format validation and <8ms timeout enforcement.
 
 ## Parallel reasoning workflow guardrails
 - `register_execution_results` **only accepts numeric self-assessment payloads**. Preserve validation that rejects raw evidence text and extra fields.
@@ -147,11 +196,29 @@ Were incorrectly considered identical (diversity = 0) because the parser removed
 - `./test-403-fix.sh` – Ensures moderation-safe payload validation stays intact.
 - `./scripts/test-parallel-reasoning-simple.sh` – Persistence sanity check (requires `npm run workers:dev`).
 
+## Dependencies
+
+### Oracle Dependencies (v5.11.0)
+
+The oracle tools use the following libraries:
+- **z3-solver** (v4.15.3): Z3 theorem prover with WebAssembly bindings (~33MB installed, but tree-shaken in bundle)
+- **mathjs** (v15.0.0): Computer Algebra System for symbolic math (~17MB installed)
+
+**Note**: These libraries are dynamically imported to minimize bundle size. The actual bundled size is much smaller due to tree-shaking.
+
+### Bundle Size Considerations
+
+- Oracle tools use dynamic imports to avoid bloating the main bundle
+- Math.js is imported only when `verify_algebraic_claim` is called
+- Z3 solver is currently not used (simple brute-force SAT solver for small formulas instead)
+- Total bundle size remains <3MB for Cloudflare Workers deployment
+
 ## Reference map
 - `src/workers/index.ts` – HTTP entrypoint, routing, heartbeat, proxy logic.
 - `src/workers/session.ts` – Durable Object session state.
 - `src/workers/manifest-execution.ts` – Self-assessment handling and evidence validation.
 - `src/workers/parallel-reasoning-tools-v5.ts` – MCP tool implementations and workflow checklist output.
+- `src/workers/oracle-tools.ts` – Oracle implementations for formal verification (SAT, CAS, proof checker).
 - `examples/` – Executable walkthroughs for reasoning, mediation, and capability orchestration.
 
 When in doubt, read the related tests under `__tests__/` to understand expected behavior before making changes.

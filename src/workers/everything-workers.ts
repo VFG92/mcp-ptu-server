@@ -97,6 +97,16 @@ import {
   type CapabilitySystemRefs
 } from './capability-tools.js';
 
+// Import oracle tools
+import {
+  VerifyLogicalClaimSchema,
+  VerifyAlgebraicClaimSchema,
+  VerifyProofSketchSchema,
+  handleVerifyLogicalClaim,
+  handleVerifyAlgebraicClaim,
+  handleVerifyProofSketch
+} from './oracle-tools.js';
+
 // Instructions inlined for Workers compatibility
 const instructions = `Testing and demonstration server for MCP protocol features.
 
@@ -673,6 +683,26 @@ This server supports parallel reasoning with diversity enforcement for complex a
         inputSchema: zodToJsonSchema(FinalizeParallelReasoningSchema) as ToolInput,
       },
 
+      // Oracle Tools (Optional Formal Verification)
+      {
+        name: 'verify_logical_claim',
+        description:
+          "Tool MCP per verifica SAT/UNSAT/UNKNOWN. Input: CNF DIMACS-like. Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
+        inputSchema: zodToJsonSchema(VerifyLogicalClaimSchema) as ToolInput,
+      },
+      {
+        name: 'verify_algebraic_claim',
+        description:
+          "Tool MCP per simplify/factor/equivalence. Input: AST strutturato. Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
+        inputSchema: zodToJsonSchema(VerifyAlgebraicClaimSchema) as ToolInput,
+      },
+      {
+        name: 'verify_proof_sketch',
+        description:
+          "Tool MCP per verifica proof sketch. Input: Metamath syntax. Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
+        inputSchema: zodToJsonSchema(VerifyProofSketchSchema) as ToolInput,
+      },
+
       // Legacy parallel reasoning tools are still handled by CallToolRequestSchema
       // but not exposed in the tool list to discourage their use.
       // They remain functional for backward compatibility if called directly.
@@ -1079,6 +1109,31 @@ This server supports parallel reasoning with diversity enforcement for complex a
         const validatedArgs = ExportSessionSchema.parse(args);
         const result = await handleExportSession(validatedArgs, capabilitySystemRefs);
         console.log(`[CallTool] export_session completed successfully`);
+        return result;
+      }
+
+      // Oracle Tool Handlers
+      if (name === 'verify_logical_claim') {
+        console.log(`[CallTool] Handling verify_logical_claim`);
+        const validatedArgs = VerifyLogicalClaimSchema.parse(args);
+        const result = await handleVerifyLogicalClaim(validatedArgs);
+        console.log(`[CallTool] verify_logical_claim completed successfully`);
+        return result;
+      }
+
+      if (name === 'verify_algebraic_claim') {
+        console.log(`[CallTool] Handling verify_algebraic_claim`);
+        const validatedArgs = VerifyAlgebraicClaimSchema.parse(args);
+        const result = await handleVerifyAlgebraicClaim(validatedArgs);
+        console.log(`[CallTool] verify_algebraic_claim completed successfully`);
+        return result;
+      }
+
+      if (name === 'verify_proof_sketch') {
+        console.log(`[CallTool] Handling verify_proof_sketch`);
+        const validatedArgs = VerifyProofSketchSchema.parse(args);
+        const result = await handleVerifyProofSketch(validatedArgs);
+        console.log(`[CallTool] verify_proof_sketch completed successfully`);
         return result;
       }
 
