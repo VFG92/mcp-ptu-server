@@ -317,6 +317,21 @@ The `oracle_validation_rate` metric tracks the percentage of critical claims tha
 - Included in finalization reports
 - Calculated as: `oracle_verified_claims / total_claims`
 
+### Oracle Tool Descriptions (as seen by ChatGPT)
+
+When ChatGPT calls `list_tools`, it sees these descriptions:
+
+**verify_logical_claim**:
+> SAT solver for propositional logic (CNF format). Returns SAT/UNSAT/UNKNOWN with witness hash. LIMITATION: Only formulas with ≤10 variables (brute-force). Larger formulas return UNKNOWN. Timeout: 8ms. Automatic deduplication.
+
+**verify_algebraic_claim**:
+> Computer Algebra System (Math.js) for symbolic math. Operations: simplify (full), factor (limited), expand (full), solve (limited), equivalent (compares simplified forms). Returns SIMPLIFIED/EXPANDED/FACTORED/SOLVED/EQUIVALENT/NOT_EQUIVALENT with witness hash. LIMITATIONS: factor and solve have limited capabilities due to Math.js constraints. Timeout: 8ms. Automatic deduplication (cache includes operation and expected_result).
+
+**verify_proof_sketch**:
+> Proof checker for propositional logic. Returns VALID/INVALID with witness hash. FULLY VERIFIED RULES: premise, modus_ponens, and_intro, and_elim, or_intro. SIMPLIFIED RULES (no assumption tracking): or_elim, implies_intro, implies_elim. Formula syntax: 'A -> B', 'A AND B', 'A OR B'. Uses regex pattern matching (not full AST). Timeout: 8ms. Automatic deduplication.
+
+These descriptions clearly communicate the capabilities and limitations to ChatGPT, preventing misuse.
+
 ## Examples & further reading
 - `examples/parallel-reasoning-v5-example.ts` – Complete manifest workflow showcasing self-assessment registration.
 - `examples/peer-review-example.ts` – Peer critique and mediation lifecycle.

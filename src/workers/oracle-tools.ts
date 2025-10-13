@@ -91,20 +91,20 @@ export type ProofSketch = z.infer<typeof ProofSketchSchema>;
  */
 export const VerifyLogicalClaimSchema = z.object({
   claim_id: z.string().describe('Unique identifier for this claim'),
-  formula: CNFFormulaSchema.describe('CNF formula in DIMACS-like format')
-});
+  formula: CNFFormulaSchema.describe('CNF formula in DIMACS-like format. LIMITATION: Only formulas with ≤10 variables are solved (brute-force). Larger formulas return UNKNOWN.')
+}).describe('SAT solver for propositional logic. Returns SAT/UNSAT/UNKNOWN with witness hash. Timeout: 8ms. Deduplication: automatic.');
 
 export const VerifyAlgebraicClaimSchema = z.object({
   claim_id: z.string().describe('Unique identifier for this claim'),
-  operation: z.enum(['simplify', 'factor', 'expand', 'solve', 'equivalent']).describe('Algebraic operation to perform'),
-  expression: AlgebraicExpressionSchema.describe('Expression to verify'),
-  expected_result: AlgebraicExpressionSchema.optional().describe('Expected result (for equivalence checking)')
-});
+  operation: z.enum(['simplify', 'factor', 'expand', 'solve', 'equivalent']).describe('Algebraic operation: simplify (full), factor (limited), expand (full), solve (limited), equivalent (compares simplified forms)'),
+  expression: AlgebraicExpressionSchema.describe('Expression to verify (structured AST format)'),
+  expected_result: AlgebraicExpressionSchema.optional().describe('Expected result for equivalence checking. REQUIRED for "equivalent" operation.')
+}).describe('Computer Algebra System using Math.js. Returns SIMPLIFIED/EXPANDED/FACTORED/SOLVED/EQUIVALENT/NOT_EQUIVALENT with witness hash. LIMITATIONS: factor and solve have limited capabilities. Timeout: 8ms. Deduplication: automatic (cache key includes operation and expected_result).');
 
 export const VerifyProofSketchSchema = z.object({
   claim_id: z.string().describe('Unique identifier for this claim'),
-  proof: ProofSketchSchema.describe('Proof sketch to verify')
-});
+  proof: ProofSketchSchema.describe('Proof sketch with premises, conclusion, and steps. FULLY VERIFIED RULES: premise, modus_ponens, and_intro, and_elim, or_intro. SIMPLIFIED RULES (no assumption tracking): or_elim, implies_intro, implies_elim. Formula syntax: "A -> B", "A AND B", "A OR B".')
+}).describe('Proof checker for propositional logic. Returns VALID/INVALID with witness hash. Uses regex pattern matching (not full AST). Timeout: 8ms. Deduplication: automatic.');
 
 /**
  * Compute hash of a claim for deduplication

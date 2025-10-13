@@ -687,19 +687,19 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: 'verify_logical_claim',
         description:
-          "Tool MCP per verifica SAT/UNSAT/UNKNOWN. Input: CNF DIMACS-like. Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
+          "SAT solver for propositional logic (CNF format). Returns SAT/UNSAT/UNKNOWN with witness hash. LIMITATION: Only formulas with ≤10 variables (brute-force). Larger formulas return UNKNOWN. Timeout: 8ms. Automatic deduplication.",
         inputSchema: zodToJsonSchema(VerifyLogicalClaimSchema) as ToolInput,
       },
       {
         name: 'verify_algebraic_claim',
         description:
-          "Tool MCP per simplify/factor/expand/solve/equivalence. Input: AST strutturato. Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
+          "Computer Algebra System (Math.js) for symbolic math. Operations: simplify (full), factor (limited), expand (full), solve (limited), equivalent (compares simplified forms). Returns SIMPLIFIED/EXPANDED/FACTORED/SOLVED/EQUIVALENT/NOT_EQUIVALENT with witness hash. LIMITATIONS: factor and solve have limited capabilities due to Math.js constraints. Timeout: 8ms. Automatic deduplication (cache includes operation and expected_result).",
         inputSchema: zodToJsonSchema(VerifyAlgebraicClaimSchema) as ToolInput,
       },
       {
         name: 'verify_proof_sketch',
         description:
-          "Tool MCP per verifica proof sketch. Input: structured proof object (premises, conclusion, steps with justifications). Output: witness sintetico + hash. Timeout 8ms. Deduplicazione claim.",
+          "Proof checker for propositional logic. Returns VALID/INVALID with witness hash. FULLY VERIFIED RULES: premise, modus_ponens, and_intro, and_elim, or_intro. SIMPLIFIED RULES (no assumption tracking): or_elim, implies_intro, implies_elim. Formula syntax: 'A -> B', 'A AND B', 'A OR B'. Uses regex pattern matching (not full AST). Timeout: 8ms. Automatic deduplication.",
         inputSchema: zodToJsonSchema(VerifyProofSketchSchema) as ToolInput,
       },
 
