@@ -158,6 +158,7 @@ describe('Oracle Tools', () => {
       const response = JSON.parse(result.content[0].text);
       expect(response.result).toBeDefined();
       expect(response.goal_hash).toBeDefined();
+      expect(response.transformed_expression).toBeDefined();
     });
 
     it('should reject invalid expression format', async () => {
@@ -236,6 +237,80 @@ describe('Oracle Tools', () => {
       // Both should be NOT_EQUIVALENT
       expect(response1.result).toBe('NOT_EQUIVALENT');
       expect(response2.result).toBe('NOT_EQUIVALENT');
+    });
+
+    it('should detect algebraic equivalence requiring expansion', async () => {
+      const x: AlgebraicExpression = { type: 'variable', value: 'x' };
+      const one: AlgebraicExpression = { type: 'number', value: 1 };
+      const two: AlgebraicExpression = { type: 'number', value: 2 };
+
+      const xPlusOne: AlgebraicExpression = {
+        type: 'operator',
+        operator: '+',
+        operands: [x, one]
+      };
+
+      const expression: AlgebraicExpression = {
+        type: 'operator',
+        operator: '^',
+        operands: [xPlusOne, two]
+      };
+
+      const xSquared: AlgebraicExpression = {
+        type: 'operator',
+        operator: '^',
+        operands: [x, two]
+      };
+
+      const twoTimesX: AlgebraicExpression = {
+        type: 'operator',
+        operator: '*',
+        operands: [two, x]
+      };
+
+      const expected: AlgebraicExpression = {
+        type: 'operator',
+        operator: '+',
+        operands: [
+          xSquared,
+          {
+            type: 'operator',
+            operator: '+',
+            operands: [twoTimesX, one]
+          }
+        ]
+      };
+
+      const result = await handleVerifyAlgebraicClaim({
+        claim_id: 'test-cas-equivalent-expand',
+        operation: 'equivalent',
+        expression,
+        expected_result: expected
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.result).toBe('EQUIVALENT');
+      expect(response.transformed_expression?.difference).toBeDefined();
+    });
+
+    it('should reject invalid expected_result payloads for equivalence', async () => {
+      const expr: AlgebraicExpression = {
+        type: 'variable',
+        value: 'x'
+      };
+
+      const invalidExpected = { type: 'not-valid' } as any;
+
+      const result = await handleVerifyAlgebraicClaim({
+        claim_id: 'test-cas-invalid-expected',
+        operation: 'equivalent',
+        expression: expr,
+        expected_result: invalidExpected
+      });
+
+      const response = JSON.parse(result.content[0].text);
+      expect(response.result).toBe('FORMAT_UNSUPPORTED');
+      expect(response.error_message).toContain('Invalid expected_result format');
     });
   });
 

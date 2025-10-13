@@ -32,6 +32,7 @@ export interface OracleResponse {
   cpu_time_ms: number;
   retryable: boolean;     // Can this be retried?
   error_message?: string;
+  transformed_expression?: string | Record<string, unknown>;
 }
 
 /**
@@ -61,6 +62,8 @@ export type AlgebraicExpression = {
   function_name?: string;
   operands?: AlgebraicExpression[];
 };
+
+type MathJsModule = typeof import('mathjs');
 
 export const AlgebraicExpressionSchema: z.ZodType<AlgebraicExpression> = z.lazy(() =>
   z.object({
@@ -312,14 +315,43 @@ export async function handleVerifyAlgebraicClaim(
     }
 
     // Import Math.js dynamically to avoid bundle bloat
-    const { simplify, parse, derivative } = await import('mathjs');
+    const mathjs = await import('mathjs');
 
     // Convert AST to Math.js expression string
     const exprString = astToMathJsString(args.expression);
 
+    if (args.operation === 'equivalent') {
+      if (!args.expected_result) {
+        const response: OracleResponse = {
+          result: 'FORMAT_UNSUPPORTED',
+          goal_hash: goalHash,
+          cpu_time_ms: Date.now() - startTime,
+          retryable: false,
+          error_message: 'Expected result is required for equivalence checks'
+        };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
+        };
+      }
+
+      const expectedParsed = AlgebraicExpressionSchema.safeParse(args.expected_result);
+      if (!expectedParsed.success) {
+        const response: OracleResponse = {
+          result: 'FORMAT_UNSUPPORTED',
+          goal_hash: goalHash,
+          cpu_time_ms: Date.now() - startTime,
+          retryable: false,
+          error_message: 'Invalid expected_result format: ' + expectedParsed.error.message
+        };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
+        };
+      }
+    }
+
     // Perform operation with timeout
     const casResult = await withTimeout(
-      performCASOperation(args.operation, exprString, args.expected_result, { simplify, parse, derivative }),
+      performCASOperation(args.operation, exprString, args.expression, args.expected_result, mathjs),
       8,
       'CAS operation'
     );
@@ -331,6 +363,10 @@ export async function handleVerifyAlgebraicClaim(
       cpu_time_ms: Date.now() - startTime,
       retryable: false
     };
+
+    if (casResult.display !== undefined) {
+      response.transformed_expression = casResult.display;
+    }
 
     oracleCache.set(cacheKey, response);
     return {
@@ -372,19 +408,27 @@ function astToMathJsString(ast: AlgebraicExpression): string {
 /**
  * Perform CAS operation using Math.js
  */
+type CASOperationResult = {
+  result: OracleResult;
+  witness?: any;
+  display?: string | Record<string, unknown>;
+};
+
 async function performCASOperation(
   operation: string,
   exprString: string,
+  originalExpression: AlgebraicExpression,
   expectedResult: AlgebraicExpression | undefined,
-  mathjs: any
-): Promise<{ result: OracleResult; witness?: any }> {
+  mathjs: MathJsModule
+): Promise<CASOperationResult> {
   try {
     switch (operation) {
       case 'simplify': {
         const simplified = mathjs.simplify(exprString);
         return {
           result: 'SIMPLIFIED',
-          witness: simplified.toString()
+          witness: simplified.toString(),
+          display: simplified.toString()
         };
       }
       case 'expand': {
@@ -392,7 +436,8 @@ async function performCASOperation(
         const expanded = mathjs.simplify(exprString, ['expand']);
         return {
           result: 'EXPANDED',
-          witness: expanded.toString()
+          witness: expanded.toString(),
+          display: expanded.toString()
         };
       }
       case 'factor': {
@@ -401,19 +446,21 @@ async function performCASOperation(
         const factored = mathjs.simplify(exprString);
         return {
           result: 'FACTORED',
-          witness: factored.toString()
+          witness: factored.toString(),
+          display: factored.toString()
         };
       }
       case 'solve': {
         // For solve, we need an equation (expression with '=')
         // This is a simplified implementation
         try {
-          const parsed = mathjs.parse(exprString);
+          mathjs.parse(exprString);
           // Math.js solve is limited, return simplified form
           const solved = mathjs.simplify(exprString);
           return {
             result: 'SOLVED',
-            witness: solved.toString()
+            witness: solved.toString(),
+            display: solved.toString()
           };
         } catch {
           return { result: 'FORMAT_UNSUPPORTED' };
@@ -425,10 +472,31 @@ async function performCASOperation(
         }
         const expr1 = mathjs.simplify(exprString);
         const expr2 = mathjs.simplify(astToMathJsString(expectedResult));
-        const equivalent = expr1.toString() === expr2.toString();
+        const comparison = compareExpressionsForEquivalence(
+          originalExpression,
+          expectedResult,
+          mathjs
+        );
         return {
-          result: equivalent ? 'EQUIVALENT' : 'NOT_EQUIVALENT',
-          witness: { expr1: expr1.toString(), expr2: expr2.toString() }
+          result: comparison.equivalent ? 'EQUIVALENT' : 'NOT_EQUIVALENT',
+          witness: {
+            expr1: expr1.toString(),
+            expr2: expr2.toString(),
+            difference: comparison.difference,
+            symbolic_zero: comparison.symbolicZero,
+            evaluation: comparison.evaluations
+          },
+          display: {
+            simplified_expression: expr1.toString(),
+            simplified_expected: expr2.toString(),
+            difference: comparison.difference,
+            symbolic_zero: comparison.symbolicZero,
+            evaluations: comparison.evaluations.map((item) => ({
+              assignment: item.assignment,
+              result: item.result,
+              zero: item.zero
+            }))
+          }
         };
       }
       default:
@@ -436,6 +504,197 @@ async function performCASOperation(
     }
   } catch (error) {
     throw error;
+  }
+}
+
+type EquivalenceEvaluation = {
+  assignment: Record<string, number>;
+  result: string;
+  zero: boolean;
+  error?: string;
+};
+
+function compareExpressionsForEquivalence(
+  expression: AlgebraicExpression,
+  expected: AlgebraicExpression,
+  mathjs: MathJsModule
+): {
+  equivalent: boolean;
+  difference: string;
+  symbolicZero: boolean;
+  evaluations: EquivalenceEvaluation[];
+} {
+  const comparisonExpr = canonicalComparisonString(expression);
+  const comparisonExpected = canonicalComparisonString(expected);
+
+  const differenceNode = mathjs.simplify(
+    `(${comparisonExpr}) - (${comparisonExpected})`
+  );
+  const differenceString = differenceNode.toString();
+
+  const symbolicZero = isSymbolicallyZero(differenceNode, mathjs);
+  if (symbolicZero) {
+    return {
+      equivalent: true,
+      difference: differenceString,
+      symbolicZero: true,
+      evaluations: []
+    };
+  }
+
+  const variables = new Set<string>();
+  collectVariables(expression, variables);
+  collectVariables(expected, variables);
+
+  const evaluations: EquivalenceEvaluation[] = [];
+  let allZero = true;
+  let successCount = 0;
+
+  const samples = generateSampleAssignments(Array.from(variables));
+  for (const assignment of samples) {
+    try {
+      const value = differenceNode.evaluate(assignment);
+      const zero = isApproximatelyZero(value);
+      evaluations.push({
+        assignment,
+        result: formatEvaluationValue(value),
+        zero
+      });
+      successCount += 1;
+      if (!zero) {
+        allZero = false;
+        break;
+      }
+    } catch (error) {
+      evaluations.push({
+        assignment,
+        result: 'error',
+        zero: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  return {
+    equivalent: successCount > 0 && allZero,
+    difference: differenceString,
+    symbolicZero: false,
+    evaluations
+  };
+}
+
+function canonicalComparisonString(ast: AlgebraicExpression): string {
+  if (ast.type === 'operator' && ast.operator === '=' && ast.operands?.length === 2) {
+    const left = astToMathJsString(ast.operands[0]);
+    const right = astToMathJsString(ast.operands[1]);
+    return `(${left}) - (${right})`;
+  }
+  return astToMathJsString(ast);
+}
+
+function collectVariables(ast: AlgebraicExpression, set: Set<string>) {
+  if (ast.type === 'variable' && typeof ast.value === 'string') {
+    set.add(ast.value);
+  }
+  if (ast.operands) {
+    for (const operand of ast.operands) {
+      collectVariables(operand, set);
+    }
+  }
+}
+
+function generateSampleAssignments(variables: string[]): Array<Record<string, number>> {
+  if (variables.length === 0) {
+    return [{}];
+  }
+
+  const sampleValues = [-2, -1, -0.5, 1, 2, 3];
+  const assignments: Array<Record<string, number>> = [];
+  const maxSamples = Math.min(6, sampleValues.length);
+
+  for (let i = 0; i < maxSamples; i++) {
+    const scope: Record<string, number> = {};
+    for (let j = 0; j < variables.length; j++) {
+      scope[variables[j]] = sampleValues[(i + j) % sampleValues.length];
+    }
+    assignments.push(scope);
+  }
+
+  return assignments;
+}
+
+function isSymbolicallyZero(node: any, mathjs: MathJsModule): boolean {
+  if (node.isConstantNode) {
+    const value = node.value;
+    if (typeof value === 'number') {
+      return Math.abs(value) < 1e-12;
+    }
+    if (typeof value === 'string') {
+      return Number(value) === 0;
+    }
+  }
+
+  const simplified = mathjs.simplify(node);
+  const simplifiedString = simplified.toString();
+  if (simplifiedString === '0' || simplifiedString === '0.0') {
+    return true;
+  }
+
+  if (simplified.isConstantNode) {
+    const value = simplified.value;
+    if (typeof value === 'number') {
+      return Math.abs(value) < 1e-12;
+    }
+    if (typeof value === 'string') {
+      return Number(value) === 0;
+    }
+  }
+
+  return false;
+}
+
+function isApproximatelyZero(value: any): boolean {
+  if (typeof value === 'number') {
+    return Math.abs(value) < 1e-9;
+  }
+
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric)) {
+      return Math.abs(numeric) < 1e-9;
+    }
+  }
+
+  if (value && typeof value === 'object') {
+    if ('re' in value && 'im' in value) {
+      const { re, im } = value as { re: number; im: number };
+      return Math.abs(re) < 1e-9 && Math.abs(im) < 1e-9;
+    }
+
+    if (typeof (value as any).valueOf === 'function') {
+      const numeric = (value as any).valueOf();
+      if (typeof numeric === 'number') {
+        return Math.abs(numeric) < 1e-9;
+      }
+    }
+  }
+
+  return false;
+}
+
+function formatEvaluationValue(value: any): string {
+  if (typeof value === 'number' || typeof value === 'string') {
+    return String(value);
+  }
+
+  if (value && typeof value === 'object' && typeof value.toString === 'function') {
+    return value.toString();
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[unrepresentable]';
   }
 }
 
