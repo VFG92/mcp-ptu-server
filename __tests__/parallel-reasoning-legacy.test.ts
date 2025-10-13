@@ -80,12 +80,17 @@ describe('parallel reasoning v5 tool handler validation', () => {
   });
 
   it('surfaces validation errors for peer critiques referencing missing plans', async () => {
+    // UPDATED (v5.10.0): Minimum 3 claims with falsification tests AND counterfactual scenarios required
     const invalid = await handleSubmitPeerCritique({
       session_id: sessionId,
       critique: {
         reviewer_plan_id: 'ghost_plan',
         reviewed_plan_id: 'plan_A',
-        claims_challenged: [],
+        claims_challenged: [
+          { claim: 'Test 1', evidence_ids: ['ev1'], challenge: 'Test', falsification_test: 'If X, falsified', counterfactual_scenario: 'If X fails, pivot to Y' },
+          { claim: 'Test 2', evidence_ids: ['ev2'], challenge: 'Test', falsification_test: 'If Y, falsified', counterfactual_scenario: 'If Y fails, pivot to Z' },
+          { claim: 'Test 3', evidence_ids: ['ev3'], challenge: 'Test', falsification_test: 'If Z, falsified', counterfactual_scenario: 'If Z fails, pivot to W' }
+        ],
         residual_risks: [],
         agreement_score: 0.5,
         timestamp: Date.now()
@@ -100,11 +105,11 @@ describe('parallel reasoning v5 tool handler validation', () => {
       critique: {
         reviewer_plan_id: 'plan_A',
         reviewed_plan_id: 'plan_B',
-        claims_challenged: [{
-          claim: 'Risk probability 5%',
-          evidence_ids: ['evidence_002'],
-          challenge: 'Consider worst-case 10%'
-        }],
+        claims_challenged: [
+          { claim: 'Risk probability 5%', evidence_ids: ['evidence_002'], challenge: 'Consider worst-case 10%', falsification_test: 'If actual risk >8%, claim falsified', counterfactual_scenario: 'If risk is 10%, increase contingency budget by 50%' },
+          { claim: 'Mitigation cost $1M', evidence_ids: ['evidence_003'], challenge: 'No vendor quotes', falsification_test: 'If quotes >$1.5M, claim falsified', counterfactual_scenario: 'If cost is $2M, delay project by 6 months' },
+          { claim: 'Timeline 6 months', evidence_ids: ['evidence_004'], challenge: 'Assumes no delays', falsification_test: 'If critical path >8mo, claim falsified', counterfactual_scenario: 'If timeline is 12mo, hire additional contractors' }
+        ],
         residual_risks: ['Supply chain disruption'],
         agreement_score: 0.7,
         timestamp: Date.now()

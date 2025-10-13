@@ -37,7 +37,13 @@ import {
 import { handleAnalyzeWithCapabilities, type CapabilitySystemRefs } from './capability-tools.js';
 import * as GuidedResponses from './guided-responses.js';
 import { formatSignals } from './evidence-signals.js';
-import { CONFIDENCE_THRESHOLD, COVERAGE_THRESHOLD, CONSENSUS_THRESHOLD } from './session-metrics.js';
+import {
+  CONFIDENCE_THRESHOLD,
+  COVERAGE_THRESHOLD,
+  CONSENSUS_THRESHOLD,
+  calculatePlanDepthMetrics,
+  formatPlanDepthMetrics
+} from './session-metrics.js';
 import {
   createStructuredContent,
   type WorkflowInitializedContent,
@@ -810,6 +816,14 @@ ${session.saliency_report.recommendations.map((rec: string) => `- ${rec}`).join(
 ---
 
 ` : ''}
+${(() => {
+  // Calculate UCT-based depth metrics (v5.10.0)
+  const depthMetrics = calculatePlanDepthMetrics(session);
+  return formatPlanDepthMetrics(depthMetrics);
+})()}
+
+---
+
 ## 📋 Detailed Plan Status
 
 ${Array.from(session.plans.values()).map(plan => {

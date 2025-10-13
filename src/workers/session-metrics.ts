@@ -51,6 +51,24 @@ export interface SessionMetrics {
 }
 
 /**
+ * UCT-like depth metrics for plan exploration guidance (v5.10.0)
+ *
+ * Inspired by Monte Carlo Tree Search (MCTS), this helps ChatGPT decide
+ * which plan branches to expand by balancing:
+ * - Exploitation: Focus on plans with high marginal benefit
+ * - Exploration: Don't neglect less-explored plans
+ */
+export interface PlanDepthMetrics {
+  plan_id: string;
+  current_depth: number;      // Number of executed steps
+  max_depth: number;          // Total capability chain length
+  marginal_benefit: number;   // Δconfidence per step (exploitation term)
+  exploration_bonus: number;  // sqrt(log(N)/n) (exploration term)
+  uct_score: number;          // marginal_benefit + C * exploration_bonus
+  recommendation: 'expand' | 'continue' | 'complete';  // Guidance for ChatGPT
+}
+
+/**
  * Calculate confidence metric based on evidence density and quality signals
  *
  * UPDATED 2025-10-11 (v5.9.1): More generous bonuses to reward quality evidence
@@ -462,6 +480,108 @@ export function formatMetrics(metrics: SessionMetrics): string {
   output += ` (target: ${(CONSENSUS_THRESHOLD * 100).toFixed(0)}%, `;
   output += `${metrics.details.consensus.agreements} agreements, `;
   output += `${metrics.details.consensus.conflicts} conflicts)\n`;
+
+  return output;
+}
+
+/**
+ * Calculate UCT-like depth metrics for plan exploration guidance (v5.10.0)
+ *
+ * Uses Upper Confidence Bound for Trees (UCT) formula to balance:
+ * - Exploitation: Plans with high marginal benefit (Δconfidence per step)
+ * - Exploration: Plans that haven't been explored much
+ *
+ * Formula: UCT = exploitation + C * exploration
+ * - exploitation = marginal_benefit (Δconfidence per step)
+ * - exploration = sqrt(log(total_steps) / (current_depth + 1))
+ * - C = 1.41 (standard exploration constant, sqrt(2))
+ *
+ * @param session - Current parallel reasoning session
+ * @returns Array of depth metrics for each plan, sorted by UCT score (descending)
+ */
+export function calculatePlanDepthMetrics(session: ParallelReasoningSession): PlanDepthMetrics[] {
+  const metrics: PlanDepthMetrics[] = [];
+
+  // Calculate total steps across all plans (for exploration term)
+  const totalSteps = session.plans.reduce((sum, plan) => {
+    const executedSteps = session.execution_results?.filter(r => r.plan_id === plan.plan_id).length || 0;
+    return sum + executedSteps;
+  }, 0);
+
+  // Avoid division by zero
+  if (totalSteps === 0) {
+    return session.plans.map(plan => ({
+      plan_id: plan.plan_id,
+      current_depth: 0,
+      max_depth: plan.capability_chain.length,
+      marginal_benefit: 0,
+      exploration_bonus: Infinity,  // Unexplored plans have infinite exploration bonus
+      uct_score: Infinity,
+      recommendation: 'expand' as const
+    }));
+  }
+
+  for (const plan of session.plans) {
+    const maxDepth = plan.capability_chain.length;
+    const executedSteps = session.execution_results?.filter(r => r.plan_id === plan.plan_id).length || 0;
+    const currentDepth = executedSteps;
+
+    // Calculate marginal benefit (Δconfidence per step)
+    // This is a simplified heuristic: we assume each step contributes equally
+    // In a more sophisticated version, we could track actual confidence changes
+    const marginalBenefit = currentDepth > 0 ? (0.85 / maxDepth) : 0;  // Target 85% confidence
+
+    // Calculate exploration bonus: sqrt(log(N) / (n + 1))
+    // +1 to avoid division by zero for unexplored plans
+    const explorationBonus = Math.sqrt(Math.log(totalSteps + 1) / (currentDepth + 1));
+
+    // UCT score: exploitation + C * exploration
+    const C = 1.41;  // sqrt(2), standard exploration constant
+    const uctScore = marginalBenefit + C * explorationBonus;
+
+    // Recommendation based on depth and UCT score
+    let recommendation: 'expand' | 'continue' | 'complete';
+    if (currentDepth >= maxDepth) {
+      recommendation = 'complete';
+    } else if (currentDepth === 0) {
+      recommendation = 'expand';
+    } else {
+      recommendation = 'continue';
+    }
+
+    metrics.push({
+      plan_id: plan.plan_id,
+      current_depth: currentDepth,
+      max_depth: maxDepth,
+      marginal_benefit: marginalBenefit,
+      exploration_bonus: explorationBonus,
+      uct_score: uctScore,
+      recommendation
+    });
+  }
+
+  // Sort by UCT score (descending) - highest priority first
+  return metrics.sort((a, b) => b.uct_score - a.uct_score);
+}
+
+/**
+ * Format plan depth metrics for display in list_plan_status
+ */
+export function formatPlanDepthMetrics(metrics: PlanDepthMetrics[]): string {
+  let output = '\n## 🎯 Plan Exploration Guidance (UCT-based)\n\n';
+  output += 'Plans ranked by exploration priority (UCT score):\n\n';
+
+  for (let i = 0; i < metrics.length; i++) {
+    const m = metrics[i];
+    const priority = i === 0 ? '🔥 HIGHEST PRIORITY' : i === 1 ? '⚡ HIGH PRIORITY' : '📊 MONITOR';
+
+    output += `### ${i + 1}. ${m.plan_id} - ${priority}\n`;
+    output += `- **Depth**: ${m.current_depth}/${m.max_depth} steps executed (${((m.current_depth / m.max_depth) * 100).toFixed(0)}%)\n`;
+    output += `- **UCT Score**: ${m.uct_score.toFixed(3)} (marginal benefit: ${m.marginal_benefit.toFixed(3)}, exploration bonus: ${m.exploration_bonus.toFixed(3)})\n`;
+    output += `- **Recommendation**: ${m.recommendation === 'expand' ? '🚀 START executing this plan' : m.recommendation === 'continue' ? '⏩ CONTINUE executing remaining steps' : '✅ COMPLETE - all steps executed'}\n\n`;
+  }
+
+  output += '**Guidance**: Focus on the highest UCT score plan to balance exploration and exploitation.\n';
 
   return output;
 }

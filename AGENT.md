@@ -4,6 +4,65 @@ This document keeps contributors and AI agents aligned while working on the repo
 
 ## 🆕 Recent Updates (October 2025)
 
+### 🚀 v5.10.0: Enhanced Reasoning Quality (Popper-Inspired Falsification)
+
+**BREAKING CHANGES**:
+- ✅ **Falsification tests now REQUIRED** (no longer optional)
+- ✅ **Counterfactual scenarios now REQUIRED** (prevents overfitting to preferred assumptions)
+- ✅ **Minimum 3 claims per critique** (prevents superficial reviews)
+- ✅ **UCT-based depth tracking** (MCTS-inspired exploration guidance)
+
+**Why this matters**:
+1. **Prevents overfitting**: Falsification tests force rigorous hypothesis testing (Popper's falsifiability criterion)
+2. **Prevents assumption lock-in**: Counterfactual scenarios explore "what if driver X doesn't hold?"
+3. **Optimizes exploration**: UCT balances exploitation (high-benefit plans) vs exploration (under-explored plans)
+
+**Example peer critique** (v5.10.0+):
+```json
+{
+  "reviewer_plan_id": "plan_A",
+  "reviewed_plan_id": "plan_B",
+  "claims_challenged": [
+    {
+      "claim": "Market size is $50B",
+      "evidence_ids": ["ev1"],
+      "challenge": "Data is outdated (2022), market has contracted",
+      "falsification_test": "If Q1 2025 growth is <5%, this claim is falsified",
+      "counterfactual_scenario": "If market size is actually $30B, plan would need to reduce headcount by 40% and focus on premium segment only"
+    },
+    {
+      "claim": "Customer acquisition cost is $100",
+      "evidence_ids": ["ev2"],
+      "challenge": "Assumes no competition, unrealistic",
+      "falsification_test": "If CAC exceeds $150 in first 6 months, claim is falsified",
+      "counterfactual_scenario": "If CAC is $200, plan would need to pivot to enterprise sales instead of SMB"
+    },
+    {
+      "claim": "Churn rate will be <5%",
+      "evidence_ids": ["ev3"],
+      "challenge": "No evidence for this assumption",
+      "falsification_test": "If churn exceeds 10% in first year, claim is falsified",
+      "counterfactual_scenario": "If churn is 15%, plan would need to add customer success team and reduce growth targets by 50%"
+    }
+  ],
+  "residual_risks": ["Market volatility", "Regulatory changes"],
+  "agreement_score": 0.7,
+  "timestamp": 1234567890
+}
+```
+
+**UCT Depth Tracking**:
+- `list_plan_status` now shows UCT-based exploration guidance
+- Plans ranked by UCT score: `exploitation + C * exploration`
+- ChatGPT receives clear recommendations: "🚀 START executing this plan" vs "⏩ CONTINUE" vs "✅ COMPLETE"
+- Prevents premature convergence on single plan
+
+**Implementation Details**:
+- `PeerCritiqueSchema`: Added `.min(3)` to `claims_challenged`, made `falsification_test` and `counterfactual_scenario` required
+- `calculatePlanDepthMetrics()`: Implements UCT formula with C=1.41 (sqrt(2))
+- `formatPlanDepthMetrics()`: Formats guidance for ChatGPT consumption
+- All tests updated to comply with new requirements
+
 ### Diversity Axis Format Support
 **Fixed**: The system now supports both `Key: value` and `Key (value)` formats for diversity axes.
 

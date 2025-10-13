@@ -634,7 +634,12 @@ This server supports parallel reasoning with diversity enforcement for complex a
       {
         name: ParallelReasoningV5ToolName.SUBMIT_PEER_CRITIQUE,
         description:
-          "STEP 5: Submit peer critiques AFTER registering results. Each plan reviews others with claims_challenged (evidence_ids, falsification_test), residual_risks, agreement_score. After all critiques: submit_mediation_decision.",
+          "STEP 5: Submit peer critiques AFTER registering results. Each plan reviews others with claims_challenged (evidence_ids, falsification_test, counterfactual_scenario), residual_risks, agreement_score. " +
+          "CRITICAL (v5.10.0): Falsification tests AND counterfactual scenarios are now REQUIRED (no longer optional). You MUST challenge at least 3 claims per critique, each with: " +
+          "(1) A specific falsification test (e.g., 'If market growth is <5% in Q1 2025, this claim is falsified.') " +
+          "(2) A counterfactual scenario (e.g., 'If driver X does not hold, the plan would need to pivot to strategy Y instead.'). " +
+          "This ensures rigorous hypothesis testing and prevents overfitting to preferred assumptions. " +
+          "After all critiques: submit_mediation_decision.",
         inputSchema: zodToJsonSchema(SubmitPeerCritiqueSchema) as ToolInput,
       },
       {

@@ -4,7 +4,33 @@ An MCP-compliant Cloudflare Worker that helps ChatGPT coordinate structured, mul
 
 ## 🆕 What's New (January 2025)
 
-### 🔧 Latest Updates (v5.9.1 - October 2025)
+### 🚀 Latest Updates (v5.10.0 - October 2025)
+
+**Enhanced Reasoning Quality (Popper-Inspired Falsification)**
+- ✅ **Falsification tests now REQUIRED** (minimum 3 claims per critique)
+- ✅ **Counterfactual scenarios now REQUIRED** (prevents overfitting to preferred assumptions)
+- ✅ **UCT-based depth tracking** (MCTS-inspired exploration guidance for plan expansion)
+
+**Why this matters**:
+- 🎯 **Prevents overfitting**: Falsification tests force rigorous hypothesis testing (Popper's criterion)
+- 🎯 **Prevents assumption lock-in**: Counterfactual scenarios explore "what if driver X doesn't hold?"
+- 🎯 **Optimizes exploration**: UCT balances exploitation (high-benefit plans) vs exploration (under-explored plans)
+
+**Example falsification test**:
+```json
+{
+  "claim": "Market size is $50B",
+  "falsification_test": "If Q1 2025 growth is <5%, this claim is falsified",
+  "counterfactual_scenario": "If market size is actually $30B, plan would need to reduce headcount by 40% and focus on premium segment only"
+}
+```
+
+**UCT Depth Tracking**:
+- Plans ranked by UCT score (exploitation + C * exploration)
+- ChatGPT receives guidance on which plan to expand next
+- Prevents premature convergence on single plan
+
+### 🔧 Previous Updates (v5.9.1 - October 2025)
 
 **Fixed: Diversity Axis Parsing**
 - ✅ Added support for `Key (value)` format in diversity axes (e.g., `Metodologia (econometrico)`)

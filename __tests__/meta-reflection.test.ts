@@ -137,16 +137,15 @@ describe('Meta-Reflection Tool', () => {
   });
 
   it('should identify most challenged claims', async () => {
+    // UPDATED (v5.10.0): Minimum 3 claims with falsification tests AND counterfactual scenarios required
     // Add multiple critiques challenging same claim
     manager.submitPeerCritique(sessionId, {
       reviewer_plan_id: 'plan_A',
       reviewed_plan_id: 'plan_B',
       claims_challenged: [
-        {
-          claim: 'Market size is $10B',
-          evidence_ids: ['ev1'],
-          challenge: 'Data source is outdated'
-        }
+        { claim: 'Market size is $10B', evidence_ids: ['ev1'], challenge: 'Data source is outdated', falsification_test: 'If 2024 data shows <$8B, claim falsified', counterfactual_scenario: 'If market is $6B, reduce team by 50%' },
+        { claim: 'Growth rate 15%', evidence_ids: ['ev2'], challenge: 'No historical basis', falsification_test: 'If historical avg <10%, claim falsified', counterfactual_scenario: 'If growth is 8%, pivot to profitability' },
+        { claim: 'TAM $50B', evidence_ids: ['ev3'], challenge: 'Includes adjacent markets', falsification_test: 'If core market <$30B, claim falsified', counterfactual_scenario: 'If TAM is $25B, focus on niche segments' }
       ],
       residual_risks: [],
       agreement_score: 0.4,
@@ -157,11 +156,9 @@ describe('Meta-Reflection Tool', () => {
       reviewer_plan_id: 'plan_B',
       reviewed_plan_id: 'plan_A',
       claims_challenged: [
-        {
-          claim: 'Market size is $10B based on 2023 data',
-          evidence_ids: ['ev2'],
-          challenge: 'Methodology is flawed'
-        }
+        { claim: 'Market size is $10B based on 2023 data', evidence_ids: ['ev4'], challenge: 'Methodology is flawed', falsification_test: 'If independent analysis shows <$8B, claim falsified', counterfactual_scenario: 'If market is $7B, delay expansion by 12mo' },
+        { claim: 'CAGR 20%', evidence_ids: ['ev5'], challenge: 'Assumes no recession', falsification_test: 'If GDP growth <2%, claim falsified', counterfactual_scenario: 'If CAGR is 10%, cut marketing spend 40%' },
+        { claim: 'Addressable market 60%', evidence_ids: ['ev6'], challenge: 'No segmentation', falsification_test: 'If qualified leads <40%, claim falsified', counterfactual_scenario: 'If addressable is 30%, increase CAC budget' }
       ],
       residual_risks: [],
       agreement_score: 0.3,

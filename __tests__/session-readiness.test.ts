@@ -216,10 +216,15 @@ describe('Session Readiness and Quality Thresholds', () => {
     }
 
     // Submit peer critiques to boost consensus
+    // UPDATED (v5.10.0): Minimum 3 claims with falsification tests AND counterfactual scenarios required
     manager.submitPeerCritique('test_finalize_success', {
       reviewer_plan_id: 'plan_A',
       reviewed_plan_id: 'plan_B',
-      claims_challenged: [],
+      claims_challenged: [
+        { claim: 'Market size $50B', evidence_ids: ['ev1'], challenge: 'Data outdated', falsification_test: 'If Q1 2025 growth <5%, claim falsified', counterfactual_scenario: 'If market size is actually $30B, plan would need to reduce headcount by 40% and focus on premium segment only.' },
+        { claim: 'TAM growth 15%', evidence_ids: ['ev2'], challenge: 'Assumes no recession', falsification_test: 'If GDP growth <2%, claim falsified', counterfactual_scenario: 'If TAM growth is only 5%, plan would need to pivot from growth to profitability strategy, cutting marketing spend by 50%.' },
+        { claim: 'Competitor share 30%', evidence_ids: ['ev3'], challenge: 'Based on old data', falsification_test: 'If new entrants >5, claim falsified', counterfactual_scenario: 'If competitor share is actually 50%, plan would need to differentiate on service quality rather than price.' }
+      ],
       residual_risks: [],
       agreement_score: 0.9,
       timestamp: Date.now()
@@ -228,7 +233,11 @@ describe('Session Readiness and Quality Thresholds', () => {
     manager.submitPeerCritique('test_finalize_success', {
       reviewer_plan_id: 'plan_B',
       reviewed_plan_id: 'plan_C',
-      claims_challenged: [],
+      claims_challenged: [
+        { claim: 'Customer acquisition cost $100', evidence_ids: ['ev4'], challenge: 'No sensitivity analysis', falsification_test: 'If CAC >$150, claim falsified', counterfactual_scenario: 'If CAC is $200, plan would need to shift from paid ads to organic growth and partnerships.' },
+        { claim: 'Churn rate 5%', evidence_ids: ['ev5'], challenge: 'Industry avg is 8%', falsification_test: 'If churn >7% in Q1, claim falsified', counterfactual_scenario: 'If churn is 10%, plan would need to invest heavily in customer success team and retention programs.' },
+        { claim: 'LTV $2000', evidence_ids: ['ev6'], challenge: 'Assumes 5yr retention', falsification_test: 'If avg tenure <3yr, claim falsified', counterfactual_scenario: 'If LTV is only $1000, plan would need to increase prices by 30% or reduce CAC to maintain unit economics.' }
+      ],
       residual_risks: [],
       agreement_score: 0.85,
       timestamp: Date.now()
@@ -237,7 +246,11 @@ describe('Session Readiness and Quality Thresholds', () => {
     manager.submitPeerCritique('test_finalize_success', {
       reviewer_plan_id: 'plan_C',
       reviewed_plan_id: 'plan_A',
-      claims_challenged: [],
+      claims_challenged: [
+        { claim: 'Revenue $10M Y1', evidence_ids: ['ev7'], challenge: 'Optimistic conversion rate', falsification_test: 'If conversion <2%, claim falsified', counterfactual_scenario: 'If revenue is only $5M, plan would need to delay Series A and extend runway through cost cuts.' },
+        { claim: 'Gross margin 60%', evidence_ids: ['ev8'], challenge: 'No COGS breakdown', falsification_test: 'If COGS >45%, claim falsified', counterfactual_scenario: 'If gross margin is 40%, plan would need to renegotiate supplier contracts or increase prices.' },
+        { claim: 'Break-even 18mo', evidence_ids: ['ev9'], challenge: 'Assumes no delays', falsification_test: 'If runway <12mo, claim falsified', counterfactual_scenario: 'If break-even takes 24mo, plan would need to raise bridge round or cut burn rate by 50%.' }
+      ],
       residual_risks: [],
       agreement_score: 0.95,
       timestamp: Date.now()
@@ -254,7 +267,7 @@ describe('Session Readiness and Quality Thresholds', () => {
     expect(readiness.quality_check.coverage_met).toBe(true);
     expect(readiness.quality_check.consensus_met).toBe(true);
     expect(readiness.blockers.length).toBe(1);
-    expect(readiness.blockers[0]).toContain('Confidence below 75%'); // Updated threshold in v5.9.0
+    expect(readiness.blockers[0]).toContain('Confidence below 85%'); // Updated threshold in v5.9.0
 
     // Attempt finalization - should be BLOCKED due to confidence
     const result = manager.finalizeSession('test_finalize_success');
