@@ -634,14 +634,15 @@ function isSymbolicallyZero(node: any, mathjs: MathJsModule): boolean {
     }
   }
 
-  const simplified = mathjs.simplify(node);
-  const simplifiedString = simplified.toString();
+  const simplified = mathjs.simplify(node) as any;
+  const simplifiedString =
+    simplified && typeof simplified.toString === 'function' ? simplified.toString() : String(simplified);
   if (simplifiedString === '0' || simplifiedString === '0.0') {
     return true;
   }
 
-  if (simplified.isConstantNode) {
-    const value = simplified.value;
+  if (simplified && simplified.isConstantNode) {
+    const value = simplified.value as unknown;
     if (typeof value === 'number') {
       return Math.abs(value) < 1e-12;
     }
@@ -880,4 +881,3 @@ async function checkProofSketch(proof: ProofSketch): Promise<{ valid: boolean; d
     return { valid: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
-

@@ -182,6 +182,14 @@ export function parseAxisString(axis: string): ParsedAxis {
     const keyPart = parenMatch[1].trim();
     const key = extractMainKey(keyPart);
     const value = parenMatch[2].trim().toLowerCase();
+
+    // Heuristic: in some Italian long-form requirement axes, parentheses are used to list
+    // possible values (e.g. "(accettazione vs contestazione)") rather than a chosen value.
+    // Treat that specific pattern as descriptive (no value) to improve required-axes matching.
+    if (/\bverso\b/i.test(keyPart) && /\bvs\b/i.test(value)) {
+      return { key, value: '', original: trimmed };
+    }
+
     return { key, value, original: trimmed };
   }
 

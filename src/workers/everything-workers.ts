@@ -61,6 +61,9 @@ import type { ParallelReasoningSession } from './parallel-reasoning-mcp.js';
 // Import UI resources for ChatGPT Apps SDK
 import { UI_RESOURCES, getUIResource, isUIResource } from './ui-resources.js';
 
+// OpenAI Apps SDK metadata helper (widget rendering via `_meta.openai/outputTemplate`)
+import { convertToAppsSDKResponse, TOOL_WIDGET_MAPPING } from './apps-sdk-metadata.js';
+
 // Legacy parallel reasoning tools (deprecated, kept for backward compatibility)
 // Legacy parallel reasoning tools removed - use v5.0 tools instead
 // import {
@@ -132,6 +135,17 @@ Argument completion is available for prompt parameters and resource IDs. Resourc
 
 If asked about server instructions, respond with "🎉 Server instructions are working! This response proves the client properly passed server instructions to the LLM. This demonstrates MCP's instructions feature in action."
 `;
+
+function isAppsSDKMappableToolName(name: string): name is keyof typeof TOOL_WIDGET_MAPPING {
+  return Object.prototype.hasOwnProperty.call(TOOL_WIDGET_MAPPING, name);
+}
+
+function maybeConvertToAppsSDKToolResponse<T>(toolName: string, result: T): T {
+  if (!result || typeof result !== 'object') return result;
+  if (!('structuredContent' in (result as any))) return result;
+  if (!isAppsSDKMappableToolName(toolName)) return result;
+  return convertToAppsSDKResponse(result as any, toolName) as any as T;
+}
 
 const ToolInputSchema = ToolSchema.shape.inputSchema;
 type ToolInput = z.infer<typeof ToolInputSchema>;
@@ -770,13 +784,13 @@ This server supports parallel reasoning with diversity enforcement for complex a
           }
         }
 
-        if (parallelReasoningV5PersistCallback) {
-          console.log(`[CallTool] Calling persist callback...`);
-          await parallelReasoningV5PersistCallback();
-          console.log(`[CallTool] Persist callback completed`);
-        }
-        return result;
-      }
+	        if (parallelReasoningV5PersistCallback) {
+	          console.log(`[CallTool] Calling persist callback...`);
+	          await parallelReasoningV5PersistCallback();
+	          console.log(`[CallTool] Persist callback completed`);
+	        }
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       if (name === ParallelReasoningV5ToolName.SUBMIT_REASONING_PLAN) {
         console.log(`[CallTool] Handling submit_reasoning_plan (v5)`);
@@ -796,13 +810,13 @@ This server supports parallel reasoning with diversity enforcement for complex a
         console.log(`[CallTool] Plan diversity_axes: ${validatedArgs.plan.diversity_axes.join(', ')}`);
         const result = await handleSubmitReasoningPlan(validatedArgs, parallelReasoningV5Manager);
         console.log(`[CallTool] handleSubmitReasoningPlan completed. Sessions after submit: ${parallelReasoningV5Manager.getAllSessions().size}`);
-        if (parallelReasoningV5PersistCallback) {
-          console.log(`[CallTool] Calling persist callback...`);
-          await parallelReasoningV5PersistCallback();
-          console.log(`[CallTool] Persist callback completed`);
-        }
-        return result;
-      }
+	        if (parallelReasoningV5PersistCallback) {
+	          console.log(`[CallTool] Calling persist callback...`);
+	          await parallelReasoningV5PersistCallback();
+	          console.log(`[CallTool] Persist callback completed`);
+	        }
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       // REMOVED: execute_plan_step handler (deprecated - use manifest-based workflow)
       // REMOVED: submit_cross_plan_note handler (deprecated - not needed in manifest workflow)
@@ -819,11 +833,11 @@ This server supports parallel reasoning with diversity enforcement for complex a
             }]
           };
         }
-        const validatedArgs = SubmitPeerCritiqueSchema.parse(args);
-        const result = await handleSubmitPeerCritique(validatedArgs, parallelReasoningV5Manager);
-        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
-        return result;
-      }
+	        const validatedArgs = SubmitPeerCritiqueSchema.parse(args);
+	        const result = await handleSubmitPeerCritique(validatedArgs, parallelReasoningV5Manager);
+	        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       if (name === ParallelReasoningV5ToolName.SUBMIT_MEDIATION_DECISION) {
         console.log(`[CallTool] Handling submit_mediation_decision (v5)`);
@@ -837,11 +851,11 @@ This server supports parallel reasoning with diversity enforcement for complex a
             }]
           };
         }
-        const validatedArgs = SubmitMediationDecisionSchema.parse(args);
-        const result = await handleSubmitMediationDecision(validatedArgs, parallelReasoningV5Manager, capabilityLedger);
-        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
-        return result;
-      }
+	        const validatedArgs = SubmitMediationDecisionSchema.parse(args);
+	        const result = await handleSubmitMediationDecision(validatedArgs, parallelReasoningV5Manager, capabilityLedger);
+	        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       if (name === ParallelReasoningV5ToolName.LIST_PLAN_STATUS) {
         console.log(`[CallTool] Handling list_plan_status (v5)`);
@@ -854,11 +868,11 @@ This server supports parallel reasoning with diversity enforcement for complex a
               text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
             }]
           };
-        }
-        const validatedArgs = ListPlanStatusSchema.parse(args);
-        const result = await handleListPlanStatus(validatedArgs, parallelReasoningV5Manager);
-        return result;
-      }
+	        }
+	        const validatedArgs = ListPlanStatusSchema.parse(args);
+	        const result = await handleListPlanStatus(validatedArgs, parallelReasoningV5Manager);
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       if (name === ParallelReasoningV5ToolName.CHECK_SESSION_READINESS) {
         console.log(`[CallTool] Handling check_session_readiness (v5)`);
@@ -871,11 +885,11 @@ This server supports parallel reasoning with diversity enforcement for complex a
               text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
             }]
           };
-        }
-        const validatedArgs = CheckSessionReadinessSchema.parse(args);
-        const result = await handleCheckSessionReadiness(validatedArgs, parallelReasoningV5Manager);
-        return result;
-      }
+	        }
+	        const validatedArgs = CheckSessionReadinessSchema.parse(args);
+	        const result = await handleCheckSessionReadiness(validatedArgs, parallelReasoningV5Manager);
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       if (name === ParallelReasoningV5ToolName.GENERATE_META_REFLECTION) {
         console.log(`[CallTool] Handling generate_meta_reflection`);
@@ -887,11 +901,11 @@ This server supports parallel reasoning with diversity enforcement for complex a
               text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
             }]
           };
-        }
-        const validatedArgs = GenerateMetaReflectionSchema.parse(args);
-        const result = await handleGenerateMetaReflection(validatedArgs, parallelReasoningV5Manager);
-        return result;
-      }
+	        }
+	        const validatedArgs = GenerateMetaReflectionSchema.parse(args);
+	        const result = await handleGenerateMetaReflection(validatedArgs, parallelReasoningV5Manager);
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       if (name === ParallelReasoningV5ToolName.FINALIZE_PARALLEL_REASONING) {
         console.log(`[CallTool] Handling finalize_parallel_reasoning (v5)`);
@@ -904,12 +918,12 @@ This server supports parallel reasoning with diversity enforcement for complex a
               text: '❌ **Server Configuration Error**\n\nThe parallel reasoning session manager is not properly initialized. This indicates a server configuration issue. Please contact support.'
             }]
           };
-        }
-        const validatedArgs = FinalizeParallelReasoningSchema.parse(args);
-        const result = await handleFinalizeParallelReasoning(validatedArgs, parallelReasoningV5Manager);
-        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
-        return result;
-      }
+	        }
+	        const validatedArgs = FinalizeParallelReasoningSchema.parse(args);
+	        const result = await handleFinalizeParallelReasoning(validatedArgs, parallelReasoningV5Manager);
+	        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       // NEW: Manifest-based execution handlers
       if (name === ParallelReasoningV5ToolName.EXECUTE_REASONING_MANIFEST) {
@@ -926,13 +940,13 @@ This server supports parallel reasoning with diversity enforcement for complex a
         const validatedArgs = ExecuteReasoningManifestSchema.parse(args);
         const result = await handleExecuteReasoningManifest(validatedArgs, parallelReasoningV5Manager);
         // CRITICAL: Persist session state after generating manifest (saves execution tokens)
-        if (parallelReasoningV5PersistCallback) {
-          console.log(`[CallTool] Persisting session state after manifest generation...`);
-          await parallelReasoningV5PersistCallback();
-          console.log(`[CallTool] Session state persisted successfully`);
-        }
-        return result;
-      }
+	        if (parallelReasoningV5PersistCallback) {
+	          console.log(`[CallTool] Persisting session state after manifest generation...`);
+	          await parallelReasoningV5PersistCallback();
+	          console.log(`[CallTool] Session state persisted successfully`);
+	        }
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       if (name === ParallelReasoningV5ToolName.REGENERATE_EXECUTION_TOKEN) {
         console.log(`[CallTool] Handling regenerate_execution_token`);
@@ -941,12 +955,12 @@ This server supports parallel reasoning with diversity enforcement for complex a
           return {
             content: [{ type: 'text', text: 'Error: Parallel Reasoning V5 manager not initialized' }],
           };
-        }
-        const validatedArgs = RegenerateExecutionTokenSchema.parse(args);
-        const result = await handleRegenerateExecutionToken(validatedArgs, parallelReasoningV5Manager);
-        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
-        return result;
-      }
+	        }
+	        const validatedArgs = RegenerateExecutionTokenSchema.parse(args);
+	        const result = await handleRegenerateExecutionToken(validatedArgs, parallelReasoningV5Manager);
+	        if (parallelReasoningV5PersistCallback) await parallelReasoningV5PersistCallback();
+	        return maybeConvertToAppsSDKToolResponse(name, result);
+	      }
 
       if (name === ParallelReasoningV5ToolName.REGISTER_EXECUTION_RESULTS) {
         console.log(`[CallTool] Handling register_execution_results (MCP tool)`);
@@ -981,17 +995,17 @@ This server supports parallel reasoning with diversity enforcement for complex a
           const result = await handleRegisterExecutionResults(validatedArgs, parallelReasoningV5Manager);
 
           // Persist session state after registering results
-          if (parallelReasoningV5PersistCallback) {
-            console.log(`[CallTool] Persisting session state after registering results...`);
-            await parallelReasoningV5PersistCallback();
-            console.log(`[CallTool] Session state persisted successfully`);
-          }
+	          if (parallelReasoningV5PersistCallback) {
+	            console.log(`[CallTool] Persisting session state after registering results...`);
+	            await parallelReasoningV5PersistCallback();
+	            console.log(`[CallTool] Session state persisted successfully`);
+	          }
 
-          return result;
-        } catch (error) {
-          console.error(`[CallTool] Error in register_execution_results:`, error);
-          return {
-            content: [{
+	          return maybeConvertToAppsSDKToolResponse(name, result);
+	        } catch (error) {
+	          console.error(`[CallTool] Error in register_execution_results:`, error);
+	          return {
+	            content: [{
               type: 'text',
               text: `❌ Error: ${error instanceof Error ? error.message : String(error)}`
             }]

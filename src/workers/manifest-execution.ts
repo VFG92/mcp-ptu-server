@@ -721,7 +721,12 @@ export async function handleRegisterExecutionResults(
     const failed_count = failedResults.length;
 
     // Token remains valid for multiple batches (micro-batching support)
-    // No need to mark as "used" - token expires after 7 days or when regenerated
+    // Mark token as "used" only when a batch completes without failures.
+    // This preserves retry workflows when partial batches fail.
+    const tokenEntry = session.execution_tokens?.find((t: ExecutionToken) => t.token === args.execution_token);
+    if (tokenEntry && failed_count === 0) {
+      tokenEntry.used = true;
+    }
 
     // Store self-assessment in session for later validation
     if (!session.self_assessments) {

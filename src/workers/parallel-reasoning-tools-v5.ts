@@ -34,11 +34,15 @@ import {
 import { handleAnalyzeWithCapabilities, type CapabilitySystemRefs } from './capability-tools.js';
 import * as GuidedResponses from './guided-responses.js';
 import { formatSignals } from './evidence-signals.js';
+import { CONFIDENCE_THRESHOLD, COVERAGE_THRESHOLD, CONSENSUS_THRESHOLD } from './session-metrics.js';
 import {
   createStructuredContent,
   type WorkflowInitializedContent,
   type PlanSubmittedContent,
   type PlanExecutionContent,
+  type CrossPlanNoteContent,
+  type PeerCritiqueContent,
+  type MediationDecisionContent,
   type WorkflowStatusContent,
   type WorkflowFinalizedContent
 } from './ui-structured-content.js';
@@ -433,7 +437,7 @@ export const SubmitCrossPlanNoteSchema = z.object({
 export async function handleSubmitCrossPlanNote(
   args: z.infer<typeof SubmitCrossPlanNoteSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: CrossPlanNoteContent }> {
   try {
     manager.submitCrossPlanNote(args.session_id, args.note);
   } catch (error) {
@@ -444,6 +448,14 @@ export async function handleSubmitCrossPlanNote(
       content: [{ type: 'text', text: response }]
     };
   }
+
+  const structuredContent = createStructuredContent<CrossPlanNoteContent>(
+    'cross_plan_note',
+    args.session_id,
+    {
+      note: args.note
+    }
+  );
 
   const response = `# Cross-Plan Note Recorded
 
@@ -456,7 +468,8 @@ This note enables contamination between reasoning paths.
 Plan ${args.note.to_plan_id} can now consider insights from Plan ${args.note.from_plan_id}.`;
 
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: response }],
+    structuredContent
   };
 }
 
@@ -471,7 +484,7 @@ export const SubmitPeerCritiqueSchema = z.object({
 export async function handleSubmitPeerCritique(
   args: z.infer<typeof SubmitPeerCritiqueSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: PeerCritiqueContent }> {
   try {
     manager.submitPeerCritique(args.session_id, args.critique);
   } catch (error) {
@@ -482,6 +495,17 @@ export async function handleSubmitPeerCritique(
       content: [{ type: 'text', text: response }]
     };
   }
+
+  const session = manager.getSession(args.session_id);
+  const storedCritique = session?.peer_critiques[session.peer_critiques.length - 1] ?? args.critique;
+
+  const structuredContent = createStructuredContent<PeerCritiqueContent>(
+    'peer_critique',
+    args.session_id,
+    {
+      critique: storedCritique as any
+    }
+  );
 
   const response = `# Peer Critique Recorded
 
@@ -505,7 +529,8 @@ ${args.critique.residual_risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 Critique stored for consensus analysis.`;
 
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: response }],
+    structuredContent
   };
 }
 
@@ -521,7 +546,7 @@ export async function handleSubmitMediationDecision(
   args: z.infer<typeof SubmitMediationDecisionSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager,
   evidenceLedger?: any // EvidenceLedger type from evidence-ledger.ts
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: MediationDecisionContent }> {
   try {
     // Create evidence validator if ledger provided
     const validateEvidenceIds = evidenceLedger ? (ids: string[]) => {
@@ -545,6 +570,31 @@ export async function handleSubmitMediationDecision(
     };
   }
 
+  const session = manager.getSession(args.session_id);
+  const storedDecision = session?.mediation_decisions[session.mediation_decisions.length - 1] ?? args.decision;
+
+  const evidence_validation = evidenceLedger
+    ? (() => {
+        const valid_evidence_ids: string[] = [];
+        const invalid_evidence_ids: string[] = [];
+        for (const id of args.decision.evidence_ids) {
+          const entry = evidenceLedger.getEntry(id);
+          if (entry) valid_evidence_ids.push(id);
+          else invalid_evidence_ids.push(id);
+        }
+        return { valid_evidence_ids, invalid_evidence_ids };
+      })()
+    : undefined;
+
+  const structuredContent = createStructuredContent<MediationDecisionContent>(
+    'mediation_decision',
+    args.session_id,
+    {
+      decision: storedDecision as any,
+      evidence_validation
+    }
+  );
+
   const response = `# Mediation Decision Recorded
 
 **Decision Point**: ${args.decision.decision_point}
@@ -558,7 +608,8 @@ export async function handleSubmitMediationDecision(
 Decision stored. Continue submitting decisions for all key points.`;
 
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: response }],
+    structuredContent
   };
 }
 
@@ -608,16 +659,76 @@ ${session.peer_critiques.length} critiques submitted
 
 ## Mediation Decisions
 
-${session.mediation_decisions.length} decisions recorded
+${session.mediation_decisions.length} decisions recorded`;
 
-## Pending Frames
+  // Readiness preview appears only after the minimum number of plans is met.
+  if (session.plans.size >= session.min_plans) {
+    const readiness = manager.checkSessionReadiness(args.session_id);
+    const executedSteps = readiness.metrics.details.coverage.executed_steps;
+    const totalSteps = readiness.metrics.details.coverage.total_declared_steps;
 
-${status.pending_frames.length > 0 ? status.pending_frames.map(f => `- ${f}`).join('\n') : 'None - all frames complete'}
+    const coveragePct = readiness.metrics.coverage * 100;
+    const confidencePct = readiness.metrics.confidence * 100;
+    const consensusPct = readiness.metrics.consensus * 100;
 
----
+    const coverageGapPct = Math.max(0, (COVERAGE_THRESHOLD - readiness.metrics.coverage) * 100);
+    const confidenceGapPct = Math.max(0, (CONFIDENCE_THRESHOLD - readiness.metrics.confidence) * 100);
+    const consensusGapPct = Math.max(0, (CONSENSUS_THRESHOLD - readiness.metrics.consensus) * 100);
 
-**Created**: ${new Date(session.created_at).toISOString()}
-**Updated**: ${new Date(session.updated_at).toISOString()}`;
+    response += `\n\n## 🎯 Readiness Preview\n\n`;
+    response += `### Finalization Readiness\n\n`;
+    response += `- **Coverage**: ${executedSteps}/${totalSteps} steps (${coveragePct.toFixed(1)}%)\n`;
+    response += `  - **Coverage Gap**: ${coverageGapPct.toFixed(1)}% (target: ${(COVERAGE_THRESHOLD * 100).toFixed(0)}%)\n`;
+    response += `- **Confidence**: ${confidencePct.toFixed(1)}%\n`;
+    response += `  - **Confidence Gap**: ${confidenceGapPct.toFixed(1)}% (target: ${(CONFIDENCE_THRESHOLD * 100).toFixed(0)}%)\n`;
+    response += `- **Consensus**: ${consensusPct.toFixed(1)}%\n`;
+    response += `  - **Consensus Gap**: ${consensusGapPct.toFixed(1)}% (target: ${(CONSENSUS_THRESHOLD * 100).toFixed(0)}%)\n`;
+  }
+
+  // Evidence saliency report (from register_execution_results)
+  if (session.saliency_report) {
+    response += `\n\n## 🧭 Evidence Quality Report\n\n`;
+    const sr = session.saliency_report as any;
+    response += `**Overall Quality Score**: ${typeof sr.overall_quality_score === 'number' ? (sr.overall_quality_score * 100).toFixed(1) : 'N/A'}%\n`;
+    if (typeof sr.generated_at === 'number') {
+      response += `**Generated**: ${new Date(sr.generated_at).toISOString()}\n\n`;
+    } else {
+      response += `\n`;
+    }
+
+    const missing = Array.isArray(sr.missing_evidence_types) ? sr.missing_evidence_types : [];
+    if (missing.length === 0) {
+      response += `✅ No missing evidence types flagged.\n`;
+    } else {
+      response += `### Missing Evidence Types\n\n`;
+      for (const met of missing) {
+        const type = met?.type ?? 'unknown';
+        const priority = met?.priority ?? 'unknown';
+        const desc = met?.description ?? '';
+        response += `- **${type}** (${priority}): ${desc}\n`;
+        const examples = Array.isArray(met?.examples) ? met.examples : [];
+        for (const ex of examples) {
+          response += `  - ${ex}\n`;
+        }
+      }
+      response += `\n`;
+
+      const recs = Array.isArray(sr.recommendations) ? sr.recommendations : [];
+      if (recs.length > 0) {
+        response += `### Recommendations\n\n`;
+        for (const rec of recs) {
+          response += `- ${rec}\n`;
+        }
+      }
+    }
+  }
+
+  response += `\n\n## Pending Frames\n\n`;
+  response += `${status.pending_frames.length > 0 ? status.pending_frames.map(f => `- ${f}`).join('\n') : 'None - all frames complete'}`;
+
+  response += `\n\n---\n\n`;
+  response += `**Created**: ${new Date(session.created_at).toISOString()}\n`;
+  response += `**Updated**: ${new Date(session.updated_at).toISOString()}`;
 
   // Create structured content for UI visualization
   const structuredContent = createStructuredContent<WorkflowStatusContent>(
@@ -683,7 +794,8 @@ export const CheckSessionReadinessSchema = z.object({
 export async function handleCheckSessionReadiness(
   args: z.infer<typeof CheckSessionReadinessSchema>,
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
+): Promise<{ content: Array<{ type: string; text: string }>; structuredContent?: WorkflowFinalizedContent }> {
+  const session = manager.getSession(args.session_id);
   const readiness = manager.checkSessionReadiness(args.session_id);
 
   let response = `# 🔍 Session Readiness Check\n\n`;
@@ -752,8 +864,84 @@ export async function handleCheckSessionReadiness(
     response += `Call \`finalize_parallel_reasoning\` to complete the session.\n`;
   }
 
+  // Reuse the existing "workflow_finalized" UI payload shape to drive the metrics dashboard,
+  // even though this tool does not finalize the session.
+  const structuredContent = session
+    ? (() => {
+        let totalArtifacts = 0;
+        let flaggedArtifacts = 0;
+        let criticalIssues = 0;
+        let warningsCount = 0;
+
+        // Plans
+        session.plans.forEach(plan => {
+          totalArtifacts++;
+          if (plan.signals && plan.signals.signals.length > 0) {
+            flaggedArtifacts++;
+            plan.signals.signals.forEach(s => {
+              if (s.severity === 'critical') criticalIssues++;
+              if (s.severity === 'warning') warningsCount++;
+            });
+          }
+        });
+
+        // Peer critiques
+        for (const critique of session.peer_critiques) {
+          totalArtifacts++;
+          if (critique.signals && critique.signals.signals.length > 0) {
+            flaggedArtifacts++;
+            critique.signals.signals.forEach(s => {
+              if (s.severity === 'critical') criticalIssues++;
+              if (s.severity === 'warning') warningsCount++;
+            });
+          }
+        }
+
+        // Mediation decisions
+        for (const decision of session.mediation_decisions) {
+          totalArtifacts++;
+          if (decision.signals && decision.signals.signals.length > 0) {
+            flaggedArtifacts++;
+            decision.signals.signals.forEach(s => {
+              if (s.severity === 'critical') criticalIssues++;
+              if (s.severity === 'warning') warningsCount++;
+            });
+          }
+        }
+
+        return createStructuredContent<WorkflowFinalizedContent>(
+          'workflow_finalized',
+          args.session_id,
+          {
+            finalized: false,
+            metrics: {
+              confidence: readiness.metrics.confidence,
+              coverage: readiness.metrics.coverage,
+              consensus: readiness.metrics.consensus,
+              computed_at: readiness.metrics.computed_at
+            },
+            quality_summary: {
+              total_artifacts: totalArtifacts,
+              flagged_artifacts: flaggedArtifacts,
+              critical_issues: criticalIssues,
+              warnings: warningsCount
+            },
+            decision_map: session.mediation_decisions.map(d => ({
+              decision_point: d.decision_point,
+              chosen_from_plan: d.chosen_from_plan,
+              confidence: d.confidence,
+              evidence_count: d.evidence_ids.length
+            })),
+            recommendations: readiness.recommendations,
+            warnings: readiness.blockers
+          }
+        );
+      })()
+    : undefined;
+
   return {
-    content: [{ type: 'text', text: response }]
+    content: [{ type: 'text', text: response }],
+    structuredContent
   };
 }
 
@@ -915,35 +1103,24 @@ export async function handleGenerateMetaReflection(
     };
   }
 
-  // Check if there are mediation decisions to analyze
-  if (session.mediation_decisions.length === 0) {
-    return {
-      content: [{
-        type: 'text',
-        text: `⚠️ **No Mediation Decisions Yet**\n\nSession \`${args.session_id}\` has no mediation decisions to analyze.\n\nPlease use \`submit_mediation_decision\` to add decisions before generating meta-reflection.`
-      }]
-    };
-  }
+  const hasDecisions = session.mediation_decisions.length > 0;
 
   // Analyze decision patterns
   const planChoiceCounts = new Map<string, number>();
   const decisionConfidences: number[] = [];
-  const lowConfidenceDecisions: string[] = [];
+  const lowConfidenceDecisions: Array<{ decision_point: string; confidence: number }> = [];
 
   for (const decision of session.mediation_decisions) {
-    // Count how often each plan was chosen
-    const count = planChoiceCounts.get(decision.chosen_from_plan) || 0;
-    planChoiceCounts.set(decision.chosen_from_plan, count + 1);
-
-    // Track confidence levels
+    planChoiceCounts.set(decision.chosen_from_plan, (planChoiceCounts.get(decision.chosen_from_plan) || 0) + 1);
     decisionConfidences.push(decision.confidence);
-    if (decision.confidence < 0.7) {
-      lowConfidenceDecisions.push(decision.decision_point);
+    if (typeof decision.confidence === 'number' && decision.confidence < 0.7) {
+      lowConfidenceDecisions.push({ decision_point: decision.decision_point, confidence: decision.confidence });
     }
   }
 
-  // Calculate average confidence
-  const avgConfidence = decisionConfidences.reduce((a, b) => a + b, 0) / decisionConfidences.length;
+  const avgConfidence = decisionConfidences.length > 0
+    ? decisionConfidences.reduce((a, b) => a + b, 0) / decisionConfidences.length
+    : 0;
 
   // Identify dominant plan (if any)
   let dominantPlan: string | null = null;
@@ -956,64 +1133,121 @@ export async function handleGenerateMetaReflection(
   }
 
   // Analyze peer critique patterns
-  const challengedClaims = new Map<string, number>();
+  const totalCritiques = session.peer_critiques.length;
+  const disagreements = session.peer_critiques.filter(c => typeof c.agreement_score === 'number' && c.agreement_score < 0.5).length;
+
+  const challengedClaims = new Map<string, { claim: string; count: number }>();
+  let missingFalsificationTests = 0;
+
   for (const critique of session.peer_critiques) {
-    for (const claim of critique.claims_challenged) {
-      const key = `${critique.reviewed_plan_id}:${claim.claim}`;
-      challengedClaims.set(key, (challengedClaims.get(key) || 0) + 1);
+    const claims = Array.isArray((critique as any).claims_challenged) ? (critique as any).claims_challenged : [];
+    for (const claim of claims) {
+      const claimText = String(claim?.claim ?? '');
+      if (!claimText) continue;
+      const entry = challengedClaims.get(claimText);
+      challengedClaims.set(claimText, { claim: claimText, count: (entry?.count || 0) + 1 });
+
+      const falsification = (claim as any)?.falsification_test;
+      if (!falsification || String(falsification).trim().length === 0) {
+        missingFalsificationTests++;
+      }
     }
+  }
+
+  // Residual uncertainty analysis
+  const residualRisks = new Set<string>();
+  for (const critique of session.peer_critiques) {
+    const risks = Array.isArray((critique as any).residual_risks) ? (critique as any).residual_risks : [];
+    for (const risk of risks) residualRisks.add(String(risk));
   }
 
   // Build reflection text
   let reflection = `# 🔍 Meta-Reflection for Session \`${args.session_id}\`\n\n`;
+
+  if (!hasDecisions) {
+    reflection += `⚠️ No mediation decisions yet.\n`;
+    reflection += `Please use \`submit_mediation_decision\` to record decisions before finalization.\n\n`;
+  }
+
   reflection += `## Decision Pattern Analysis\n\n`;
   reflection += `- **Total Decisions**: ${session.mediation_decisions.length}\n`;
-  reflection += `- **Average Confidence**: ${(avgConfidence * 100).toFixed(1)}%\n`;
+  if (hasDecisions) {
+    reflection += `- **Average Confidence**: ${(avgConfidence * 100).toFixed(1)}%\n`;
+  }
+
+  reflection += `\n### Decision Distribution\n\n`;
+  if (planChoiceCounts.size === 0) {
+    reflection += `No decisions recorded yet.\n`;
+  } else {
+    for (const [planId, count] of planChoiceCounts) {
+      reflection += `- \`${planId}\`: ${count}\n`;
+    }
+  }
 
   if (dominantPlan && maxChoices > session.mediation_decisions.length / 2) {
-    reflection += `- **Dominant Plan**: \`${dominantPlan}\` (chosen ${maxChoices}/${session.mediation_decisions.length} times)\n`;
-    reflection += `  - ⚠️ This may indicate insufficient diversity in the analysis\n`;
+    reflection += `\n- ⚠️ decision imbalance: \`${dominantPlan}\` dominates (${maxChoices}/${session.mediation_decisions.length})\n`;
   }
 
   if (lowConfidenceDecisions.length > 0) {
-    reflection += `\n### Low Confidence Decisions (<70%)\n`;
-    for (const dp of lowConfidenceDecisions) {
-      reflection += `- ${dp}\n`;
-    }
-    reflection += `\n💡 Consider gathering more evidence for these decision points.\n`;
-  }
-
-  // Residual uncertainty analysis
-  reflection += `\n## Residual Uncertainty\n\n`;
-  const residualRisks = new Set<string>();
-  for (const critique of session.peer_critiques) {
-    for (const risk of critique.residual_risks) {
-      residualRisks.add(risk);
+    reflection += `\n### Low Confidence Decisions\n\n`;
+    for (const d of lowConfidenceDecisions) {
+      reflection += `- ${d.decision_point} (${(d.confidence * 100).toFixed(1)}% confidence)\n`;
     }
   }
 
+  reflection += `\n## Disagreement Pattern Analysis\n\n`;
+  reflection += `- **Total Critiques**: ${totalCritiques}\n`;
+  reflection += `- **Disagreements**: ${disagreements}\n`;
+
+  reflection += `\n## Most Challenged Claims\n\n`;
+  const topClaims = Array.from(challengedClaims.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+  if (topClaims.length === 0) {
+    reflection += `No challenged claims recorded yet.\n`;
+  } else {
+    for (const c of topClaims) {
+      reflection += `- ${c.claim} (${c.count}x)\n`;
+    }
+  }
+
+  reflection += `\n## Residual Uncertainty & Risks\n\n`;
+  reflection += `- **Total Unique Risks Identified**: ${residualRisks.size}\n`;
   if (residualRisks.size > 0) {
-    reflection += `The following residual risks were identified during peer review:\n\n`;
     for (const risk of residualRisks) {
       reflection += `- ${risk}\n`;
     }
-  } else {
-    reflection += `No residual risks were explicitly identified during peer review.\n`;
   }
 
-  // Recommendations
-  reflection += `\n## Recommendations\n\n`;
-  if (avgConfidence < 0.85) {
-    reflection += `1. **Increase Evidence Quality**: Average confidence (${(avgConfidence * 100).toFixed(1)}%) is below the 85% threshold.\n`;
+  reflection += `\n## Recommendations for Further Analysis\n\n`;
+  const recommendations: string[] = [];
+  if (!hasDecisions) {
+    recommendations.push('Submit mediation decisions for key decision points.');
   }
   if (lowConfidenceDecisions.length > 0) {
-    reflection += `2. **Address Low-Confidence Decisions**: ${lowConfidenceDecisions.length} decision(s) need additional evidence.\n`;
+    recommendations.push('Re-examine low-confidence decisions with additional evidence.');
   }
-  if (residualRisks.size > 0) {
-    reflection += `3. **Mitigate Residual Risks**: ${residualRisks.size} risk(s) require attention.\n`;
+  if (dominantPlan && maxChoices > session.mediation_decisions.length / 2) {
+    recommendations.push('Check for decision imbalance: explicitly reconsider alternatives from under-selected plans.');
+  }
+  if (missingFalsificationTests > 0) {
+    recommendations.push('Add falsification tests to challenged claims to strengthen peer review rigor.');
   }
 
-  reflection += `\n---\n\n**Next Step**: Use \`check_session_readiness\` to verify if the session meets quality thresholds for finalization.`;
+  if (recommendations.length === 0) {
+    reflection += `No specific recommendations identified.\n`;
+  } else {
+    for (let i = 0; i < recommendations.length; i++) {
+      reflection += `${i + 1}. ${recommendations[i]}\n`;
+    }
+  }
+
+  reflection += `\n## Next Steps\n\n`;
+  reflection += `1. Call \`list_plan_status\` frequently to monitor gaps\n`;
+  reflection += `2. Use \`check_session_readiness\` before attempting \`finalize_parallel_reasoning\`\n`;
+  if (!hasDecisions) {
+    reflection += `3. Add decisions with \`submit_mediation_decision\`\n`;
+  }
 
   return {
     content: [{ type: 'text', text: reflection }]
