@@ -11,9 +11,9 @@
   "files": [],
   "scripts": {
     "build": "tsc --noEmit",
-    "workers:dev": "wrangler dev",
-    "workers:deploy": "wrangler deploy",
-    "workers:tail": "wrangler tail",
+    "workers:dev": "XDG_CONFIG_HOME=.wrangler XDG_CACHE_HOME=.wrangler/cache XDG_DATA_HOME=.wrangler/data XDG_STATE_HOME=.wrangler/state wrangler dev",
+    "workers:deploy": "XDG_CONFIG_HOME=.wrangler XDG_CACHE_HOME=.wrangler/cache XDG_DATA_HOME=.wrangler/data XDG_STATE_HOME=.wrangler/state wrangler deploy",
+    "workers:tail": "XDG_CONFIG_HOME=.wrangler XDG_CACHE_HOME=.wrangler/cache XDG_DATA_HOME=.wrangler/data XDG_STATE_HOME=.wrangler/state wrangler tail",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
     "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage"
@@ -32,6 +32,6 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250927.0",
     "@types/jest": "^30.0.0",
-    "wrangler": "^4.42.1"
+    "wrangler": "^4.56.0"
   }
 }
