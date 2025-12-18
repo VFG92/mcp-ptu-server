@@ -92,9 +92,15 @@ export function createAppsSDKMetadata(
 export interface AppsSDKToolResponse {
   /** Text content for conversation (always required) */
   content: Array<{ type: string; text: string }>;
-  
-  /** Optional metadata for widget rendering */
+
+  /** Optional metadata for widget rendering (Apps SDK format) */
   _meta?: AppsSDKMetadata;
+
+  /**
+   * Legacy structured content for backward compatibility
+   * @deprecated Use _meta instead for Apps SDK compatibility
+   */
+  structuredContent?: StructuredContent;
 }
 
 /**
@@ -124,7 +130,36 @@ export function createToolResponse(
   };
 
   if (widgetType && structuredContent) {
+    // Apps SDK format (new)
     response._meta = createAppsSDKMetadata(widgetType, structuredContent);
+    // Legacy format (for backward compatibility)
+    response.structuredContent = structuredContent;
+  }
+
+  return response;
+}
+
+/**
+ * Convert a legacy tool response to Apps SDK format
+ * Use this to migrate existing handlers without rewriting them
+ *
+ * @param legacyResponse - Response with structuredContent
+ * @param toolName - Name of the tool (to determine widget type)
+ * @returns Apps SDK compatible response with _meta
+ */
+export function convertToAppsSDKResponse(
+  legacyResponse: { content: Array<{ type: string; text: string }>; structuredContent?: StructuredContent },
+  toolName: keyof typeof TOOL_WIDGET_MAPPING
+): AppsSDKToolResponse {
+  const response: AppsSDKToolResponse = {
+    content: legacyResponse.content
+  };
+
+  if (legacyResponse.structuredContent) {
+    const widgetType = TOOL_WIDGET_MAPPING[toolName];
+    response._meta = createAppsSDKMetadata(widgetType, legacyResponse.structuredContent);
+    // Keep legacy format for backward compatibility
+    response.structuredContent = legacyResponse.structuredContent;
   }
 
   return response;
@@ -135,16 +170,28 @@ export function createToolResponse(
  * This defines which widget should be rendered for each tool's response
  */
 export const TOOL_WIDGET_MAPPING = {
+  // Core workflow tools
   init_parallel_reasoning: WidgetTypes.WORKFLOW_VISUALIZER,
   submit_reasoning_plan: WidgetTypes.PLAN_TIMELINE,
-  // REMOVED: execute_plan_step (deprecated)
-  // REMOVED: submit_cross_plan_note (deprecated)
+
+  // Manifest-based execution tools
+  execute_reasoning_manifest: WidgetTypes.PLAN_TIMELINE,
+  register_execution_results: WidgetTypes.METRICS_DASHBOARD,
+  regenerate_execution_token: WidgetTypes.WORKFLOW_VISUALIZER,
+
+  // Peer review and mediation
   submit_peer_critique: WidgetTypes.WORKFLOW_VISUALIZER,
   submit_mediation_decision: WidgetTypes.WORKFLOW_VISUALIZER,
+
+  // Status and finalization
   list_plan_status: WidgetTypes.DIVERSITY_MATRIX,
   check_session_readiness: WidgetTypes.METRICS_DASHBOARD,
   generate_meta_reflection: WidgetTypes.METRICS_DASHBOARD,
-  finalize_parallel_reasoning: WidgetTypes.METRICS_DASHBOARD
+  finalize_parallel_reasoning: WidgetTypes.METRICS_DASHBOARD,
+
+  // Legacy tools (deprecated but kept for compatibility)
+  execute_plan_step: WidgetTypes.PLAN_TIMELINE,
+  submit_cross_plan_note: WidgetTypes.WORKFLOW_VISUALIZER
 } as const;
 
 /**

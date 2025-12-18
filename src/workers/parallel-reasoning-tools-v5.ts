@@ -6,16 +6,13 @@
  * - ChatGPT = Unico agente deliberativo (planning, reasoning, mediation)
  * - Parallel reasoning happens INSIDE ChatGPT, not in server
  * 
- * WORKFLOW (Manifest-based):
+ * WORKFLOW:
  * 1. ChatGPT: init_parallel_reasoning → declares diversity axes
  * 2. ChatGPT: submit_reasoning_plan (Plan A, B, C...) → server validates diversity
- * 3. ChatGPT: execute_reasoning_manifest → generates manifest with execution token
- * 4. ChatGPT: executes ALL steps using native tools (web search, Python, etc.)
- * 5. ChatGPT: register_execution_results → batch registers all evidence
- * 6. ChatGPT: submit_peer_critique → peer review with falsification tests
- * 7. ChatGPT: submit_mediation_decision → mediation with evidence
- * 8. ChatGPT: generate_meta_reflection → analyzes patterns and gaps
- * 9. ChatGPT: finalize_parallel_reasoning → synthesis with quality metrics
+ * 3. ChatGPT: execute_plan_step → invokes capabilities, server persists
+ * 4. ChatGPT: submit_cross_plan_note → contamination between plans
+ * 5. ChatGPT: submit_peer_critique → peer review (ChatGPT writes, server stores)
+ * 6. ChatGPT: finalize_parallel_reasoning → synthesis with decision map
  * 
  * References:
  * - Wang et al., Self-Consistency, 2022
@@ -37,13 +34,6 @@ import {
 import { handleAnalyzeWithCapabilities, type CapabilitySystemRefs } from './capability-tools.js';
 import * as GuidedResponses from './guided-responses.js';
 import { formatSignals } from './evidence-signals.js';
-import {
-  CONFIDENCE_THRESHOLD,
-  COVERAGE_THRESHOLD,
-  CONSENSUS_THRESHOLD,
-  calculatePlanDepthMetrics,
-  formatPlanDepthMetrics
-} from './session-metrics.js';
 import {
   createStructuredContent,
   type WorkflowInitializedContent,
@@ -219,20 +209,20 @@ export async function handleSubmitReasoningPlan(
   let response: string;
 
   if (result.accepted) {
+    // Plan accepted - use guided response
     // Calculate total declared steps across all plans
-    let total_declared_steps = 0;
+    let totalDeclaredSteps = 0;
     for (const plan of session.plans.values()) {
-      total_declared_steps += plan.capability_chain.length;
+      totalDeclaredSteps += plan.capability_chain.length;
     }
 
-    // Plan accepted - use guided response with readiness preview
     response = GuidedResponses.formatPlanAccepted(
       args.plan.plan_id,
       args.session_id,
       session.plans.size,
       session.min_plans,
       args.plan.diversity_axes,
-      total_declared_steps,
+      totalDeclaredSteps,
       args.plan.capability_chain.length
     );
 
@@ -324,31 +314,18 @@ export async function handleSubmitReasoningPlan(
 
 /**
  * Tool 3: Execute Plan Step
- *
- * CRITICAL: This tool executes REAL ANALYSIS using reasoning and tool use.
- * The `task` parameter must describe WHAT ANALYSIS TO PERFORM in detail.
- *
- * GOOD: "Analyze top 5 competitors: identify pricing models, estimate market share, list differentiators. Use web search."
- * BAD: "competitor analysis" (too vague, won't trigger deep reasoning)
- *
- * The system will:
- * 1. Parse your task description
- * 2. Activate reasoning capabilities
- * 3. Use tools (web search, calculations, etc.) as needed
- * 4. Generate evidence with traceable ID
- * 5. Return detailed analysis results
  */
 export const ExecutePlanStepSchema = z.object({
-  session_id: z.string().describe('Session ID'),
-  plan_id: z.string().describe('Plan ID to execute step for'),
-  task: z.string().describe('DETAILED description of what analysis to perform. Be specific about: 1) What to analyze, 2) What data to collect, 3) What tools/methods to use, 4) What outputs are expected. Detailed tasks trigger deeper reasoning and tool use.'),
-  adapter_id: z.enum(['strategy', 'finance', 'commercial', 'risk', 'comprehensive']).optional().describe('Analysis adapter type (default: comprehensive)'),
+  session_id: z.string(),
+  plan_id: z.string(),
+  task: z.string().describe('Task for capability execution'),
+  adapter_id: z.enum(['strategy', 'finance', 'commercial', 'risk', 'comprehensive']).optional(),
   budget: z.object({
     max_tokens_in: z.number().int().min(1),
     max_tokens_out: z.number().int().min(1),
     max_cpu_ms: z.number().int().min(1),
     max_subrequests: z.number().int().min(1)
-  }).optional().describe('Resource limits for execution (optional)')
+  }).optional()
 });
 
 export async function handleExecutePlanStep(
@@ -461,15 +438,14 @@ export async function handleSubmitCrossPlanNote(
     manager.submitCrossPlanNote(args.session_id, args.note);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const response = `# ❌ Validation Error\n\n${message}\n\nPlease correct the plan references and try again.` +
-      GuidedResponses.formatWorkflowChecklist(3);
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease correct the plan references and try again.`;
 
     return {
       content: [{ type: 'text', text: response }]
     };
   }
 
-  let response = `# Cross-Plan Note Recorded
+  const response = `# Cross-Plan Note Recorded
 
 **From**: ${args.note.from_plan_id}
 **To**: ${args.note.to_plan_id}
@@ -478,8 +454,6 @@ export async function handleSubmitCrossPlanNote(
 
 This note enables contamination between reasoning paths.
 Plan ${args.note.to_plan_id} can now consider insights from Plan ${args.note.from_plan_id}.`;
-
-  response += GuidedResponses.formatWorkflowChecklist(3);
 
   return {
     content: [{ type: 'text', text: response }]
@@ -502,15 +476,14 @@ export async function handleSubmitPeerCritique(
     manager.submitPeerCritique(args.session_id, args.critique);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const response = `# ❌ Validation Error\n\n${message}\n\nPlease fix the critique and resubmit.` +
-      GuidedResponses.formatWorkflowChecklist(5);
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease fix the critique and resubmit.`;
 
     return {
       content: [{ type: 'text', text: response }]
     };
   }
 
-  let response = `# Peer Critique Recorded
+  const response = `# Peer Critique Recorded
 
 **Reviewer**: ${args.critique.reviewer_plan_id}
 **Reviewed**: ${args.critique.reviewed_plan_id}
@@ -530,8 +503,6 @@ ${i + 1}. **Claim**: ${c.claim}
 ${args.critique.residual_risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
 Critique stored for consensus analysis.`;
-
-  response += GuidedResponses.formatWorkflowChecklist(6);
 
   return {
     content: [{ type: 'text', text: response }]
@@ -567,15 +538,14 @@ export async function handleSubmitMediationDecision(
     manager.submitMediationDecision(args.session_id, args.decision, validateEvidenceIds);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const response = `# ❌ Validation Error\n\n${message}\n\nPlease update the mediation decision with valid plan and evidence references.` +
-      GuidedResponses.formatWorkflowChecklist(6);
+    const response = `# ❌ Validation Error\n\n${message}\n\nPlease update the mediation decision with valid plan and evidence references.`;
 
     return {
       content: [{ type: 'text', text: response }]
     };
   }
 
-  let response = `# Mediation Decision Recorded
+  const response = `# Mediation Decision Recorded
 
 **Decision Point**: ${args.decision.decision_point}
 **Chosen From**: ${args.decision.chosen_from_plan}
@@ -587,24 +557,16 @@ export async function handleSubmitMediationDecision(
 
 Decision stored. Continue submitting decisions for all key points.`;
 
-  response += GuidedResponses.formatWorkflowChecklist(7);
-
   return {
     content: [{ type: 'text', text: response }]
   };
 }
 
 /**
- * Tool 7: Get Readiness Preview & Session Status
- *
- * This is the PRIMARY tool for checking session progress and understanding what needs to be done.
- * Call this frequently to:
- * - See current progress toward finalization thresholds
- * - Identify specific gaps that need to be filled
- * - Get actionable recommendations for next steps
+ * Tool 7: List Plan Status (Passive)
  */
 export const ListPlanStatusSchema = z.object({
-  session_id: z.string().describe('Session ID to get readiness preview and status for')
+  session_id: z.string()
 });
 
 export async function handleListPlanStatus(
@@ -615,247 +577,47 @@ export async function handleListPlanStatus(
 
   if (!status.session) {
     return {
-      content: [{ type: 'text', text: 'Session not found.' + GuidedResponses.formatWorkflowChecklist(0) }]
+      content: [{ type: 'text', text: 'Session not found.' }]
     };
   }
 
   const session = status.session;
 
-  // Calculate readiness metrics
-  const readiness = manager.checkSessionReadiness(args.session_id);
+  let response = `# Parallel Reasoning Session Status
 
-  // Calculate total declared and executed steps
-  let total_declared_steps = 0;
-  let total_executed_steps = 0;
-  for (const plan of session.plans.values()) {
-    total_declared_steps += plan.capability_chain.length;
-    total_executed_steps += session.plan_results.get(plan.plan_id)?.length || 0;
-  }
-
-  const coverage_pct = total_declared_steps > 0 ? (total_executed_steps / total_declared_steps * 100) : 0;
-  const confidence_pct = readiness.metrics.confidence * 100;
-  const consensus_pct = readiness.metrics.consensus * 100;
-  const evidence_count = readiness.metrics.details.confidence.unique_evidence_count;
-  const coverageTargetValue = COVERAGE_THRESHOLD * 100;
-  const confidenceTargetValue = CONFIDENCE_THRESHOLD * 100;
-  const consensusTargetValue = CONSENSUS_THRESHOLD * 100;
-  const coverageTargetPct = coverageTargetValue.toFixed(0);
-  const confidenceTargetPct = confidenceTargetValue.toFixed(0);
-  const consensusTargetPct = consensusTargetValue.toFixed(0);
-
-  // Build response with READINESS PREVIEW as primary content
-  let response = `# 🎯 Readiness Preview & Session Status
-
-**Session ID**: \`${session.session_id}\`
+**Session ID**: ${session.session_id}
 **Status**: ${session.status}
-**Plans Submitted**: ${session.plans.size}/${session.min_plans}
+**Plans**: ${session.plans.size}/${session.min_plans}
 
----
+## Plans
 
-## 📊 Finalization Readiness
-
-${readiness.ready ? '✅ **READY TO FINALIZE**' : '⚠️ **NOT READY - Action Required**'}
-
-| Metric | Current | Target | Status |
-|--------|---------|--------|--------|
-| **Coverage** | ${coverage_pct.toFixed(1)}% (${total_executed_steps}/${total_declared_steps} steps) | ≥${coverageTargetPct}% | ${readiness.quality_check.coverage_met ? '✅' : '❌'} |
-| **Confidence** | ${confidence_pct.toFixed(1)}% | ≥${confidenceTargetPct}% | ${readiness.quality_check.confidence_met ? '✅' : '❌'} |
-| **Consensus** | ${consensus_pct.toFixed(1)}% | ≥${consensusTargetPct}% | ${readiness.quality_check.consensus_met ? '✅' : '❌'} |
-
----
-
-${(session as any).self_assessments && (session as any).self_assessments.length > 0 ? `
-## 🔍 Your Self-Assessment vs Server Validation
-
-${(() => {
-  const selfAssessment = (session as any).self_assessments[(session as any).self_assessments.length - 1];
-  const estimatedConfidence = selfAssessment.estimated_confidence * 100;
-  const actualConfidence = confidence_pct;
-  const confidenceDiff = actualConfidence - estimatedConfidence;
-  const estimatedCoverage = selfAssessment.estimated_coverage * 100;
-  const actualCoverage = coverage_pct;
-  const coverageDiff = actualCoverage - estimatedCoverage;
-
-  return `
-**Your declared evidence**:
-- Total evidence items: ${selfAssessment.total_evidence_items}
-- External sources: ${selfAssessment.external_sources}
-- Quantitative datapoints: ${selfAssessment.quantitative_datapoints}
-- Workpapers created: ${selfAssessment.workpapers_created}
-
-**Your self-evaluation vs Server calculation**:
-| Metric | You Estimated | Server Calculated | Difference |
-|--------|---------------|-------------------|------------|
-| **Confidence** | ${estimatedConfidence.toFixed(1)}% | ${actualConfidence.toFixed(1)}% | ${confidenceDiff >= 0 ? '+' : ''}${confidenceDiff.toFixed(1)}% ${Math.abs(confidenceDiff) < 5 ? '✅' : (confidenceDiff > 0 ? '⚠️ Underestimated' : '⚠️ Overestimated')} |
-| **Coverage** | ${estimatedCoverage.toFixed(1)}% | ${actualCoverage.toFixed(1)}% | ${coverageDiff >= 0 ? '+' : ''}${coverageDiff.toFixed(1)}% ${Math.abs(coverageDiff) < 5 ? '✅' : (coverageDiff > 0 ? '⚠️ Underestimated' : '⚠️ Overestimated')} |
-
-${selfAssessment.meets_confidence_threshold !== (actualConfidence >= confidenceTargetValue) ? `
-⚠️ **Self-assessment mismatch**: You said you ${selfAssessment.meets_confidence_threshold ? 'meet' : "don't meet"} confidence threshold, but server calculated ${actualConfidence >= confidenceTargetValue ? 'you DO meet it ✅' : "you DON'T meet it ❌"}.
-` : ''}
-
-${selfAssessment.gaps_identified && selfAssessment.gaps_identified.length > 0 ? `
-**Gaps you identified**:
-${selfAssessment.gaps_identified.map((gap: string) => `- ${gap}`).join('\n')}
-` : ''}
-
-${selfAssessment.improvement_actions_taken ? `
-**Improvements you made**: ${selfAssessment.improvement_actions_taken}
-` : ''}
-`;
-})()}
-
----
-` : ''}
-
-## 🎬 What You Need To Do Now
-
-${!readiness.quality_check.coverage_met ? `
-### ❌ Coverage Gap: ${(coverageTargetValue - coverage_pct).toFixed(1)}% short
-
-**Problem**: You've only executed ${total_executed_steps} out of ${total_declared_steps} declared capability steps.
-**Target**: Execute at least ${Math.ceil(total_declared_steps * COVERAGE_THRESHOLD)} steps (${coverageTargetPct}% coverage).
-**Gap**: ${Math.ceil(total_declared_steps * COVERAGE_THRESHOLD) - total_executed_steps} more steps needed.
-
-**Action Required**:
-1. Use \`execute_reasoning_manifest\` to generate execution manifest
-2. Execute ALL steps using native tools (web search, Python, code interpreter)
-3. Register results with \`register_execution_results\`
-4. For EACH step, use the \`task\` parameter to describe WHAT ANALYSIS TO PERFORM
-3. **CRITICAL**: The system will execute real reasoning and tool use for each task
-4. Don't just list steps - describe the actual analytical work needed
-
-**Example - GOOD**:
-\`\`\`json
-{
-  "session_id": "${session.session_id}",
-  "plan_id": "plan_A",
-  "task": "Analyze the top 5 competitors in the healthcare SaaS market. For each: 1) Identify their pricing model, 2) Estimate market share, 3) List key differentiators. Use web search and financial data."
-}
-\`\`\`
-
-**Example - BAD** (don't do this):
-\`\`\`json
-{
-  "task": "competitor analysis"  // ❌ Too vague, won't trigger deep reasoning
-}
-\`\`\`
-
-` : ''}${!readiness.quality_check.confidence_met ? `
-### ❌ Confidence Gap: ${(confidenceTargetValue - confidence_pct).toFixed(1)}% short
-
-**Problem**: ${evidence_count < 4 ? 'Not enough evidence collected' : 'Evidence quality is too low'}.
-**Current Evidence IDs**: ${evidence_count}
-**Target**: At least 4 unique evidence IDs with HIGH QUALITY
-
-${evidence_count >= 4 ? `
-**⚠️ CRITICAL**: You have ${evidence_count} evidence IDs but confidence is still low (${confidence_pct.toFixed(1)}%).
-This means your evidence has LOW QUALITY signals - the system detected that your \`execute_plan_step\` tasks were too vague or didn't trigger real reasoning.
-
-**Root Cause**: Using vague tasks like "analyze competitors" instead of detailed analytical instructions.
-
-**Solution**: Re-execute steps with MUCH MORE DETAILED tasks that force the system to:
-- Use specific tools (web search, calculations, data analysis)
-- Collect specific data points
-- Perform specific analytical operations
-- Generate traceable, verifiable outputs
-
-` : ''}
-**Action Required**:
-1. Call \`execute_plan_step\` with EXTREMELY DETAILED task descriptions
-2. **BAD Example**: \`{"task": "market analysis"}\` ❌
-3. **GOOD Example**: \`{"task": "Search for the top 5 B2B SaaS companies in healthcare. For EACH company: 1) Find their website, 2) Identify their pricing model (per-user/per-feature/tiered), 3) Estimate their annual revenue from Crunchbase or similar sources, 4) List 3 key product differentiators. Provide specific data points for each finding."}\` ✅
-
-**Why this matters**: Detailed tasks → System uses reasoning + tools → High-quality evidence → Higher confidence
-
-` : ''}${!readiness.quality_check.consensus_met ? `
-### ❌ Consensus Gap: ${(80 - consensus_pct).toFixed(1)}% short
-
-**Problem**: Not enough peer critiques to establish consensus.
-**Current Critiques**: ${session.peer_critiques.length}
-**Target**: 3-5 peer critiques with high agreement scores
-
-**Action Required**:
-1. Call \`submit_peer_critique\` to have plans review each other
-2. Aim for agreement_score > 0.7 in each critique
-3. Focus on substantive agreement/disagreement, not superficial points
-
-` : ''}${readiness.ready ? `
-### ✅ All Requirements Met
-
-You can now call \`finalize_parallel_reasoning\` to complete the session.
-
-` : ''}
----
-
-${session.saliency_report ? `
-## 🔍 Evidence Quality Report
-
-**Overall Quality Score**: ${(session.saliency_report.overall_quality_score * 100).toFixed(1)}% ${session.saliency_report.overall_quality_score >= 0.7 ? '✅' : '⚠️'}
-
-${session.saliency_report.missing_evidence_types.length > 0 ? `
-### ❌ Missing Evidence Types
-
-${session.saliency_report.missing_evidence_types.map((missing: any) => `
-#### ${missing.priority === 'critical' ? '🔴' : '🟡'} ${missing.type.replace(/_/g, ' ').toUpperCase()}
-
-**Description**: ${missing.description}
-
-**Examples of what to add**:
-${missing.examples.map((ex: string) => `- ${ex}`).join('\n')}
-
-**Priority**: ${missing.priority}
-`).join('\n')}
-` : ''}
-
-${session.saliency_report.recommendations.length > 0 ? `
-### 💡 Recommendations
-
-${session.saliency_report.recommendations.map((rec: string) => `- ${rec}`).join('\n')}
-` : ''}
-
----
-
-` : ''}
-${(() => {
-  // Calculate UCT-based depth metrics (v5.10.0)
-  const depthMetrics = calculatePlanDepthMetrics(session);
-  return formatPlanDepthMetrics(depthMetrics);
-})()}
-
----
-
-## 📋 Detailed Plan Status
-
-${Array.from(session.plans.values()).map(plan => {
-  const executed = session.plan_results.get(plan.plan_id)?.length || 0;
-  const declared = plan.capability_chain.length;
-  const plan_coverage = declared > 0 ? (executed / declared * 100) : 0;
-
-  return `
-### ${plan.plan_id} ${plan_coverage >= coverageTargetValue ? '✅' : '⚠️'}
-
-- **Coverage**: ${plan_coverage.toFixed(0)}% (${executed}/${declared} steps executed)
+${Array.from(session.plans.values()).map(plan => `
+### ${plan.plan_id}
 - **Diversity Axes**: ${plan.diversity_axes.join(', ')}
 - **Capability Chain**: ${plan.capability_chain.join(' → ')}
-${executed < declared ? `
-**Missing Steps**: ${declared - executed} steps not yet executed
-**Next Action**: Call \`execute_plan_step\` with detailed analytical tasks for remaining capabilities
-` : ''}`;
-}).join('\n')}
+- **Results**: ${session.plan_results.get(plan.plan_id)?.length || 0} steps completed
+`).join('\n')}
+
+## Cross-Plan Notes
+
+${session.cross_plan_notes.length} notes exchanged
+
+## Peer Critiques
+
+${session.peer_critiques.length} critiques submitted
+
+## Mediation Decisions
+
+${session.mediation_decisions.length} decisions recorded
+
+## Pending Frames
+
+${status.pending_frames.length > 0 ? status.pending_frames.map(f => `- ${f}`).join('\n') : 'None - all frames complete'}
 
 ---
 
-## 📈 Session Activity
-
-- **Cross-Plan Notes**: ${session.cross_plan_notes.length} notes exchanged
-- **Peer Critiques**: ${session.peer_critiques.length} critiques submitted
-- **Mediation Decisions**: ${session.mediation_decisions.length} decisions recorded
-
----
-
-**💡 Pro Tip**: Call this tool frequently to track progress and identify gaps. Don't wait until the end!`;
-
-  response += GuidedResponses.formatWorkflowChecklist(5);
+**Created**: ${new Date(session.created_at).toISOString()}
+**Updated**: ${new Date(session.updated_at).toISOString()}`;
 
   // Create structured content for UI visualization
   const structuredContent = createStructuredContent<WorkflowStatusContent>(
@@ -910,7 +672,7 @@ ${executed < declared ? `
  *
  * Verifies if session is ready for finalization by checking:
  * - Structural requirements (min plans, all executed)
- * - Quality metrics (confidence ≥75%, coverage ≥85%, consensus ≥70%)
+ * - Quality metrics (confidence ≥85%, coverage ≥95%, consensus ≥80%)
  *
  * Use this BEFORE calling finalize_parallel_reasoning to avoid rejection
  */
@@ -923,14 +685,6 @@ export async function handleCheckSessionReadiness(
   manager: ParallelReasoningSessionManager = globalParallelReasoningManager
 ): Promise<{ content: Array<{ type: string; text: string }> }> {
   const readiness = manager.checkSessionReadiness(args.session_id);
-
-  // Define threshold values for display
-  const confidenceTargetValue = CONFIDENCE_THRESHOLD * 100;
-  const confidenceTargetPct = confidenceTargetValue.toFixed(0);
-  const coverageTargetValue = COVERAGE_THRESHOLD * 100;
-  const coverageTargetPct = coverageTargetValue.toFixed(0);
-  const consensusTargetValue = CONSENSUS_THRESHOLD * 100;
-  const consensusTargetPct = consensusTargetValue.toFixed(0);
 
   let response = `# 🔍 Session Readiness Check\n\n`;
   response += `**Session ID**: \`${args.session_id}\`\n\n`;
@@ -957,53 +711,19 @@ export async function handleCheckSessionReadiness(
   }
   response += `\n\n`;
 
-  // Self-Assessment Validation (if available)
-  const session = manager.getSession(args.session_id);
-  const selfAssessments = session ? (session as any).self_assessments : null;
-  if (selfAssessments && selfAssessments.length > 0) {
-    const latestAssessment = selfAssessments[selfAssessments.length - 1];
-    const estimatedConfidence = latestAssessment.estimated_confidence * 100;
-    const actualConfidence = readiness.metrics.confidence * 100;
-    const confidenceDiff = actualConfidence - estimatedConfidence;
-
-    response += `### 🔍 Self-Assessment Validation\n\n`;
-    response += `**Your self-evaluation vs Server calculation**:\n`;
-    response += `- **Confidence**: You estimated ${estimatedConfidence.toFixed(1)}%, Server calculated ${actualConfidence.toFixed(1)}%`;
-    if (Math.abs(confidenceDiff) < 5) {
-      response += ` ✅ (accurate self-assessment)\n`;
-    } else if (confidenceDiff > 0) {
-      response += ` ⚠️ (you underestimated by ${confidenceDiff.toFixed(1)}%)\n`;
-    } else {
-      response += ` ⚠️ (you overestimated by ${Math.abs(confidenceDiff).toFixed(1)}%)\n`;
-    }
-
-    if (latestAssessment.meets_confidence_threshold !== (actualConfidence >= confidenceTargetValue)) {
-      response += `\n⚠️ **Threshold mismatch**: You said you ${latestAssessment.meets_confidence_threshold ? 'meet' : "don't meet"} the ${confidenceTargetPct}% threshold, `;
-      response += `but server calculated you ${actualConfidence >= confidenceTargetValue ? 'DO meet it ✅' : "DON'T meet it ❌"}.\n`;
-    }
-
-    if (latestAssessment.gaps_identified && latestAssessment.gaps_identified.length > 0) {
-      response += `\n**Gaps you identified**:\n`;
-      latestAssessment.gaps_identified.forEach((gap: string) => {
-        response += `- ${gap}\n`;
-      });
-    }
-    response += `\n`;
-  }
-
   // Quality metrics
   response += `### 📊 Quality Metrics\n\n`;
   response += `- **Confidence**: ${(readiness.metrics.confidence * 100).toFixed(1)}% `;
   response += readiness.quality_check.confidence_met ? '✅' : '❌';
-  response += ` (target: ${confidenceTargetPct}%, ${readiness.metrics.details.confidence.unique_evidence_count} evidence)\n`;
+  response += ` (target: 85%, ${readiness.metrics.details.confidence.unique_evidence_count} evidence)\n`;
 
   response += `- **Coverage**: ${(readiness.metrics.coverage * 100).toFixed(1)}% `;
   response += readiness.quality_check.coverage_met ? '✅' : '❌';
-  response += ` (target: ${coverageTargetPct}%, ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps)\n`;
+  response += ` (target: 95%, ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps)\n`;
 
   response += `- **Consensus**: ${(readiness.metrics.consensus * 100).toFixed(1)}% `;
   response += readiness.quality_check.consensus_met ? '✅' : '❌';
-  response += ` (target: ${consensusTargetPct}%, ${readiness.metrics.details.consensus.agreements} agreements, ${readiness.metrics.details.consensus.conflicts} conflicts)\n\n`;
+  response += ` (target: 80%, ${readiness.metrics.details.consensus.agreements} agreements, ${readiness.metrics.details.consensus.conflicts} conflicts)\n\n`;
 
   // Recommendations
   if (readiness.recommendations.length > 0) {
@@ -1014,69 +734,22 @@ export async function handleCheckSessionReadiness(
     response += `\n`;
   }
 
-  // Next steps with DETAILED GUIDANCE
+  // Next steps
   if (!readiness.ready) {
-    response += `### 🎯 Next Steps (Detailed Guidance)\n\n`;
-
-    // COVERAGE guidance
+    response += `### 🎯 Next Steps\n\n`;
     if (!readiness.quality_check.coverage_met) {
-      const coverageGap = coverageTargetValue - (readiness.metrics.coverage * 100);
-      response += `#### 1. ❌ Coverage: ${(readiness.metrics.coverage * 100).toFixed(1)}% (need ${coverageTargetPct}%)\n\n`;
-      response += `**Gap**: ${coverageGap.toFixed(1)}% more coverage needed\n\n`;
-      response += `**How to fix**:\n`;
-      response += `- You have ${readiness.metrics.details.coverage.executed_steps}/${readiness.metrics.details.coverage.total_declared_steps} steps executed\n`;
-      response += `- Execute remaining ${readiness.metrics.details.coverage.total_declared_steps - readiness.metrics.details.coverage.executed_steps} steps\n`;
-      response += `- **Do the work** (web search, Python, analysis) then COUNT evidence\n`;
-      response += `- Register with self_assessment showing honest coverage evaluation\n\n`;
+      response += `1. **Execute remaining capability steps** using \`execute_plan_step\` to complete declared workflows\n`;
     }
-
-    // CONFIDENCE guidance
     if (!readiness.quality_check.confidence_met) {
-      const confidenceGap = confidenceTargetValue - (readiness.metrics.confidence * 100);
-      response += `#### 2. ❌ Confidence: ${(readiness.metrics.confidence * 100).toFixed(1)}% (need ${confidenceTargetPct}%)\n\n`;
-      response += `**Gap**: ${confidenceGap.toFixed(1)}% more confidence needed\n\n`;
-      response += `**How to fix** (v5.9.0+ Self-Assessment approach):\n`;
-      response += `1. **DO the research/analysis** (use web search, Python, code interpreter)\n`;
-      response += `   - Search for authoritative sources (academic papers, official reports, industry data)\n`;
-      response += `   - Perform calculations and quantitative analysis\n`;
-      response += `   - Create workpapers with detailed methodology\n\n`;
-      response += `2. **COUNT what you collected** (for self_assessment):\n`;
-      response += `   - total_evidence_items: Total unique evidence pieces\n`;
-      response += `   - external_sources: Count of authoritative sources consulted\n`;
-      response += `   - quantitative_datapoints: Count of specific numbers/calculations\n`;
-      response += `   - workpapers_created: Count of detailed analysis documents\n\n`;
-      response += `3. **Self-evaluate HONESTLY**:\n`;
-      response += `   - estimated_confidence: Your honest assessment (0-1)\n`;
-      response += `   - meets_confidence_threshold: Do you REALLY meet ${confidenceTargetPct}%?\n`;
-      response += `   - gaps_identified: What's missing if threshold not met\n\n`;
-      response += `4. **Register with counts** (NOT textual content):\n`;
-      response += `   - Use register_execution_results with self_assessment\n`;
-      response += `   - Server will validate and provide feedback\n\n`;
-      response += `Current evidence count: ${readiness.metrics.details.confidence.unique_evidence_count}\n`;
-      response += `Aim for 30+ total evidence items (10+ sources, 15+ datapoints, 5+ workpapers)\n\n`;
+      response += `2. **Add more evidence** by executing plan steps with detailed analysis\n`;
     }
-
-    // CONSENSUS guidance
     if (!readiness.quality_check.consensus_met) {
-      const consensusGap = consensusTargetValue - (readiness.metrics.consensus * 100);
-      response += `#### 3. ❌ Consensus: ${(readiness.metrics.consensus * 100).toFixed(1)}% (need ${consensusTargetPct}%)\n\n`;
-      response += `**Gap**: ${consensusGap.toFixed(1)}% more consensus needed\n\n`;
-      response += `**How to fix**:\n`;
-      response += `- Submit peer critiques using \`submit_peer_critique\`\n`;
-      response += `- Each plan should review other plans with:\n`;
-      response += `  - \`claims_challenged\`: Specific claims with evidence_ids and falsification tests\n`;
-      response += `  - \`residual_risks\`: Remaining uncertainties\n`;
-      response += `  - \`agreement_score\`: 0-1 score indicating agreement level\n`;
-      response += `- Then submit mediation decisions using \`submit_mediation_decision\`\n`;
-      response += `- For each decision_point, choose best approach with rationale and evidence_ids\n`;
-      response += `- Current: ${readiness.metrics.details.consensus.agreements} agreements, ${readiness.metrics.details.consensus.conflicts} conflicts\n\n`;
+      response += `3. **Submit peer critiques** using \`submit_peer_critique\` to build consensus\n`;
     }
-
-    response += `#### 4. ✅ Final Step\n\n`;
-    response += `After addressing the above, call \`check_session_readiness\` again to verify all metrics are met.\n`;
+    response += `4. **Re-check readiness** using \`check_session_readiness\` before attempting finalization\n`;
   } else {
     response += `### 🎯 Next Step\n\n`;
-    response += `✅ All requirements met! Call \`finalize_parallel_reasoning\` to complete the session.\n`;
+    response += `Call \`finalize_parallel_reasoning\` to complete the session.\n`;
   }
 
   return {
@@ -1085,237 +758,7 @@ export async function handleCheckSessionReadiness(
 }
 
 /**
- * Tool 9: Generate Meta-Reflection
- *
- * Guides ChatGPT to produce a reflective synthesis after mediation.
- * Analyzes patterns in disagreements, identifies residual uncertainty,
- * and suggests further analysis.
- *
- * Should be called AFTER mediation decisions but BEFORE finalization.
- */
-export const GenerateMetaReflectionSchema = z.object({
-  session_id: z.string().describe('Session ID to generate meta-reflection for')
-});
-
-export async function handleGenerateMetaReflection(
-  args: z.infer<typeof GenerateMetaReflectionSchema>,
-  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
-): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const session = manager.getSession(args.session_id);
-
-  if (!session) {
-    throw new Error(`Session ${args.session_id} not found`);
-  }
-
-  let response = `# 🔮 Meta-Reflection Analysis\n\n`;
-  response += `**Session ID**: \`${args.session_id}\`\n`;
-  response += `**Task**: ${session.task_description}\n\n`;
-
-  // 1. Analyze mediation decisions
-  response += `## 📊 Mediation Decision Patterns\n\n`;
-
-  if (session.mediation_decisions.length === 0) {
-    response += `⚠️ **No mediation decisions yet**. Submit mediation decisions using \`submit_mediation_decision\` before generating meta-reflection.\n\n`;
-  } else {
-    response += `**Total Decisions**: ${session.mediation_decisions.length}\n\n`;
-
-    // Group decisions by chosen plan
-    const decisionsByPlan = new Map<string, number>();
-    for (const decision of session.mediation_decisions) {
-      const count = decisionsByPlan.get(decision.chosen_from_plan) || 0;
-      decisionsByPlan.set(decision.chosen_from_plan, count + 1);
-    }
-
-    response += `### Decision Distribution\n\n`;
-    for (const [planId, count] of decisionsByPlan.entries()) {
-      const percentage = (count / session.mediation_decisions.length * 100).toFixed(1);
-      response += `- **${planId}**: ${count} decisions (${percentage}%)\n`;
-    }
-    response += `\n`;
-
-    // Analyze confidence levels
-    const avgConfidence = session.mediation_decisions.reduce((sum, d) => sum + d.confidence, 0) / session.mediation_decisions.length;
-    const lowConfidenceDecisions = session.mediation_decisions.filter(d => d.confidence < 0.7);
-
-    response += `### Confidence Analysis\n\n`;
-    response += `- **Average Confidence**: ${(avgConfidence * 100).toFixed(1)}%\n`;
-    response += `- **Low Confidence Decisions** (<70%): ${lowConfidenceDecisions.length}\n\n`;
-
-    if (lowConfidenceDecisions.length > 0) {
-      response += `#### ⚠️ Low Confidence Decision Points\n\n`;
-      for (const decision of lowConfidenceDecisions.slice(0, 5)) {
-        response += `- **${decision.decision_point}** (${(decision.confidence * 100).toFixed(1)}% confidence)\n`;
-        response += `  - Chosen from: ${decision.chosen_from_plan}\n`;
-        response += `  - Rationale: ${decision.rationale.substring(0, 100)}...\n\n`;
-      }
-    }
-  }
-
-  // 2. Analyze disagreement patterns
-  response += `## 🔍 Disagreement Pattern Analysis\n\n`;
-
-  if (session.peer_critiques.length === 0) {
-    response += `⚠️ **No peer critiques yet**. Peer review is essential for identifying disagreement patterns.\n\n`;
-  } else {
-    const lowAgreementCritiques = session.peer_critiques.filter(c => c.agreement_score < 0.5);
-    const constructiveDisagreements = session.peer_critiques.filter(c =>
-      c.agreement_score < 0.5 &&
-      c.claims_challenged &&
-      c.claims_challenged.length > 0 &&
-      c.claims_challenged.some(claim => claim.falsification_test)
-    );
-
-    response += `- **Total Critiques**: ${session.peer_critiques.length}\n`;
-    response += `- **Disagreements** (agreement < 50%): ${lowAgreementCritiques.length}\n`;
-    response += `- **Constructive Disagreements** (with falsification tests): ${constructiveDisagreements.length}\n\n`;
-
-    // Identify most challenged claims
-    const claimChallenges = new Map<string, number>();
-    for (const critique of session.peer_critiques) {
-      if (critique.claims_challenged) {
-        for (const claim of critique.claims_challenged) {
-          const key = claim.claim.substring(0, 50);
-          claimChallenges.set(key, (claimChallenges.get(key) || 0) + 1);
-        }
-      }
-    }
-
-    if (claimChallenges.size > 0) {
-      response += `### Most Challenged Claims\n\n`;
-      const sortedClaims = Array.from(claimChallenges.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5);
-
-      for (const [claim, count] of sortedClaims) {
-        response += `- **"${claim}..."** (challenged ${count} times)\n`;
-      }
-      response += `\n`;
-    }
-  }
-
-  // 3. Identify residual uncertainty
-  response += `## ⚠️ Residual Uncertainty & Risks\n\n`;
-
-  const allResidualRisks = new Set<string>();
-  for (const critique of session.peer_critiques) {
-    if (critique.residual_risks) {
-      for (const risk of critique.residual_risks) {
-        allResidualRisks.add(risk);
-      }
-    }
-  }
-
-  if (allResidualRisks.size === 0) {
-    response += `✅ **No residual risks identified** in peer critiques.\n\n`;
-  } else {
-    response += `**Total Unique Risks Identified**: ${allResidualRisks.size}\n\n`;
-
-    const riskArray = Array.from(allResidualRisks).slice(0, 10);
-    for (const risk of riskArray) {
-      response += `- ${risk}\n`;
-    }
-
-    if (allResidualRisks.size > 10) {
-      response += `\n... and ${allResidualRisks.size - 10} more\n`;
-    }
-    response += `\n`;
-  }
-
-  // 4. Suggest further analysis
-  response += `## 🎯 Recommendations for Further Analysis\n\n`;
-
-  const recommendations: string[] = [];
-
-  // Check for low confidence decisions
-  if (session.mediation_decisions.length > 0) {
-    const lowConfCount = session.mediation_decisions.filter(d => d.confidence < 0.7).length;
-    if (lowConfCount > 0) {
-      recommendations.push(`**Re-examine ${lowConfCount} low-confidence decisions** - Consider gathering additional evidence or running sensitivity analysis`);
-    }
-  }
-
-  // Check for unbalanced decision distribution
-  if (session.mediation_decisions.length > 0 && session.plans.size > 1) {
-    const decisionsByPlan = new Map<string, number>();
-    for (const decision of session.mediation_decisions) {
-      decisionsByPlan.set(decision.chosen_from_plan, (decisionsByPlan.get(decision.chosen_from_plan) || 0) + 1);
-    }
-
-    const maxDecisions = Math.max(...Array.from(decisionsByPlan.values()));
-    const minDecisions = Math.min(...Array.from(decisionsByPlan.values()));
-
-    if (maxDecisions > minDecisions * 3) {
-      recommendations.push(`**Investigate decision imbalance** - One plan dominates (${maxDecisions} vs ${minDecisions} decisions). Verify this reflects genuine quality differences, not bias`);
-    }
-  }
-
-  // Check for high-frequency challenged claims
-  if (session.peer_critiques.length > 0) {
-    const claimChallenges = new Map<string, number>();
-    for (const critique of session.peer_critiques) {
-      if (critique.claims_challenged) {
-        for (const claim of critique.claims_challenged) {
-          const key = claim.claim.substring(0, 50);
-          claimChallenges.set(key, (claimChallenges.get(key) || 0) + 1);
-        }
-      }
-    }
-
-    const maxChallenges = Math.max(...Array.from(claimChallenges.values()), 0);
-    if (maxChallenges >= 2) {
-      recommendations.push(`**Deep-dive on repeatedly challenged claims** - Some claims were challenged ${maxChallenges} times. These may represent fundamental uncertainties requiring additional research`);
-    }
-  }
-
-  // Check for residual risks
-  if (allResidualRisks.size > 5) {
-    recommendations.push(`**Risk mitigation analysis** - ${allResidualRisks.size} residual risks identified. Consider developing mitigation strategies or contingency plans`);
-  }
-
-  // Check for missing falsification tests
-  if (session.peer_critiques.length > 0) {
-    const critiquesWithoutTests = session.peer_critiques.filter(c =>
-      c.claims_challenged &&
-      c.claims_challenged.length > 0 &&
-      !c.claims_challenged.some(claim => claim.falsification_test)
-    );
-
-    if (critiquesWithoutTests.length > 0) {
-      recommendations.push(`**Add falsification tests** - ${critiquesWithoutTests.length} critiques lack falsification tests. These would strengthen the analysis`);
-    }
-  }
-
-  if (recommendations.length === 0) {
-    response += `✅ **Analysis appears comprehensive** - No major gaps identified.\n\n`;
-  } else {
-    for (let i = 0; i < recommendations.length; i++) {
-      response += `${i + 1}. ${recommendations[i]}\n\n`;
-    }
-  }
-
-  // 5. Next steps
-  response += `## 🚀 Next Steps\n\n`;
-
-  if (session.mediation_decisions.length === 0) {
-    response += `1. **Submit mediation decisions** using \`submit_mediation_decision\` for key decision points\n`;
-    response += `2. **Re-run meta-reflection** to analyze decision patterns\n`;
-  } else if (recommendations.length > 0) {
-    response += `1. **Address recommendations above** to strengthen the analysis\n`;
-    response += `2. **Re-run meta-reflection** to verify improvements\n`;
-    response += `3. **Check session readiness** using \`check_session_readiness\`\n`;
-    response += `4. **Finalize** using \`finalize_parallel_reasoning\` when ready\n`;
-  } else {
-    response += `1. **Check session readiness** using \`check_session_readiness\`\n`;
-    response += `2. **Finalize** using \`finalize_parallel_reasoning\` when ready\n`;
-  }
-
-  return {
-    content: [{ type: 'text', text: response }]
-  };
-}
-
-/**
- * Tool 10: Finalize Parallel Reasoning
+ * Tool 9: Finalize Parallel Reasoning
  */
 export const FinalizeParallelReasoningSchema = z.object({
   session_id: z.string()
@@ -1445,5 +888,134 @@ ${i + 1}. **${d.decision_point}**
   return {
     content: [{ type: 'text', text: response }],
     structuredContent
+  };
+}
+
+/**
+ * Tool 9: Generate Meta-Reflection
+ *
+ * Analyzes patterns in disagreements, identifies residual uncertainty,
+ * and suggests areas for further analysis.
+ */
+export const GenerateMetaReflectionSchema = z.object({
+  session_id: z.string().describe('Session ID to generate meta-reflection for')
+});
+
+export async function handleGenerateMetaReflection(
+  args: z.infer<typeof GenerateMetaReflectionSchema>,
+  manager: ParallelReasoningSessionManager = globalParallelReasoningManager
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const session = manager.getSession(args.session_id);
+  if (!session) {
+    return {
+      content: [{
+        type: 'text',
+        text: `❌ **Session Not Found**\n\nSession \`${args.session_id}\` does not exist. Use \`init_parallel_reasoning\` to create a new session.`
+      }]
+    };
+  }
+
+  // Check if there are mediation decisions to analyze
+  if (session.mediation_decisions.length === 0) {
+    return {
+      content: [{
+        type: 'text',
+        text: `⚠️ **No Mediation Decisions Yet**\n\nSession \`${args.session_id}\` has no mediation decisions to analyze.\n\nPlease use \`submit_mediation_decision\` to add decisions before generating meta-reflection.`
+      }]
+    };
+  }
+
+  // Analyze decision patterns
+  const planChoiceCounts = new Map<string, number>();
+  const decisionConfidences: number[] = [];
+  const lowConfidenceDecisions: string[] = [];
+
+  for (const decision of session.mediation_decisions) {
+    // Count how often each plan was chosen
+    const count = planChoiceCounts.get(decision.chosen_from_plan) || 0;
+    planChoiceCounts.set(decision.chosen_from_plan, count + 1);
+
+    // Track confidence levels
+    decisionConfidences.push(decision.confidence);
+    if (decision.confidence < 0.7) {
+      lowConfidenceDecisions.push(decision.decision_point);
+    }
+  }
+
+  // Calculate average confidence
+  const avgConfidence = decisionConfidences.reduce((a, b) => a + b, 0) / decisionConfidences.length;
+
+  // Identify dominant plan (if any)
+  let dominantPlan: string | null = null;
+  let maxChoices = 0;
+  for (const [planId, count] of planChoiceCounts) {
+    if (count > maxChoices) {
+      maxChoices = count;
+      dominantPlan = planId;
+    }
+  }
+
+  // Analyze peer critique patterns
+  const challengedClaims = new Map<string, number>();
+  for (const critique of session.peer_critiques) {
+    for (const claim of critique.claims_challenged) {
+      const key = `${critique.reviewed_plan_id}:${claim.claim}`;
+      challengedClaims.set(key, (challengedClaims.get(key) || 0) + 1);
+    }
+  }
+
+  // Build reflection text
+  let reflection = `# 🔍 Meta-Reflection for Session \`${args.session_id}\`\n\n`;
+  reflection += `## Decision Pattern Analysis\n\n`;
+  reflection += `- **Total Decisions**: ${session.mediation_decisions.length}\n`;
+  reflection += `- **Average Confidence**: ${(avgConfidence * 100).toFixed(1)}%\n`;
+
+  if (dominantPlan && maxChoices > session.mediation_decisions.length / 2) {
+    reflection += `- **Dominant Plan**: \`${dominantPlan}\` (chosen ${maxChoices}/${session.mediation_decisions.length} times)\n`;
+    reflection += `  - ⚠️ This may indicate insufficient diversity in the analysis\n`;
+  }
+
+  if (lowConfidenceDecisions.length > 0) {
+    reflection += `\n### Low Confidence Decisions (<70%)\n`;
+    for (const dp of lowConfidenceDecisions) {
+      reflection += `- ${dp}\n`;
+    }
+    reflection += `\n💡 Consider gathering more evidence for these decision points.\n`;
+  }
+
+  // Residual uncertainty analysis
+  reflection += `\n## Residual Uncertainty\n\n`;
+  const residualRisks = new Set<string>();
+  for (const critique of session.peer_critiques) {
+    for (const risk of critique.residual_risks) {
+      residualRisks.add(risk);
+    }
+  }
+
+  if (residualRisks.size > 0) {
+    reflection += `The following residual risks were identified during peer review:\n\n`;
+    for (const risk of residualRisks) {
+      reflection += `- ${risk}\n`;
+    }
+  } else {
+    reflection += `No residual risks were explicitly identified during peer review.\n`;
+  }
+
+  // Recommendations
+  reflection += `\n## Recommendations\n\n`;
+  if (avgConfidence < 0.85) {
+    reflection += `1. **Increase Evidence Quality**: Average confidence (${(avgConfidence * 100).toFixed(1)}%) is below the 85% threshold.\n`;
+  }
+  if (lowConfidenceDecisions.length > 0) {
+    reflection += `2. **Address Low-Confidence Decisions**: ${lowConfidenceDecisions.length} decision(s) need additional evidence.\n`;
+  }
+  if (residualRisks.size > 0) {
+    reflection += `3. **Mitigate Residual Risks**: ${residualRisks.size} risk(s) require attention.\n`;
+  }
+
+  reflection += `\n---\n\n**Next Step**: Use \`check_session_readiness\` to verify if the session meets quality thresholds for finalization.`;
+
+  return {
+    content: [{ type: 'text', text: reflection }]
   };
 }

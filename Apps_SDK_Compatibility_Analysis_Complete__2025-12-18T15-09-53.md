@@ -1,0 +1,20 @@
+[ ] NAME:Current Task List DESCRIPTION:Root task for conversation __NEW_AGENT__
+-[/] NAME:Apps SDK Compatibility Implementation DESCRIPTION:Implementare compatibilità completa con OpenAI Apps SDK per mcp-ptu-server - AGGIORNATO: Apps SDK usa _meta.openai/outputTemplate per widget rendering in iframe
+--[ ] NAME:Fase 1: Metadata Format (CRITICO) DESCRIPTION:Adattare formato risposte tools per compatibilità Apps SDK
+--[x] NAME:Creare helper apps-sdk-metadata.ts DESCRIPTION:File apps-sdk-metadata.ts già creato con helper functions
+--[x] NAME:Aggiornare tipo ToolResponse DESCRIPTION:Tipo AppsSDKToolResponse creato con supporto dual (structuredContent + _meta)
+--[/] NAME:Modificare tutti i 9 tool handlers DESCRIPTION:Aggiornare tutti i tool handlers per usare _meta.openai/outputTemplate - in corso
+--[ ] NAME:Testare con build e type-check DESCRIPTION:Verificare che il codice compili senza errori TypeScript
+--[ ] NAME:Fase 2: Widget Build System DESCRIPTION:Setup build process per generare widget bundles
+--[ ] NAME:Fase 3: Testing & Documentation DESCRIPTION:Test end-to-end e aggiornamento documentazione
+-[ ] NAME:Current Task List DESCRIPTION:Root task for conversation __NEW_AGENT__
+--[x] NAME:Fase 1: Progettazione Architettura Manifest-Based DESCRIPTION:Progettare l'architettura completa del sistema manifest-based con execution token, batch registration, e saliency reporting
+--[x] NAME:Fase 2: Implementazione Execution Manifest DESCRIPTION:Implementare il nuovo tool execute_reasoning_manifest che genera un manifest completo per ChatGPT con tutti gli step da eseguire in una sessione di reasoning nativo
+--[x] NAME:Fase 3: Implementazione Evidence Registration Batch DESCRIPTION:Implementare register_execution_results per registrare in batch tutti i risultati del reasoning nativo di ChatGPT, includendo workpapers e evidence refs
+--[/] NAME:Fase 4: Implementazione Saliency Report DESCRIPTION:Aggiungere saliency report a list_plan_status che indica esattamente quale tipo di evidence manca (quantitative data, external sources, comparative analysis, workpapers)
+--[ ] NAME:Fase 5: Evoluzione Consensus Metrics DESCRIPTION:Modificare il calcolo del consenso per valorizzare il dissenso argomentato invece di penalizzarlo, aggiungendo productive_disagreement_score e convergence_quality
+--[ ] NAME:Fase 6: Implementazione Meta-Reflection DESCRIPTION:Creare nuovo tool generate_meta_reflection che guida ChatGPT a produrre una sintesi riflessiva post-mediazione su cosa il processo ha rivelato
+--[ ] NAME:Fase 7: Implementazione Session Persistence DESCRIPTION:Implementare sistema di checkpoint/resume con save automatico periodico e resume_token per riprendere sessioni interrotte
+--[ ] NAME:Fase 8: Testing e Validazione DESCRIPTION:Creare test suite completa per il nuovo workflow manifest-based, inclusi test di persistenza e recovery
+--[ ] NAME:Fase 9: Documentazione e Migration Guide DESCRIPTION:Aggiornare README.md e AGENT.md con il nuovo workflow, creare migration guide per passare dal vecchio al nuovo sistema
+--[ ] NAME:Fase 10: Deploy e Monitoring DESCRIPTION:Deploy del nuovo sistema su Cloudflare Workers con monitoring per verificare miglioramenti in confidence, consensus quality, e user experience. Deprecare tool di funzioni che non servono più e non renderle visibili a chatgpt.
