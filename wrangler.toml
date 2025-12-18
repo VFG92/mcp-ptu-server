@@ -3,6 +3,7 @@ name = "mcp-server"
 main = "src/workers/index.ts"
 compatibility_date = "2025-01-15"
 compatibility_flags = ["nodejs_compat"]
+preview_urls = false
 
 # Workers Free plan limits
 # - 100,000 requests/day
@@ -47,4 +48,3 @@ vars = { }
 [env.production]
 name = "mcp-server-production"
 vars = { }
-
