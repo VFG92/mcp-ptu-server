@@ -35,10 +35,12 @@ When deploying, use `npm run workers:deploy` with the appropriate Cloudflare cre
 
 ## UI visualization layer (ChatGPT Apps SDK)
 
-The server includes an optional **passive visualization layer** that renders interactive UI components inside ChatGPT. All 8 parallel reasoning tools return `structuredContent` alongside text responses.
+The server includes an optional **passive visualization layer** that renders interactive UI components inside ChatGPT.
 
-**Apps SDK Compatibility Status**: ~70% compatible
-**Required Changes**: Adapt tool response format to include `_meta.openai/outputTemplate` metadata instead of custom `structuredContent` field. See [`APPS_SDK_COMPATIBILITY_ANALYSIS.md`](./APPS_SDK_COMPATIBILITY_ANALYSIS.md) for details.
+**Apps SDK output format**:
+- Tools may return legacy `structuredContent` (used by the existing UI bundle).
+- The server also emits Apps SDK-compatible widget metadata via `_meta["openai/outputTemplate"]` (used by ChatGPT Apps SDK iframe rendering).
+- Metadata is added centrally in `src/workers/everything-workers.ts` using `src/workers/apps-sdk-metadata.ts`.
 
 ### Key files
 - `src/ui/src/types.ts` – TypeScript interfaces for structured content
@@ -65,9 +67,9 @@ The main `tsconfig.json` excludes `src/ui` to avoid conflicts with React JSX con
 
 ### Rules for AI agents
 **When modifying tool responses**:
-- ✅ Always return both `content` (text) and `structuredContent` (data)
-- ✅ Use `createStructuredContent()` helper from `ui-structured-content.ts`
-- ✅ Ensure structured content matches TypeScript interfaces
+- ✅ Always return `content` (text)
+- ✅ If the response drives a widget, return `structuredContent` (legacy) using `createStructuredContent()` from `ui-structured-content.ts`
+- ✅ Keep structured content aligned with TypeScript interfaces (UI relies on it); `_meta["openai/outputTemplate"]` is derived from it
 - ❌ DO NOT modify UI components without rebuilding (`npm run build` in `src/ui`)
 - ❌ DO NOT change structured content types without updating UI components
 
@@ -161,4 +163,3 @@ The server enforces strict quality thresholds to prevent premature finalization 
 - `__tests__/session-metrics.test.ts`: Updated to reflect blocking finalization
 - `__tests__/parallel-reasoning-v5.test.ts`: Updated to reflect quality threshold enforcement
 - All 266 tests passing ✅
-

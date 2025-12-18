@@ -111,18 +111,15 @@ The server enforces quality thresholds to prevent premature finalization:
 
 ## OpenAI Apps SDK Compatibility
 
-This server is **architecturally compatible** with [OpenAI Apps SDK](https://developers.openai.com/apps-sdk) for building ChatGPT apps. The MCP protocol implementation, tool system, and UI layer align with Apps SDK requirements.
+This server is compatible with OpenAI Apps SDK widget rendering:
+- Tool responses include `_meta["openai/outputTemplate"]` for iframe/widget rendering (Apps SDK format).
+- Legacy `structuredContent` is still returned for backward compatibility.
 
-**Current Status**: ~70% compatible
-**Required Changes**: Adapt tool response format to include `_meta.openai/outputTemplate` metadata
-
-See [`APPS_SDK_COMPATIBILITY_ANALYSIS.md`](./APPS_SDK_COMPATIBILITY_ANALYSIS.md) for detailed compatibility analysis and implementation roadmap.
+Implementation references:
+- `src/workers/apps-sdk-metadata.ts` – metadata helpers + tool→widget mapping
+- `src/workers/everything-workers.ts` – centralized response conversion wrapper
 
 ## Additional resources
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [OpenAI Apps SDK](https://developers.openai.com/apps-sdk)
 - [Apps SDK Examples](https://github.com/openai/openai-apps-sdk-examples)
-- [`SESSION_ID_EXPLAINED.md`](./SESSION_ID_EXPLAINED.md) – detailed guidance on the two types of session identifiers.
-- [`IMPLEMENTATION_SUMMARY.md`](./IMPLEMENTATION_SUMMARY.md) – subsystem overview for maintainers.
-- [`APPS_SDK_COMPATIBILITY_ANALYSIS.md`](./APPS_SDK_COMPATIBILITY_ANALYSIS.md) – Apps SDK compatibility analysis and roadmap.
-
